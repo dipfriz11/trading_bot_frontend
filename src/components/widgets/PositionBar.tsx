@@ -1,18 +1,94 @@
 import { useState, useRef, useEffect } from "react"
-import { ChevronDown, X } from "lucide-react"
+import { ChevronDown, X, Info } from "lucide-react"
 import { usePositionSettings, type MarginMode } from "@/hooks/usePositionSettings"
 
 interface PositionBarProps {
   symbol: string
   marketType: "spot" | "futures"
-  // Mock balance — will be replaced with real data later
   availableBalance?: number
-  compact?: boolean // compact mode for under-chart form
+  inOrders?: number // amount currently locked in open orders
+  compact?: boolean
 }
 
 const LEVERAGE_PRESETS = [1, 2, 3, 5, 10, 20, 25, 50, 75, 100, 125]
 
-// Popover that lets user pick leverage via slider + presets
+// ---- Tooltip for futures balance breakdown ----
+function BalanceTooltip({
+  walletBalance,
+  inOrders,
+  leverage,
+  available,
+}: {
+  walletBalance: number
+  inOrders: number
+  leverage: number
+  available: number
+}) {
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  return (
+    <div
+      className="absolute z-50 flex flex-col gap-1.5 p-3 rounded-lg pointer-events-none"
+      style={{
+        bottom: "calc(100% + 6px)",
+        left: 0,
+        minWidth: 230,
+        background: "#0a1220",
+        border: "1px solid rgba(30,111,239,0.25)",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+      }}
+    >
+      {/* Title */}
+      <span className="text-xs font-mono font-semibold" style={{ color: "rgba(200,214,229,0.9)", letterSpacing: "0.05em", fontSize: 10 }}>
+        AVAILABLE BALANCE
+      </span>
+
+      {/* Rows */}
+      <div className="flex flex-col gap-1 mt-0.5">
+        <div className="flex justify-between gap-4">
+          <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>Wallet balance</span>
+          <span className="text-xs font-mono" style={{ color: "rgba(200,214,229,0.75)", fontSize: 10 }}>{fmt(walletBalance)} USDT</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>In open orders</span>
+          <span className="text-xs font-mono" style={{ color: "rgba(255,71,87,0.85)", fontSize: 10 }}>−{fmt(inOrders)} USDT</span>
+        </div>
+        <div
+          className="flex justify-between gap-4 pt-1 mt-0.5"
+          style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}
+        >
+          <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>Free margin</span>
+          <span className="text-xs font-mono" style={{ color: "rgba(200,214,229,0.75)", fontSize: 10 }}>{fmt(walletBalance - inOrders)} USDT</span>
+        </div>
+        <div className="flex justify-between gap-4">
+          <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>Leverage</span>
+          <span className="text-xs font-mono" style={{ color: "#4d9fff", fontSize: 10 }}>×{leverage}</span>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }} />
+
+      {/* Result */}
+      <div className="flex justify-between gap-4">
+        <span className="text-xs font-mono font-semibold" style={{ color: "rgba(255,255,255,0.55)", fontSize: 10 }}>
+          Available (with leverage)
+        </span>
+        <span className="text-xs font-mono font-bold" style={{ color: "#4d9fff", fontSize: 10 }}>
+          {fmt(available)} USDT
+        </span>
+      </div>
+
+      <p className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, lineHeight: 1.5 }}>
+        = (Wallet − In orders) × {leverage}×<br/>
+        = {fmt(walletBalance - inOrders)} × {leverage} = {fmt(available)}
+      </p>
+    </div>
+  )
+}
+
+// ---- Leverage popover ----
 function LeveragePopover({
   symbol,
   leverage,
@@ -47,12 +123,11 @@ function LeveragePopover({
         top: "calc(100% + 4px)",
         left: 0,
         minWidth: 220,
-        background: "var(--terminal-surface, #0d1526)",
+        background: "#0a1220",
         border: "1px solid rgba(30,111,239,0.3)",
         boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
       }}
     >
-      {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono font-semibold" style={{ color: "rgba(200,214,229,0.9)", letterSpacing: "0.06em" }}>
           LEVERAGE
@@ -62,14 +137,12 @@ function LeveragePopover({
         </button>
       </div>
 
-      {/* Current value display */}
       <div className="flex items-center justify-center">
         <span className="text-2xl font-mono font-bold" style={{ color: "#1e6fef" }}>
           {local}×
         </span>
       </div>
 
-      {/* Slider */}
       <input
         type="range"
         min={1}
@@ -87,7 +160,6 @@ function LeveragePopover({
         <span>125×</span>
       </div>
 
-      {/* Presets */}
       <div className="flex flex-wrap gap-1">
         {LEVERAGE_PRESETS.map((v) => (
           <button
@@ -106,7 +178,6 @@ function LeveragePopover({
         ))}
       </div>
 
-      {/* Confirm */}
       <button
         onClick={apply}
         className="w-full py-1.5 rounded text-xs font-mono font-semibold transition-all"
@@ -122,7 +193,7 @@ function LeveragePopover({
   )
 }
 
-// Popover for margin mode (Cross / Isolated)
+// ---- Margin mode popover ----
 function MarginModePopover({
   symbol,
   mode,
@@ -156,7 +227,7 @@ function MarginModePopover({
         top: "calc(100% + 4px)",
         left: 0,
         minWidth: 240,
-        background: "var(--terminal-surface, #0d1526)",
+        background: "#0a1220",
         border: "1px solid rgba(255,255,255,0.12)",
         boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
       }}
@@ -205,13 +276,21 @@ function MarginModePopover({
   )
 }
 
-export function PositionBar({ symbol, marketType, availableBalance = 10000 }: PositionBarProps) {
+// ---- Main PositionBar ----
+
+export function PositionBar({ symbol, marketType, availableBalance = 10000, inOrders = 1250 }: PositionBarProps) {
   const { settings } = usePositionSettings(symbol)
   const [leverageOpen, setLeverageOpen] = useState(false)
   const [marginOpen, setMarginOpen] = useState(false)
+  const [balTooltip, setBalTooltip] = useState(false)
+
+  const freeMargin = availableBalance - inOrders
+  const availableWithLeverage = freeMargin * settings.leverage
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   if (marketType === "spot") {
-    // Spot: just show balance, no leverage/margin controls
     return (
       <div
         className="flex items-center justify-between px-2 py-1 rounded"
@@ -224,34 +303,50 @@ export function PositionBar({ symbol, marketType, availableBalance = 10000 }: Po
           Available
         </span>
         <span className="text-xs font-mono font-semibold" style={{ color: "rgba(200,214,229,0.85)" }}>
-          {availableBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+          {fmt(availableBalance)} USDT
         </span>
       </div>
     )
   }
 
-  // Futures: balance + leverage + margin mode
+  // Futures
   return (
     <div className="flex flex-col gap-1">
-      {/* Balance row */}
-      <div
-        className="flex items-center justify-between px-2 py-1 rounded"
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.35)", fontSize: 10 }}>
-          Available
-        </span>
-        <span className="text-xs font-mono font-semibold" style={{ color: "rgba(200,214,229,0.85)" }}>
-          {availableBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
-        </span>
+      {/* Balance row with tooltip */}
+      <div className="relative">
+        <div
+          className="flex items-center justify-between px-2 py-1 rounded cursor-default"
+          style={{
+            background: balTooltip ? "rgba(30,111,239,0.06)" : "rgba(255,255,255,0.03)",
+            border: `1px solid ${balTooltip ? "rgba(30,111,239,0.2)" : "rgba(255,255,255,0.06)"}`,
+            transition: "background 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={() => setBalTooltip(true)}
+          onMouseLeave={() => setBalTooltip(false)}
+        >
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.35)", fontSize: 10 }}>
+              Available
+            </span>
+            <Info size={9} style={{ color: "rgba(30,111,239,0.5)", flexShrink: 0 }} />
+          </div>
+          <span className="text-xs font-mono font-semibold" style={{ color: "#4d9fff" }}>
+            {fmt(availableWithLeverage)} USDT
+          </span>
+        </div>
+
+        {balTooltip && (
+          <BalanceTooltip
+            walletBalance={availableBalance}
+            inOrders={inOrders}
+            leverage={settings.leverage}
+            available={availableWithLeverage}
+          />
+        )}
       </div>
 
       {/* Leverage + Margin row */}
       <div className="flex gap-1">
-        {/* Leverage button */}
         <div className="relative flex-1">
           <button
             onClick={() => { setLeverageOpen((v) => !v); setMarginOpen(false) }}
@@ -268,15 +363,10 @@ export function PositionBar({ symbol, marketType, availableBalance = 10000 }: Po
             <ChevronDown size={10} style={{ opacity: 0.5, transform: leverageOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
           </button>
           {leverageOpen && (
-            <LeveragePopover
-              symbol={symbol}
-              leverage={settings.leverage}
-              onClose={() => setLeverageOpen(false)}
-            />
+            <LeveragePopover symbol={symbol} leverage={settings.leverage} onClose={() => setLeverageOpen(false)} />
           )}
         </div>
 
-        {/* Margin mode button */}
         <div className="relative flex-1">
           <button
             onClick={() => { setMarginOpen((v) => !v); setLeverageOpen(false) }}
@@ -293,11 +383,7 @@ export function PositionBar({ symbol, marketType, availableBalance = 10000 }: Po
             <ChevronDown size={10} style={{ opacity: 0.5, transform: marginOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
           </button>
           {marginOpen && (
-            <MarginModePopover
-              symbol={symbol}
-              mode={settings.marginMode}
-              onClose={() => setMarginOpen(false)}
-            />
+            <MarginModePopover symbol={symbol} mode={settings.marginMode} onClose={() => setMarginOpen(false)} />
           )}
         </div>
       </div>
@@ -305,20 +391,26 @@ export function PositionBar({ symbol, marketType, availableBalance = 10000 }: Po
   )
 }
 
-// Compact version for use inside the chart order form (inline, single row)
-export function PositionBarCompact({ symbol, marketType, availableBalance = 10000 }: PositionBarProps) {
+// ---- Compact version for under-chart form ----
+
+export function PositionBarCompact({ symbol, marketType, availableBalance = 10000, inOrders = 1250 }: PositionBarProps) {
   const { settings } = usePositionSettings(symbol)
   const [leverageOpen, setLeverageOpen] = useState(false)
   const [marginOpen, setMarginOpen] = useState(false)
+  const [balTooltip, setBalTooltip] = useState(false)
+
+  const freeMargin = availableBalance - inOrders
+  const availableWithLeverage = freeMargin * settings.leverage
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { maximumFractionDigits: 0 })
 
   if (marketType === "spot") {
     return (
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>
-          Bal:
-        </span>
+        <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>Avail:</span>
         <span className="text-xs font-mono font-semibold" style={{ color: "rgba(200,214,229,0.8)", fontSize: 10 }}>
-          {availableBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })} USDT
+          {fmt(availableBalance)} USDT
         </span>
       </div>
     )
@@ -326,14 +418,33 @@ export function PositionBarCompact({ symbol, marketType, availableBalance = 1000
 
   return (
     <div className="flex items-center gap-1">
-      {/* Balance */}
-      <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, flexShrink: 0 }}>
-        {availableBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })} USDT
-      </span>
+      {/* Balance with tooltip */}
+      <div
+        className="relative flex items-center gap-0.5 cursor-default"
+        onMouseEnter={() => setBalTooltip(true)}
+        onMouseLeave={() => setBalTooltip(false)}
+      >
+        <span
+          className="text-xs font-mono font-semibold"
+          style={{ color: "#4d9fff", fontSize: 10 }}
+        >
+          {fmt(availableWithLeverage)} USDT
+        </span>
+        <Info size={8} style={{ color: "rgba(30,111,239,0.5)", flexShrink: 0 }} />
+
+        {balTooltip && (
+          <BalanceTooltip
+            walletBalance={availableBalance}
+            inOrders={inOrders}
+            leverage={settings.leverage}
+            available={availableWithLeverage}
+          />
+        )}
+      </div>
 
       <span style={{ color: "rgba(255,255,255,0.12)", fontSize: 10 }}>|</span>
 
-      {/* Leverage compact button */}
+      {/* Leverage */}
       <div className="relative">
         <button
           onClick={() => { setLeverageOpen((v) => !v); setMarginOpen(false) }}
@@ -348,15 +459,11 @@ export function PositionBarCompact({ symbol, marketType, availableBalance = 1000
           <ChevronDown size={8} style={{ opacity: 0.5 }} />
         </button>
         {leverageOpen && (
-          <LeveragePopover
-            symbol={symbol}
-            leverage={settings.leverage}
-            onClose={() => setLeverageOpen(false)}
-          />
+          <LeveragePopover symbol={symbol} leverage={settings.leverage} onClose={() => setLeverageOpen(false)} />
         )}
       </div>
 
-      {/* Margin mode compact button */}
+      {/* Margin mode */}
       <div className="relative">
         <button
           onClick={() => { setMarginOpen((v) => !v); setLeverageOpen(false) }}
@@ -371,11 +478,7 @@ export function PositionBarCompact({ symbol, marketType, availableBalance = 1000
           <ChevronDown size={8} style={{ opacity: 0.5 }} />
         </button>
         {marginOpen && (
-          <MarginModePopover
-            symbol={symbol}
-            mode={settings.marginMode}
-            onClose={() => setMarginOpen(false)}
-          />
+          <MarginModePopover symbol={symbol} mode={settings.marginMode} onClose={() => setMarginOpen(false)} />
         )}
       </div>
     </div>
