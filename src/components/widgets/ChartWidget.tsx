@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
 import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget, Candle } from "@/types/terminal"
@@ -304,9 +304,43 @@ interface ChartProps {
   onBackgroundClick?: () => void
 }
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick }: ChartProps) {
-  if (!candles.length || width < 2 || height < 2) return null
+interface OrdersOverlayProps {
+  allOrders: PlacedOrder[]
+  editingOrderId: string | null
+  width: number
+  height: number
+  toY: (price: number) => number
+  toPrice: (y: number) => number
+  minPrice: number
+  maxPrice: number
+  chartHeight: number
+  padTop: number
+  padding: { left: number; right: number; top: number; bottom: number }
+  onOrderClose: (id: string) => void
+  onOrderDragStart: (id: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+}
 
+function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice, minPrice, maxPrice, chartHeight, padTop, padding, onOrderClose, onOrderDragStart }: OrdersOverlayProps) {
+  if (!allOrders.length) return null
+  return (
+    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+      {allOrders.map((order) => {
+        const price = order.orderType === "market" ? maxPrice : order.price
+        return renderOrderLine(
+          order, price, toY, minPrice, maxPrice, padding, width,
+          () => onOrderClose(order.id),
+          (e) => onOrderDragStart(order.id, e, toPrice, minPrice, maxPrice, chartHeight, padTop),
+          undefined,
+          editingOrderId === order.id,
+        )
+      })}
+    </svg>
+  )
+}
+
+const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles, width, height, onBackgroundClick }: {
+  candles: Candle[]; width: number; height: number; onBackgroundClick?: () => void
+}) {
   const chartHeight = height * 0.72
   const volumeHeight = height * 0.18
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -320,7 +354,6 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   const maxVol = Math.max(...visible.map((c) => c.volume)) || 1
 
   const toY = (price: number) => padding.top + ((maxPrice - price) / priceRange) * chartHeight
-  const toPrice = (yPx: number) => minPrice + (1 - (yPx - padding.top) / chartHeight) * priceRange
   const candleW = Math.max(2, chartAreaWidth / displayCount - 1)
 
   const priceLabels: Array<{ price: number; y: number }> = []
@@ -386,23 +419,41 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         )
       })()}
 
-      {allOrders.map((order) => {
-        const price = order.orderType === "market" ? (visible[visible.length - 1]?.close ?? 0) : order.price
-        return renderOrderLine(
-          order, price, toY, minPrice, maxPrice, padding, width,
-          () => onOrderClose(order.id),
-          (e) => onOrderDragStart(order.id, e, toPrice, minPrice, maxPrice, chartHeight, padding.top),
-          undefined,
-          editingOrderId === order.id,
-        )
-      })}
     </svg>
+  )
+})
+
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick }: ChartProps) {
+  if (!candles.length || width < 2 || height < 2) return null
+  const chartHeight = height * 0.72
+  const padding = { left: 52, right: 56, top: 10, bottom: 20 }
+  const chartAreaWidth = width - padding.left - padding.right
+  const displayCount = Math.min(candles.length, Math.floor(chartAreaWidth / 8))
+  const visible = candles.slice(-displayCount)
+  const maxPrice = Math.max(...visible.map((c) => c.high))
+  const minPrice = Math.min(...visible.map((c) => c.low))
+  const priceRange = maxPrice - minPrice || 1
+  const toY = (price: number) => padding.top + ((maxPrice - price) / priceRange) * chartHeight
+  const toPrice = (yPx: number) => minPrice + (1 - (yPx - padding.top) / chartHeight) * priceRange
+  return (
+    <div style={{ position: "relative", width, height }}>
+      <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
+      <OrdersOverlay
+        allOrders={allOrders} editingOrderId={editingOrderId}
+        width={width} height={height}
+        toY={toY} toPrice={toPrice}
+        minPrice={minPrice} maxPrice={maxPrice}
+        chartHeight={chartHeight} padTop={padding.top}
+        padding={padding}
+        onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
+      />
+    </div>
   )
 }
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick }: ChartProps) {
-  if (!candles.length || width < 2 || height < 2) return null
-
+const LineChartBody = React.memo(function LineChartBody({ candles, width, height, onBackgroundClick }: {
+  candles: Candle[]; width: number; height: number; onBackgroundClick?: () => void
+}) {
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartAreaWidth = width - padding.left - padding.right
   const chartHeight = height - padding.top - padding.bottom
@@ -414,7 +465,6 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
 
   const toX = (i: number) => padding.left + (i / (candles.length - 1)) * chartAreaWidth
   const toY = (price: number) => padding.top + ((maxPrice - price) / priceRange) * chartHeight
-  const toPrice = (yPx: number) => minPrice + (1 - (yPx - padding.top) / chartHeight) * priceRange
 
   const points = candles.map((c, i) => `${toX(i)},${toY(c.close)}`).join(" ")
   const areaPoints = [
@@ -466,18 +516,33 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
             stroke={color} strokeWidth={1} strokeDasharray="3,3" opacity={0.5} />
         )
       })()}
-
-      {allOrders.map((order) => {
-        const price = order.orderType === "market" ? (candles[candles.length - 1]?.close ?? 0) : order.price
-        return renderOrderLine(
-          order, price, toY, minPrice, maxPrice, padding, width,
-          () => onOrderClose(order.id),
-          (e) => onOrderDragStart(order.id, e, toPrice, minPrice, maxPrice, chartHeight, padding.top),
-          undefined,
-          editingOrderId === order.id,
-        )
-      })}
     </svg>
+  )
+})
+
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick }: ChartProps) {
+  if (!candles.length || width < 2 || height < 2) return null
+  const padding = { left: 52, right: 56, top: 10, bottom: 20 }
+  const chartHeight = height - padding.top - padding.bottom
+  const prices = candles.map((c) => c.close)
+  const maxPrice = Math.max(...prices)
+  const minPrice = Math.min(...prices)
+  const priceRange = maxPrice - minPrice || 1
+  const toY = (price: number) => padding.top + ((maxPrice - price) / priceRange) * chartHeight
+  const toPrice = (yPx: number) => minPrice + (1 - (yPx - padding.top) / chartHeight) * priceRange
+  return (
+    <div style={{ position: "relative", width, height }}>
+      <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
+      <OrdersOverlay
+        allOrders={allOrders} editingOrderId={editingOrderId}
+        width={width} height={height}
+        toY={toY} toPrice={toPrice}
+        minPrice={minPrice} maxPrice={maxPrice}
+        chartHeight={chartHeight} padTop={padding.top}
+        padding={padding}
+        onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
+      />
+    </div>
   )
 }
 
