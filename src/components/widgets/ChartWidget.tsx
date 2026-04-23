@@ -26,11 +26,11 @@ interface ChartWidgetProps {
 }
 
 const CHART_COLORS = {
-  up: "#00d97e",
+  up: "#00e5a0",
   down: "#ff4757",
   draft: "rgba(160,175,200,0.85)",
   draftClose: "rgba(100,115,135,0.9)",
-  volume: { up: "rgba(0,217,126,0.25)", down: "rgba(255,71,87,0.25)" },
+  volume: { up: "rgba(0,229,160,0.25)", down: "rgba(255,71,87,0.25)" },
   grid: "rgba(255,255,255,0.04)",
   text: "rgba(200,214,229,0.7)",
 }
@@ -695,12 +695,12 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         </select>
 
         {last && (
-          <span className="font-mono text-xs font-bold" style={{ color: isUp ? "#00d97e" : "#ff4757" }}>
+          <span className="font-mono text-xs font-bold" style={{ color: isUp ? "#00e5a0" : "#ff4757" }}>
             {formatPrice(last.close)}
           </span>
         )}
         {last && prev && (
-          <span className="font-mono text-xs" style={{ color: isUp ? "#00d97e" : "#ff4757" }}>
+          <span className="font-mono text-xs" style={{ color: isUp ? "#00e5a0" : "#ff4757" }}>
             {isUp ? "+" : ""}{(((last.close - prev.close) / prev.close) * 100).toFixed(2)}%
           </span>
         )}
@@ -803,7 +803,7 @@ function OrderBookPanel({ symbol }: { symbol: string }) {
       <div className="px-2 py-1 text-xs font-mono"
         style={{ opacity: 0.5, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <span style={{ color: "#ff4757", marginRight: 8 }}>ASKS</span>
-        <span style={{ color: "#00d97e" }}>BIDS</span>
+        <span style={{ color: "#00e5a0" }}>BIDS</span>
       </div>
       <div className="flex-1 overflow-auto">
         {data.asks.slice(0, 10).reverse().map((ask, i) => (
@@ -821,8 +821,8 @@ function OrderBookPanel({ symbol }: { symbol: string }) {
         {data.bids.slice(0, 10).map((bid, i) => (
           <div key={i} className="relative px-1 py-px flex justify-between text-xs font-mono">
             <div className="absolute inset-0"
-              style={{ background: "rgba(0,217,126,0.08)", width: `${(bid.total / maxTotal) * 100}%` }} />
-            <span style={{ color: "#00d97e", position: "relative" }}>{formatPrice(bid.price)}</span>
+              style={{ background: "rgba(0,229,160,0.08)", width: `${(bid.total / maxTotal) * 100}%` }} />
+            <span style={{ color: "#00e5a0", position: "relative" }}>{formatPrice(bid.price)}</span>
             <span style={{ opacity: 0.7, position: "relative" }}>{bid.size.toFixed(3)}</span>
           </div>
         ))}
@@ -1051,8 +1051,8 @@ function StandaloneOrderForm({
     setStopPrice("")
   }
 
-  const accentColor = effectiveSide === "buy" ? "#00d97e" : "#ff4757"
-  const accentBg = effectiveSide === "buy" ? "rgba(0,217,126,0.5)" : "rgba(255,71,87,0.5)"
+  const accentColor = effectiveSide === "buy" ? "#00e5a0" : "#ff4757"
+  const accentBg = effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"
 
   const qtyBorder = anchor === "qty"
     ? `1px solid ${accentBg}`
@@ -1092,9 +1092,9 @@ function StandaloneOrderForm({
               onClick={() => setSide(s)}
               className="flex-1 py-0.5 text-xs font-mono font-bold rounded transition-all"
               style={{
-                background: side === s ? (s === "buy" ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)") : "transparent",
-                border: `1px solid ${side === s ? (s === "buy" ? "#00d97e" : "#ff4757") : "rgba(255,255,255,0.1)"}`,
-                color: side === s ? (s === "buy" ? "#00d97e" : "#ff4757") : "rgba(255,255,255,0.4)",
+                background: side === s ? (s === "buy" ? "rgba(0,229,160,0.2)" : "rgba(255,71,87,0.2)") : "transparent",
+                border: `1px solid ${side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.1)"}`,
+                color: side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.4)",
               }}
               onMouseDown={stopProp}
             >
@@ -1110,11 +1110,11 @@ function StandaloneOrderForm({
               className="flex-1 py-0.5 text-xs font-mono font-bold rounded transition-all"
               style={{
                 background: futuresSide === fs
-                  ? (fs === "long" ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)")
+                  ? (fs === "long" ? "rgba(0,229,160,0.2)" : "rgba(255,71,87,0.2)")
                   : "transparent",
-                border: `1px solid ${futuresSide === fs ? (fs === "long" ? "#00d97e" : "#ff4757") : "rgba(255,255,255,0.1)"}`,
+                border: `1px solid ${futuresSide === fs ? (fs === "long" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.1)"}`,
                 color: futuresSide === fs
-                  ? (fs === "long" ? "#00d97e" : "#ff4757")
+                  ? (fs === "long" ? "#00e5a0" : "#ff4757")
                   : "rgba(255,255,255,0.4)",
               }}
               onMouseDown={stopProp}
@@ -1294,8 +1294,8 @@ function StandaloneOrderForm({
           onClick={handleSubmit}
           className="w-full py-1.5 text-sm font-mono font-semibold rounded transition-all"
           style={{
-            background: effectiveSide === "buy" ? "rgba(0,217,126,0.15)" : "rgba(255,71,87,0.15)",
-            border: `1px solid ${effectiveSide === "buy" ? "rgba(0,217,126,0.3)" : "rgba(255,71,87,0.3)"}`,
+            background: effectiveSide === "buy" ? "#0d3d2e" : "#3d0d0d",
+            border: `1px solid ${effectiveSide === "buy" ? "#1a7a5a" : "#c02030"}`,
             color: accentColor,
           }}
           onMouseDown={stopProp}
@@ -1312,9 +1312,9 @@ function StandaloneOrderForm({
         <div
           className="text-xs font-mono px-2 py-1 rounded text-center mt-1"
           style={{
-            background: lastResult.success ? "rgba(0,217,126,0.1)" : "rgba(255,71,87,0.1)",
-            color: lastResult.success ? "#00d97e" : "#ff4757",
-            border: `1px solid ${lastResult.success ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)"}`,
+            background: lastResult.success ? "rgba(0,229,160,0.1)" : "rgba(255,71,87,0.1)",
+            color: lastResult.success ? "#00e5a0" : "#ff4757",
+            border: `1px solid ${lastResult.success ? "rgba(0,229,160,0.2)" : "rgba(255,71,87,0.2)"}`,
             fontSize: 10,
           }}
         >
@@ -1568,8 +1568,8 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
           style={{
             fontSize: 9,
             opacity: widget.showOrderForm ? 1 : 0.55,
-            border: `1px solid ${widget.showOrderForm ? "#00d97e" : "rgba(255,255,255,0.1)"}`,
-            color: widget.showOrderForm ? "#00d97e" : "inherit",
+            border: `1px solid ${widget.showOrderForm ? "#00e5a0" : "rgba(255,255,255,0.1)"}`,
+            color: widget.showOrderForm ? "#00e5a0" : "inherit",
           }}
         >
           ⌤ Order

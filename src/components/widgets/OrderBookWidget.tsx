@@ -89,9 +89,9 @@ export function OrderBookWidget({ widget }: OrderBookWidgetProps) {
           <div key={i} className="relative grid grid-cols-3 px-2 text-xs font-mono" style={{ height: 20 }}>
             <div
               className="absolute left-0 top-0 bottom-0"
-              style={{ background: "rgba(0,217,126,0.08)", width: `${(bid.total / maxTotal) * 100}%` }}
+              style={{ background: "rgba(0,229,160,0.08)", width: `${(bid.total / maxTotal) * 100}%` }}
             />
-            <span style={{ color: "#00d97e", position: "relative" }}>{formatPrice(bid.price)}</span>
+            <span style={{ color: "#00e5a0", position: "relative" }}>{formatPrice(bid.price)}</span>
             <span className="text-right" style={{ position: "relative", opacity: 0.8 }}>{bid.size.toFixed(4)}</span>
             <span className="text-right" style={{ position: "relative", opacity: 0.5 }}>{bid.total.toFixed(3)}</span>
           </div>

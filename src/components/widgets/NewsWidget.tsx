@@ -5,7 +5,7 @@ import { generateNews } from "@/lib/mock-data"
 import type { NewsItem } from "@/types/terminal"
 
 function SentimentIcon({ sentiment }: { sentiment: NewsItem["sentiment"] }) {
-  if (sentiment === "positive") return <TrendingUp size={10} style={{ color: "#00d97e" }} />
+  if (sentiment === "positive") return <TrendingUp size={10} style={{ color: "#00e5a0" }} />
   if (sentiment === "negative") return <TrendingDown size={10} style={{ color: "#ff4757" }} />
   return <Minus size={10} style={{ color: "rgba(255,255,255,0.3)" }} />
 }
@@ -34,7 +34,7 @@ export function NewsWidget(_props: { widget: Widget }) {
   })
 
   const sentimentColor = (s: NewsItem["sentiment"]) => {
-    if (s === "positive") return "#00d97e"
+    if (s === "positive") return "#00e5a0"
     if (s === "negative") return "#ff4757"
     return "rgba(255,255,255,0.3)"
   }
@@ -53,7 +53,7 @@ export function NewsWidget(_props: { widget: Widget }) {
             style={{
               background: filter === f ? "rgba(255,255,255,0.08)" : "transparent",
               color: filter === f
-                ? f === "positive" ? "#00d97e" : f === "negative" ? "#ff4757" : "rgba(255,255,255,0.8)"
+                ? f === "positive" ? "#00e5a0" : f === "negative" ? "#ff4757" : "rgba(255,255,255,0.8)"
                 : "rgba(255,255,255,0.35)",
               border: "1px solid",
               borderColor: filter === f ? "rgba(255,255,255,0.1)" : "transparent",
@@ -68,7 +68,7 @@ export function NewsWidget(_props: { widget: Widget }) {
           className="ml-auto flex items-center gap-1"
           style={{ fontSize: 9, opacity: 0.4 }}
         >
-          <span className="inline-block size-1.5 rounded-full animate-pulse" style={{ background: "#00d97e" }} />
+          <span className="inline-block size-1.5 rounded-full animate-pulse" style={{ background: "#00e5a0" }} />
           <span className="font-mono">LIVE</span>
         </div>
       </div>

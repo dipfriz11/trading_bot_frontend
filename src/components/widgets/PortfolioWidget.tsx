@@ -41,9 +41,9 @@ function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void 
           <span
             className="px-1.5 py-0.5 text-xs font-mono font-bold rounded"
             style={{
-              background: isBuy ? "rgba(0,217,126,0.15)" : "rgba(255,71,87,0.15)",
-              color: isBuy ? "#00d97e" : "#ff4757",
-              border: `1px solid ${isBuy ? "rgba(0,217,126,0.3)" : "rgba(255,71,87,0.3)"}`,
+              background: isBuy ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)",
+              color: isBuy ? "#00e5a0" : "#ff4757",
+              border: `1px solid ${isBuy ? "rgba(0,229,160,0.3)" : "rgba(255,71,87,0.3)"}`,
               fontSize: 9,
             }}
           >
@@ -90,10 +90,10 @@ function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void 
               background: isPending
                 ? "rgba(255,211,42,0.1)"
                 : order.status === "filled"
-                  ? "rgba(0,217,126,0.1)"
+                  ? "rgba(0,229,160,0.1)"
                   : "rgba(255,71,87,0.1)",
-              color: isPending ? "#ffd32a" : order.status === "filled" ? "#00d97e" : "#ff4757",
-              border: `1px solid ${isPending ? "rgba(255,211,42,0.2)" : order.status === "filled" ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)"}`,
+              color: isPending ? "#ffd32a" : order.status === "filled" ? "#00e5a0" : "#ff4757",
+              border: `1px solid ${isPending ? "rgba(255,211,42,0.2)" : order.status === "filled" ? "rgba(0,229,160,0.2)" : "rgba(255,71,87,0.2)"}`,
             }}
           >
             {order.status?.toUpperCase() ?? "PENDING"}
@@ -192,7 +192,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
       >
         <div>
           <div className="text-xs font-mono" style={{ opacity: 0.5 }}>Total P&L</div>
-          <div className="text-sm font-mono font-bold" style={{ color: totalPnl >= 0 ? "#00d97e" : "#ff4757" }}>
+          <div className="text-sm font-mono font-bold" style={{ color: totalPnl >= 0 ? "#00e5a0" : "#ff4757" }}>
             {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
           </div>
         </div>
@@ -253,7 +253,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
               style={{ gridTemplateColumns: "1fr 60px 80px 80px 80px", borderBottom: "1px solid rgba(255,255,255,0.03)" }}
             >
               <div>
-                <span style={{ color: pos.side === "long" ? "#00d97e" : "#ff4757" }}>
+                <span style={{ color: pos.side === "long" ? "#00e5a0" : "#ff4757" }}>
                   [{pos.side === "long" ? "L" : "S"}]
                 </span>
                 <span className="ml-1">{pos.symbol}</span>
@@ -262,7 +262,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
               <span className="text-right" style={{ opacity: 0.85 }}>{pos.size}</span>
               <span className="text-right" style={{ opacity: 0.7 }}>{formatPrice(pos.entryPrice)}</span>
               <span className="text-right" style={{ opacity: 0.85 }}>{formatPrice(pos.markPrice)}</span>
-              <div className="text-right" style={{ color: pos.pnl >= 0 ? "#00d97e" : "#ff4757" }}>
+              <div className="text-right" style={{ color: pos.pnl >= 0 ? "#00e5a0" : "#ff4757" }}>
                 {pos.pnl >= 0 ? "+" : ""}${pos.pnl.toFixed(0)}
                 <div style={{ opacity: 0.7 }}>({pos.pnlPct >= 0 ? "+" : ""}{pos.pnlPct.toFixed(2)}%)</div>
               </div>

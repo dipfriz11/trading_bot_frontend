@@ -28,9 +28,9 @@ function generatePnlHistory(): PnlSnapshot[] {
 }
 
 const STATS = [
-  { label: "Total P&L", key: "total" as const, color: (v: number) => (v >= 0 ? "#00d97e" : "#ff4757") },
-  { label: "Realized", key: "realized" as const, color: (v: number) => (v >= 0 ? "#00d97e" : "#ff4757") },
-  { label: "Unrealized", key: "unrealized" as const, color: (v: number) => (v >= 0 ? "#00d97e" : "#ff4757") },
+  { label: "Total P&L", key: "total" as const, color: (v: number) => (v >= 0 ? "#00e5a0" : "#ff4757") },
+  { label: "Realized", key: "realized" as const, color: (v: number) => (v >= 0 ? "#00e5a0" : "#ff4757") },
+  { label: "Unrealized", key: "unrealized" as const, color: (v: number) => (v >= 0 ? "#00e5a0" : "#ff4757") },
 ]
 
 export function PnlWidget(_props: { widget: Widget }) {
@@ -123,12 +123,12 @@ export function PnlWidget(_props: { widget: Widget }) {
           >
             <defs>
               <linearGradient id="pnl-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={isPositive ? "#00d97e" : "#ff4757"} stopOpacity="0.3" />
-                <stop offset="100%" stopColor={isPositive ? "#00d97e" : "#ff4757"} stopOpacity="0.01" />
+                <stop offset="0%" stopColor={isPositive ? "#00e5a0" : "#ff4757"} stopOpacity="0.3" />
+                <stop offset="100%" stopColor={isPositive ? "#00e5a0" : "#ff4757"} stopOpacity="0.01" />
               </linearGradient>
             </defs>
             <path d={fillD} fill="url(#pnl-grad)" />
-            <path d={pathD} fill="none" stroke={isPositive ? "#00d97e" : "#ff4757"} strokeWidth="1.5" />
+            <path d={pathD} fill="none" stroke={isPositive ? "#00e5a0" : "#ff4757"} strokeWidth="1.5" />
           </svg>
 
           {/* X-axis labels */}
@@ -154,13 +154,13 @@ export function PnlWidget(_props: { widget: Widget }) {
               style={{ height: 24, borderBottom: "1px solid rgba(255,255,255,0.025)" }}
             >
               <span style={{ opacity: 0.5 }}>{h.time}</span>
-              <span className="text-right" style={{ color: h.realized >= 0 ? "#00d97e" : "#ff4757" }}>
+              <span className="text-right" style={{ color: h.realized >= 0 ? "#00e5a0" : "#ff4757" }}>
                 {h.realized >= 0 ? "+" : ""}{h.realized.toFixed(0)}
               </span>
-              <span className="text-right" style={{ color: h.unrealized >= 0 ? "#00d97e" : "#ff4757" }}>
+              <span className="text-right" style={{ color: h.unrealized >= 0 ? "#00e5a0" : "#ff4757" }}>
                 {h.unrealized >= 0 ? "+" : ""}{h.unrealized.toFixed(0)}
               </span>
-              <span className="text-right" style={{ color: h.total >= 0 ? "#00d97e" : "#ff4757", fontWeight: 600 }}>
+              <span className="text-right" style={{ color: h.total >= 0 ? "#00e5a0" : "#ff4757", fontWeight: 600 }}>
                 {h.total >= 0 ? "+" : ""}{h.total.toFixed(0)}
               </span>
             </div>

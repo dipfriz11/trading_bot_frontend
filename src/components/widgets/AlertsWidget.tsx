@@ -146,7 +146,7 @@ export function AlertsWidget(_props: { widget: Widget }) {
                 background: alert.triggered
                   ? "rgba(255,255,255,0.2)"
                   : alert.condition === "above"
-                  ? "#00d97e"
+                  ? "#00e5a0"
                   : "#ff4757",
               }}
             />
@@ -158,7 +158,7 @@ export function AlertsWidget(_props: { widget: Widget }) {
             <span style={{ opacity: 0.45, fontSize: 10 }}>{alert.condition}</span>
 
             {/* Price */}
-            <span className="flex-1 text-right font-semibold" style={{ color: alert.condition === "above" ? "#00d97e" : "#ff4757" }}>
+            <span className="flex-1 text-right font-semibold" style={{ color: alert.condition === "above" ? "#00e5a0" : "#ff4757" }}>
               {alert.price.toLocaleString()}
             </span>
 

@@ -397,13 +397,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const statusIcon = (status: OrderStatus) => {
-    if (status === "filled")    return <CheckCircle size={10} style={{ color: "#00d97e" }} />
+    if (status === "filled")    return <CheckCircle size={10} style={{ color: "#00e5a0" }} />
     if (status === "cancelled") return <XCircle     size={10} style={{ color: "#ff4757" }} />
     return <Clock size={10} style={{ color: "#ffd32a" }} />
   }
 
-  const qtyBorder = anchor === "qty"    ? `1px solid ${effectiveSide === "buy" ? "rgba(0,217,126,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
-  const amtBorder = anchor === "amount" ? `1px solid ${effectiveSide === "buy" ? "rgba(0,217,126,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
+  const qtyBorder = anchor === "qty"    ? `1px solid ${effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
+  const amtBorder = anchor === "amount" ? `1px solid ${effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
 
   const availableForOrder = marketType === "futures" ? Math.max(0, freeMargin) * posSettings.leverage : Math.max(0, freeMargin)
   const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
@@ -496,8 +496,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                   onClick={() => setSide(s)}
                   className="flex-1 text-xs font-mono py-1.5 transition-colors font-semibold uppercase tracking-wider"
                   style={{
-                    background: side === s ? (s === "buy" ? "rgba(0,217,126,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
-                    color: side === s ? (s === "buy" ? "#00d97e" : "#ff4757") : "rgba(255,255,255,0.3)",
+                    background: side === s ? (s === "buy" ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
+                    color: side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
                     fontSize: 10,
                   }}
                   onMouseDown={stopProp}
@@ -515,10 +515,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                   className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
                   style={{
                     background: futuresSide === fs
-                      ? (fs === "long" ? "rgba(0,217,126,0.18)" : "rgba(255,71,87,0.18)")
+                      ? (fs === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
                       : "transparent",
                     color: futuresSide === fs
-                      ? (fs === "long" ? "#00d97e" : "#ff4757")
+                      ? (fs === "long" ? "#00e5a0" : "#ff4757")
                       : "rgba(255,255,255,0.3)",
                     fontSize: 10,
                   }}
@@ -703,9 +703,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
               onClick={handleSubmit}
               className="w-full text-sm font-mono font-semibold py-2 rounded mt-1 transition-all"
               style={{
-                background: effectiveSide === "buy" ? "rgba(0,217,126,0.15)" : "rgba(255,71,87,0.15)",
-                color: effectiveSide === "buy" ? "#00d97e" : "#ff4757",
-                border: `1px solid ${effectiveSide === "buy" ? "rgba(0,217,126,0.3)" : "rgba(255,71,87,0.3)"}`,
+                background: effectiveSide === "buy" ? "#0d3d2e" : "#3d0d0d",
+                color: effectiveSide === "buy" ? "#00e5a0" : "#ff4757",
+                border: `1px solid ${effectiveSide === "buy" ? "#1a7a5a" : "#c02030"}`,
               }}
               onMouseDown={stopProp}
             >
@@ -721,9 +721,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             <div
               className="text-xs font-mono px-2 py-1.5 rounded text-center"
               style={{
-                background: lastResult.success ? "rgba(0,217,126,0.1)" : "rgba(255,71,87,0.1)",
-                color: lastResult.success ? "#00d97e" : "#ff4757",
-                border: `1px solid ${lastResult.success ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)"}`,
+                background: lastResult.success ? "rgba(0,229,160,0.1)" : "rgba(255,71,87,0.1)",
+                color: lastResult.success ? "#00e5a0" : "#ff4757",
+                border: `1px solid ${lastResult.success ? "rgba(0,229,160,0.2)" : "rgba(255,71,87,0.2)"}`,
               }}
             >
               {lastResult.success ? "✓ " : "✗ "}{lastResult.msg}
@@ -750,7 +750,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             >
               <span style={{ width: 14, flexShrink: 0 }}>{statusIcon(o.status)}</span>
               <span style={{ width: 52, opacity: 0.7 }}>{o.symbol}</span>
-              <span style={{ width: 26, color: o.side === "buy" ? "#00d97e" : "#ff4757", fontWeight: 600, fontSize: 10 }}>
+              <span style={{ width: 26, color: o.side === "buy" ? "#00e5a0" : "#ff4757", fontWeight: 600, fontSize: 10 }}>
                 {o.side.toUpperCase()}
               </span>
               <span style={{ flex: 1, opacity: 0.6 }}>{o.qty}</span>

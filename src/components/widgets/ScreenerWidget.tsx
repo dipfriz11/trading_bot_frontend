@@ -81,7 +81,7 @@ export function ScreenerWidget(_props: { widget: Widget }) {
               className="text-right"
               style={{
                 minWidth: 60,
-                color: row.changePct >= 0 ? "#00d97e" : "#ff4757",
+                color: row.changePct >= 0 ? "#00e5a0" : "#ff4757",
               }}
             >
               {row.changePct >= 0 ? "+" : ""}{row.changePct.toFixed(2)}%

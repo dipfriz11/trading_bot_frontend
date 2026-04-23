@@ -70,7 +70,7 @@ export function TradesWidget({ widget }: TradesWidgetProps) {
             className={`grid grid-cols-3 px-2 text-xs font-mono ${flashMap[trade.id] === "green" ? "flash-green" : flashMap[trade.id] === "red" ? "flash-red" : ""}`}
             style={{ height: 20 }}
           >
-            <span style={{ color: trade.side === "buy" ? "#00d97e" : "#ff4757" }}>
+            <span style={{ color: trade.side === "buy" ? "#00e5a0" : "#ff4757" }}>
               {formatPrice(trade.price)}
             </span>
             <span className="text-right" style={{ opacity: 0.8 }}>{trade.size.toFixed(4)}</span>

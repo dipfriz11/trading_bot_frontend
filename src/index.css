@@ -46,8 +46,12 @@
     --terminal-border: #1a2740;
     --terminal-header: #0b1220;
     --terminal-accent: #1e6fef;
-    --terminal-green: #00d97e;
+    --terminal-green: #00e5a0;
+    --terminal-green-dim: #1a7a5a;
+    --terminal-green-bg: #0d3d2e;
     --terminal-red: #ff4757;
+    --terminal-red-dim: #c02030;
+    --terminal-red-bg: #3d0d0d;
     --terminal-blue: #00b4d8;
     --terminal-yellow: #ffd32a;
     --terminal-text: #c8d6e5;
@@ -334,7 +338,7 @@
 
 /* Price animations */
 @keyframes flash-green {
-  0% { background-color: rgba(0, 217, 126, 0.3); }
+  0% { background-color: rgba(0, 229, 160, 0.3); }
   100% { background-color: transparent; }
 }
 
@@ -347,7 +351,7 @@
 .flash-red { animation: flash-red 0.5s ease-out; }
 
 /* Candlestick chart */
-.candle-up { fill: #00d97e; stroke: #00d97e; }
+.candle-up { fill: #00e5a0; stroke: #00e5a0; }
 .candle-down { fill: #ff4757; stroke: #ff4757; }
 
 /* No-select during drag */
