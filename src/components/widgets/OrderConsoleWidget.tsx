@@ -590,6 +590,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                 type="number"
                 value={qty}
                 onChange={(e) => handleQtyChange(e.target.value)}
+                onFocus={() => setAnchor("qty")}
                 placeholder="0.00"
                 className="text-xs font-mono outline-none px-2 py-1 w-full"
                 style={{ border: qtyBorder, borderRadius: 4, color: "rgba(200,214,229,0.9)", background: "rgba(255,255,255,0.04)" }}
@@ -614,6 +615,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                 type="number"
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
+                onFocus={() => setAnchor("amount")}
                 placeholder="0.00"
                 className="text-xs font-mono outline-none px-2 py-1 w-full"
                 style={{ border: amtBorder, borderRadius: 4, color: "rgba(200,214,229,0.9)", background: "rgba(255,255,255,0.04)" }}

@@ -1191,6 +1191,7 @@ function StandaloneOrderForm({
             type="number"
             value={qty}
             onChange={(e) => handleQtyChange(e.target.value)}
+            onFocus={() => setAnchor("qty")}
             placeholder="0.00"
             className="w-full px-1.5 py-0.5 text-xs font-mono rounded outline-none"
             style={{ border: qtyBorder, color: "inherit", background: "rgba(255,255,255,0.04)" }}
@@ -1215,6 +1216,7 @@ function StandaloneOrderForm({
             type="number"
             value={amount}
             onChange={(e) => handleAmountChange(e.target.value)}
+            onFocus={() => setAnchor("amount")}
             placeholder="0.00"
             className="w-full px-1.5 py-0.5 text-xs font-mono rounded outline-none"
             style={{ border: amtBorder, color: "inherit", background: "rgba(255,255,255,0.04)" }}
