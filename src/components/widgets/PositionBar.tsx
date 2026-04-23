@@ -284,7 +284,7 @@ export function PositionBar({ symbol, marketType, availableBalance = 10000, inOr
   const [marginOpen, setMarginOpen] = useState(false)
   const [balTooltip, setBalTooltip] = useState(false)
 
-  const freeMargin = Math.max(0, availableBalance - inOrders)
+  const freeMargin = availableBalance - inOrders
   const availableWithLeverage = freeMargin * settings.leverage
 
   const fmt = (n: number) =>
@@ -399,7 +399,7 @@ export function PositionBarCompact({ symbol, marketType, availableBalance = 1000
   const [marginOpen, setMarginOpen] = useState(false)
   const [balTooltip, setBalTooltip] = useState(false)
 
-  const freeMargin = Math.max(0, availableBalance - inOrders)
+  const freeMargin = availableBalance - inOrders
   const availableWithLeverage = freeMargin * settings.leverage
 
   const fmt = (n: number) =>

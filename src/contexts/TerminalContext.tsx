@@ -306,7 +306,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const k = balKey(accountId, exchangeId, marketType)
     setBalances((prev) => {
       const cur = prev[k] ?? { walletBalance: 0, inOrders: 0 }
-      return { ...prev, [k]: { walletBalance: cur.walletBalance - amount, inOrders: cur.inOrders + amount } }
+      return { ...prev, [k]: { walletBalance: cur.walletBalance, inOrders: cur.inOrders + amount } }
     })
   }, [])
 
@@ -314,7 +314,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const k = balKey(accountId, exchangeId, marketType)
     setBalances((prev) => {
       const cur = prev[k] ?? { walletBalance: 0, inOrders: 0 }
-      return { ...prev, [k]: { walletBalance: cur.walletBalance + amount, inOrders: Math.max(0, cur.inOrders - amount) } }
+      return { ...prev, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, cur.inOrders - amount) } }
     })
   }, [])
 
