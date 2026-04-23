@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { CircleCheck as CheckCircle, Circle as XCircle, Clock } from "lucide-react"
 import type { Widget } from "@/types/terminal"
-import { SYMBOLS } from "@/lib/mock-data"
+import { SYMBOLS, getAccountBalance } from "@/lib/mock-data"
 import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 
@@ -75,9 +75,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const [manualSymbol, setManualSymbol] = useState(SYMBOLS[0])
   const symbol = chartSymbol ?? manualSymbol
 
-  // Market type and futures side from active chart
+  // Market type, futures side and account from active chart
   const marketType = activeChart?.marketType ?? "spot"
   const futuresSide = activeChart?.futuresSide ?? "long"
+  const accountId = activeChart?.accountId ?? "main"
+  const exchangeId = activeChart?.exchangeId ?? "binance"
+  const { walletBalance, inOrders } = getAccountBalance(accountId, exchangeId, marketType)
   // Effective side: futures drives buy/sell from long/short
   const effectiveSide: OrderSide = marketType === "futures"
     ? (futuresSide === "long" ? "buy" : "sell")
@@ -429,7 +432,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           )}
 
           {/* Position context: balance + leverage + margin mode */}
-          <PositionBar symbol={symbol} marketType={marketType} />
+          <PositionBar
+            symbol={symbol}
+            marketType={marketType}
+            availableBalance={walletBalance}
+            inOrders={inOrders}
+          />
 
           {/* Side toggle: Spot = Buy/Sell, Futures = Long/Short */}
           {marketType === "spot" ? (

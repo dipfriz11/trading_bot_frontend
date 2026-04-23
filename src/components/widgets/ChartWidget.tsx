@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react"
-import { generateCandles, formatPrice, generateOrderBook } from "@/lib/mock-data"
+import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES, getAccountBalance } from "@/lib/mock-data"
 import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget, Candle } from "@/types/terminal"
 import { useTerminal } from "@/contexts/TerminalContext"
@@ -768,6 +768,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
               currentPrice={last?.close}
               marketType={marketType}
               futuresSide={futuresSide}
+              accountId={widget.accountId ?? "main"}
+              exchangeId={widget.exchangeId ?? "binance"}
               onFuturesSideChange={(fs) => updateWidget(widget.id, { futuresSide: fs })}
               onDraftChange={(draft) => {
                 setLocalDraft(draft ? { ...draft, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
@@ -848,6 +850,8 @@ function StandaloneOrderForm({
   currentPrice,
   marketType = "spot",
   futuresSide = "long",
+  accountId = "main",
+  exchangeId = "binance",
   onFuturesSideChange,
   onDraftChange,
   onPlaceOrder,
@@ -861,6 +865,8 @@ function StandaloneOrderForm({
   currentPrice?: number
   marketType?: "spot" | "futures"
   futuresSide?: "long" | "short"
+  accountId?: string
+  exchangeId?: string
   onFuturesSideChange?: (fs: "long" | "short") => void
   onDraftChange: (draft: DraftOrder | undefined) => void
   onPlaceOrder: (order: Omit<PlacedOrder, "id" | "isDraft">) => string
@@ -1022,7 +1028,12 @@ function StandaloneOrderForm({
 
       {/* Position context: balance + leverage + margin mode */}
       <div className="mb-1.5 flex items-center" onMouseDown={stopProp}>
-        <PositionBarCompact symbol={symbol} marketType={marketType} />
+        <PositionBarCompact
+          symbol={symbol}
+          marketType={marketType}
+          availableBalance={getAccountBalance(accountId, exchangeId, marketType).walletBalance}
+          inOrders={getAccountBalance(accountId, exchangeId, marketType).inOrders}
+        />
       </div>
 
       {/* Spot: Buy/Sell toggle | Futures: Long/Short toggle */}
@@ -1168,21 +1179,25 @@ function StandaloneOrderForm({
   )
 }
 
-const ACCOUNTS = [
-  { id: "main",  label: "Main Account",  walletBalance: 10000, inOrders: 1250 },
-  { id: "test",  label: "Test Account",  walletBalance: 2500,  inOrders: 0    },
-  { id: "scalp", label: "Scalp Account", walletBalance: 5000,  inOrders: 800  },
-]
-
 // Hover tooltip shown over the Account button
-function AccountBalanceTooltip({ accountId }: { accountId: string }) {
+function AccountBalanceTooltip({
+  accountId,
+  exchangeId,
+  marketType,
+}: {
+  accountId: string
+  exchangeId: string
+  marketType: "spot" | "futures"
+}) {
   const acc = ACCOUNTS.find((a) => a.id === accountId)
   if (!acc) return null
 
+  const { walletBalance, inOrders } = getAccountBalance(accountId, exchangeId, marketType)
+  const freeMargin = walletBalance - inOrders
+  const exLabel = EXCHANGES.find((e) => e.id === exchangeId)?.label ?? exchangeId
+
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-  const freeMargin = acc.walletBalance - acc.inOrders
 
   return (
     <div
@@ -1190,34 +1205,32 @@ function AccountBalanceTooltip({ accountId }: { accountId: string }) {
       style={{
         top: "calc(100% + 5px)",
         left: 0,
-        minWidth: 210,
+        minWidth: 230,
         background: "#0a1220",
         border: "1px solid rgba(255,255,255,0.1)",
         boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
       }}
     >
-      <span
-        className="font-mono font-semibold"
-        style={{ color: "rgba(200,214,229,0.9)", fontSize: 10, letterSpacing: "0.05em" }}
-      >
-        {acc.label.toUpperCase()}
-      </span>
+      <div className="flex items-center justify-between gap-4">
+        <span className="font-mono font-semibold" style={{ color: "rgba(200,214,229,0.9)", fontSize: 10, letterSpacing: "0.05em" }}>
+          {acc.label.toUpperCase()}
+        </span>
+        <span className="font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>
+          {exLabel} · {marketType.toUpperCase()}
+        </span>
+      </div>
 
       <div className="flex flex-col gap-1">
         <div className="flex justify-between gap-6">
-          <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>
-            Total balance
-          </span>
+          <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>Total balance</span>
           <span className="font-mono font-semibold" style={{ color: "rgba(200,214,229,0.85)", fontSize: 10 }}>
-            {fmt(acc.walletBalance)} USDT
+            {fmt(walletBalance)} USDT
           </span>
         </div>
         <div className="flex justify-between gap-6">
-          <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>
-            In open orders
-          </span>
+          <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>In open orders</span>
           <span className="font-mono" style={{ color: "rgba(255,71,87,0.85)", fontSize: 10 }}>
-            −{fmt(acc.inOrders)} USDT
+            −{fmt(inOrders)} USDT
           </span>
         </div>
       </div>
@@ -1225,9 +1238,7 @@ function AccountBalanceTooltip({ accountId }: { accountId: string }) {
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} />
 
       <div className="flex justify-between gap-6">
-        <span className="font-mono font-semibold" style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>
-          Free margin
-        </span>
+        <span className="font-mono font-semibold" style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>Free margin</span>
         <span className="font-mono font-bold" style={{ color: "rgba(200,214,229,0.95)", fontSize: 10 }}>
           {fmt(freeMargin)} USDT
         </span>
@@ -1235,16 +1246,6 @@ function AccountBalanceTooltip({ accountId }: { accountId: string }) {
     </div>
   )
 }
-
-const EXCHANGES = [
-  { id: "binance", label: "Binance" },
-  { id: "okx", label: "OKX" },
-  { id: "bybit", label: "Bybit" },
-  { id: "kraken", label: "Kraken" },
-  { id: "kucoin", label: "KuCoin" },
-  { id: "gate", label: "Gate.io" },
-  { id: "bitget", label: "Bitget" },
-]
 
 function HeaderDropdown({
   icon,
@@ -1336,9 +1337,9 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
   const hasOrderConsole = !!(activeTab?.widgets.some((w) => w.type === "order-console"))
 
   const marketType = widget.marketType ?? "spot"
+  const selectedAccount = widget.accountId ?? "main"
+  const selectedExchange = widget.exchangeId ?? "binance"
 
-  const [selectedAccount, setSelectedAccount] = useState("main")
-  const [selectedExchange, setSelectedExchange] = useState("binance")
   const [accountHover, setAccountHover] = useState(false)
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
 
@@ -1357,10 +1358,12 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
           label="Account"
           items={ACCOUNTS}
           selected={selectedAccount}
-          onSelect={setSelectedAccount}
+          onSelect={(id) => updateWidget(widget.id, { accountId: id })}
           onOpenChange={setAccountDropdownOpen}
         />
-        {accountHover && !accountDropdownOpen && <AccountBalanceTooltip accountId={selectedAccount} />}
+        {accountHover && !accountDropdownOpen && (
+          <AccountBalanceTooltip accountId={selectedAccount} exchangeId={selectedExchange} marketType={marketType} />
+        )}
       </div>
 
       {/* Exchange selector */}
@@ -1369,7 +1372,7 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
         label="Exchange"
         items={EXCHANGES}
         selected={selectedExchange}
-        onSelect={setSelectedExchange}
+        onSelect={(id) => updateWidget(widget.id, { exchangeId: id })}
       />
 
       {/* Spot / Futures toggle */}

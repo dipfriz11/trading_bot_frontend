@@ -2,6 +2,75 @@ import type { Candle, OrderBookEntry, Trade, Position, Alert, NewsItem, Screener
 
 export const SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "DOGE/USDT"]
 
+export interface AccountData {
+  id: string
+  label: string
+  // balances per exchange per marketType
+  balances: Record<string, { spot: { walletBalance: number; inOrders: number }; futures: { walletBalance: number; inOrders: number } }>
+}
+
+export const ACCOUNTS: AccountData[] = [
+  {
+    id: "main",
+    label: "Main Account",
+    balances: {
+      binance: { spot: { walletBalance: 10000, inOrders: 1250 }, futures: { walletBalance: 10000, inOrders: 1250 } },
+      okx:     { spot: { walletBalance: 4500,  inOrders: 0    }, futures: { walletBalance: 4500,  inOrders: 500  } },
+      bybit:   { spot: { walletBalance: 2000,  inOrders: 200  }, futures: { walletBalance: 2000,  inOrders: 200  } },
+      kraken:  { spot: { walletBalance: 3000,  inOrders: 0    }, futures: { walletBalance: 3000,  inOrders: 0    } },
+      kucoin:  { spot: { walletBalance: 1500,  inOrders: 100  }, futures: { walletBalance: 1500,  inOrders: 100  } },
+      gate:    { spot: { walletBalance: 800,   inOrders: 0    }, futures: { walletBalance: 800,   inOrders: 0    } },
+      bitget:  { spot: { walletBalance: 600,   inOrders: 0    }, futures: { walletBalance: 600,   inOrders: 0    } },
+    },
+  },
+  {
+    id: "test",
+    label: "Test Account",
+    balances: {
+      binance: { spot: { walletBalance: 2500, inOrders: 0   }, futures: { walletBalance: 2500, inOrders: 0   } },
+      okx:     { spot: { walletBalance: 1000, inOrders: 0   }, futures: { walletBalance: 1000, inOrders: 0   } },
+      bybit:   { spot: { walletBalance: 500,  inOrders: 0   }, futures: { walletBalance: 500,  inOrders: 0   } },
+      kraken:  { spot: { walletBalance: 300,  inOrders: 0   }, futures: { walletBalance: 300,  inOrders: 0   } },
+      kucoin:  { spot: { walletBalance: 200,  inOrders: 0   }, futures: { walletBalance: 200,  inOrders: 0   } },
+      gate:    { spot: { walletBalance: 100,  inOrders: 0   }, futures: { walletBalance: 100,  inOrders: 0   } },
+      bitget:  { spot: { walletBalance: 100,  inOrders: 0   }, futures: { walletBalance: 100,  inOrders: 0   } },
+    },
+  },
+  {
+    id: "scalp",
+    label: "Scalp Account",
+    balances: {
+      binance: { spot: { walletBalance: 5000, inOrders: 800 }, futures: { walletBalance: 5000, inOrders: 800 } },
+      okx:     { spot: { walletBalance: 2000, inOrders: 300 }, futures: { walletBalance: 2000, inOrders: 300 } },
+      bybit:   { spot: { walletBalance: 1000, inOrders: 0   }, futures: { walletBalance: 1000, inOrders: 150 } },
+      kraken:  { spot: { walletBalance: 500,  inOrders: 0   }, futures: { walletBalance: 500,  inOrders: 0   } },
+      kucoin:  { spot: { walletBalance: 400,  inOrders: 0   }, futures: { walletBalance: 400,  inOrders: 50  } },
+      gate:    { spot: { walletBalance: 300,  inOrders: 0   }, futures: { walletBalance: 300,  inOrders: 0   } },
+      bitget:  { spot: { walletBalance: 200,  inOrders: 0   }, futures: { walletBalance: 200,  inOrders: 0   } },
+    },
+  },
+]
+
+export const EXCHANGES = [
+  { id: "binance", label: "Binance" },
+  { id: "okx",     label: "OKX"     },
+  { id: "bybit",   label: "Bybit"   },
+  { id: "kraken",  label: "Kraken"  },
+  { id: "kucoin",  label: "KuCoin"  },
+  { id: "gate",    label: "Gate.io" },
+  { id: "bitget",  label: "Bitget"  },
+]
+
+export function getAccountBalance(
+  accountId: string,
+  exchangeId: string,
+  marketType: "spot" | "futures",
+): { walletBalance: number; inOrders: number } {
+  const acc = ACCOUNTS.find((a) => a.id === accountId)
+  if (!acc) return { walletBalance: 0, inOrders: 0 }
+  return acc.balances[exchangeId]?.[marketType] ?? { walletBalance: 0, inOrders: 0 }
+}
+
 function randBetween(a: number, b: number) {
   return a + Math.random() * (b - a)
 }

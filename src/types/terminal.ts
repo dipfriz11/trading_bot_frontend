@@ -33,6 +33,8 @@ export interface Widget {
   showOrderForm?: boolean
   marketType?: "spot" | "futures"
   futuresSide?: "long" | "short"
+  accountId?: string
+  exchangeId?: string
 }
 
 export interface Tab {
