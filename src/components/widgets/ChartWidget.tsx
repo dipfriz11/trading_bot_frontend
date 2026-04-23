@@ -479,7 +479,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     activeTab, updateWidget, activeChartId, setActiveChartId,
     draftOrders, placedOrders: ctxPlacedOrders,
     setDraftOrder: ctxSetDraft,
+    addPlacedOrder: ctxAddPlaced,
     removePlacedOrder: ctxRemovePlaced, updatePlacedOrderPrice: ctxUpdatePrice,
+    updatePlacedOrder: ctxUpdatePlacedOrder,
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
@@ -489,9 +491,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [candles, setCandles] = useState<Candle[]>([])
 
-  // Local state: only used when there is NO order-console in the workspace
+  // Local state: draft and editing order id for standalone mode
   const [localDraft, setLocalDraft] = useState<PlacedOrder | undefined>(undefined)
-  const [localPlaced, setLocalPlaced] = useState<PlacedOrder[]>([])
   const [localEditingOrderId, setLocalEditingOrderId] = useState<string | null>(null)
   const localDragHandlers = useRef<Map<string, (price: number) => void>>(new Map())
 
@@ -520,6 +521,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const prev = candles[candles.length - 2]
   const isUp = last && prev ? last.close >= prev.close : true
 
+  // Standalone mode uses localEditingOrderId for the form; managed mode uses context editingOrderId
   const effectiveEditingOrderId = hasOrderConsole ? editingOrderId : localEditingOrderId
 
   // ---- Compose orders to render ----
@@ -528,26 +530,18 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const draftForChart: PlacedOrder | undefined = hasOrderConsole
     ? (draftOrders[widget.id] ? { ...draftOrders[widget.id]!, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
     : localDraft
-  const placedForChart: PlacedOrder[] = hasOrderConsole
-    ? (ctxPlacedOrders[widget.id] ?? [])
-    : localPlaced
+  // Always read placed orders from context so PortfolioWidget sees them regardless of mode
+  const placedForChart: PlacedOrder[] = ctxPlacedOrders[widget.id] ?? []
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
 
   // ---- Close handler ----
   const handleOrderClose = useCallback((id: string) => {
-    if (hasOrderConsole) {
-      if (id === LOCAL_DRAFT_ID) {
-        ctxSetDraft(widget.id, undefined)
-      } else {
-        ctxRemovePlaced(widget.id, id)
-      }
+    if (id === LOCAL_DRAFT_ID) {
+      if (hasOrderConsole) ctxSetDraft(widget.id, undefined)
+      else setLocalDraft(undefined)
     } else {
-      if (id === LOCAL_DRAFT_ID) {
-        setLocalDraft(undefined)
-      } else {
-        setLocalPlaced((prev) => prev.filter((o) => o.id !== id))
-        localDragHandlers.current.delete(id)
-      }
+      ctxRemovePlaced(widget.id, id)
+      localDragHandlers.current.delete(id)
     }
   }, [hasOrderConsole, widget.id, ctxSetDraft, ctxRemovePlaced])
 
@@ -575,10 +569,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     let startPrice = 0
     if (isDraftOrder) {
       startPrice = draftForChart?.price ?? 0
-    } else if (hasOrderConsole) {
-      startPrice = ctxPlacedOrders[widget.id]?.find((o) => o.id === id)?.price ?? 0
     } else {
-      startPrice = localPlaced.find((o) => o.id === id)?.price ?? 0
+      startPrice = ctxPlacedOrders[widget.id]?.find((o) => o.id === id)?.price ?? 0
     }
 
     const startY = e.clientY
@@ -590,19 +582,13 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (dragStarted) return
       dragStarted = true
       isDraggingRef.current = true
-      // Change cursor to grabbing on the whole page
       document.body.style.cursor = "grabbing"
-      if (hasOrderConsole) {
-        setIsDraggingOrder(true)
-        if (isPlacedOrder) setEditingOrderId(id)
-      }
+      if (isPlacedOrder) setEditingOrderId(id)
     }
 
     const onMove = (mv: MouseEvent) => {
       const dy = mv.clientY - startY
-      if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) {
-        startDrag()
-      }
+      if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) startDrag()
       if (!dragStarted) return
 
       const pricePerPx = (maxP - minP) / chartH
@@ -617,12 +603,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           localDragHandlers.current.get(LOCAL_DRAFT_ID)?.(newPrice)
         }
       } else {
-        if (hasOrderConsole) {
-          ctxUpdatePrice(widget.id, id, newPrice)
-        } else {
-          setLocalPlaced((orders) => orders.map((o) => o.id === id ? { ...o, price: newPrice } : o))
-          localDragHandlers.current.get(id)?.(newPrice)
-        }
+        ctxUpdatePrice(widget.id, id, newPrice)
+        localDragHandlers.current.get(id)?.(newPrice)
       }
     }
 
@@ -633,24 +615,23 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       isDraggingRef.current = false
 
       if (dragStarted) {
-        // Was a drag — release
-        if (hasOrderConsole) {
-          setIsDraggingOrder(false)
-          if (isPlacedOrder) setEditingOrderId(null)
-        }
+        setIsDraggingOrder(false)
+        if (isPlacedOrder) setEditingOrderId(null)
       } else {
         // Was a click — toggle edit mode for placed orders
-        if (hasOrderConsole && isPlacedOrder) {
-          setEditingOrderId(editingOrderId === id ? null : id)
-        } else if (!hasOrderConsole && isPlacedOrder) {
-          setLocalEditingOrderId((prev) => prev === id ? null : id)
+        if (isPlacedOrder) {
+          if (hasOrderConsole) {
+            setEditingOrderId(editingOrderId === id ? null : id)
+          } else {
+            setLocalEditingOrderId((prev) => prev === id ? null : id)
+          }
         }
       }
     }
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, draftForChart, draftOrders, ctxPlacedOrders, localPlaced, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, editingOrderId])
+  }, [hasOrderConsole, widget.id, draftForChart, draftOrders, ctxPlacedOrders, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {
@@ -658,15 +639,18 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     else if (!hasOrderConsole && localEditingOrderId) setLocalEditingOrderId(null)
   }, [hasOrderConsole, editingOrderId, setEditingOrderId, localEditingOrderId])
 
-  // ---- Place order (standalone mode only) ----
+  // ---- Place order (standalone mode — always writes to global context) ----
   const handlePlaceOrder = useCallback((order: Omit<PlacedOrder, "id" | "isDraft">, margin?: number): string => {
     const id = Math.random().toString(36).slice(2, 10)
-    setLocalPlaced((prev) => [...prev, { ...order, id, isDraft: false }])
+    const now = new Date()
+    const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+      .map((n) => n.toString().padStart(2, "0")).join(":")
+    ctxAddPlaced(widget.id, { ...order, id, isDraft: false, time, status: "pending" })
     setLocalDraft(undefined)
     const deductAmount = margin ?? order.qty * order.price
     deductOrderBalance(widget.accountId ?? "main", widget.exchangeId ?? "binance", widget.marketType ?? "spot", deductAmount)
     return id
-  }, [widget.accountId, widget.exchangeId, widget.marketType, deductOrderBalance])
+  }, [widget.id, widget.accountId, widget.exchangeId, widget.marketType, ctxAddPlaced, deductOrderBalance])
 
   const registerDragPriceHandler = useCallback((id: string, fn: (p: number) => void) => {
     localDragHandlers.current.set(id, fn)
@@ -781,9 +765,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
               onPlaceOrder={handlePlaceOrder}
               registerDragPriceHandler={registerDragPriceHandler}
               registerDraftDragHandler={registerDraftDragHandler}
-              editingOrder={localEditingOrderId ? localPlaced.find((o) => o.id === localEditingOrderId) : undefined}
+              editingOrder={localEditingOrderId ? (ctxPlacedOrders[widget.id] ?? []).find((o) => o.id === localEditingOrderId) : undefined}
               onUpdateOrder={(id, updates) => {
-                setLocalPlaced((prev) => prev.map((o) => o.id === id ? { ...o, ...updates } : o))
+                ctxUpdatePlacedOrder(widget.id, id, updates)
                 setLocalEditingOrderId(null)
               }}
               onCancelEdit={() => setLocalEditingOrderId(null)}
@@ -890,8 +874,10 @@ function StandaloneOrderForm({
   const [price, setPrice] = useState(() => currentPrice ? priceToString(currentPrice) : "")
   const [qty, setQty] = useState("")
   const [amount, setAmount] = useState("")
-  const [orderType, setOrderType] = useState<"limit" | "market">("limit")
+  const [orderType, setOrderType] = useState<"limit" | "market" | "stop">("limit")
+  const [stopPrice, setStopPrice] = useState("")
   const [anchor, setAnchor] = useState<AnchorField>("qty")
+  const [lastResult, setLastResult] = useState<{ success: boolean; msg: string } | null>(null)
 
   const { getBalance } = useTerminal()
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
@@ -927,10 +913,13 @@ function StandaloneOrderForm({
   const effectivePrice = orderType === "market" ? (currentPrice ?? 0) : parseFloat(price) || 0
 
   useEffect(() => {
-    if (editingOrder) return
+    if (editingOrder) {
+      setStopPrice("")
+      return
+    }
     const qtyNum = parseFloat(qty)
     if (qtyNum > 0 && effectivePrice > 0) {
-      onDraftChange({ side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType })
+      onDraftChange({ side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType: orderType === "stop" ? "limit" : orderType })
     } else {
       onDraftChange(undefined)
     }
@@ -996,16 +985,30 @@ function StandaloneOrderForm({
     if (orderType !== "market" && !price) return
 
     if (editingOrder && onUpdateOrder) {
-      onUpdateOrder(editingOrder.id, { side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType })
+      onUpdateOrder(editingOrder.id, { side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType: orderType === "stop" ? "limit" : orderType })
       setQty("")
       setAmount("")
       setAnchor("qty")
+      setLastResult({ success: true, msg: `Updated ${effectiveSide.toUpperCase()} ${qty} @ ${price}` })
+      setTimeout(() => setLastResult(null), 1500)
       return
     }
 
     const notional = qtyNum * effectivePrice
     const margin = marketType === "futures" ? notional / posSettings.leverage : notional
-    const id = onPlaceOrder({ side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType }, margin)
+    const id = onPlaceOrder({
+      side: effectiveSide,
+      price: effectivePrice,
+      qty: qtyNum,
+      orderType: orderType === "stop" ? "limit" : orderType,
+      symbol,
+      accountId,
+      exchangeId,
+      marketType,
+      leverage: posSettings.leverage,
+      margin,
+      status: "pending",
+    }, margin)
     registerDragPriceHandler(id, (newPrice: number) => {
       setPrice(priceToString(newPrice))
       if (anchorRef.current === "qty") {
@@ -1017,9 +1020,14 @@ function StandaloneOrderForm({
       }
     })
 
+    const ticker = symbol.split("/")[0]
+    setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${ticker} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
+    setTimeout(() => setLastResult(null), 1500)
+
     setQty("")
     setAmount("")
     setAnchor("qty")
+    setStopPrice("")
   }
 
   const handleCancelEdit = () => {
@@ -1027,6 +1035,7 @@ function StandaloneOrderForm({
     setQty("")
     setAmount("")
     setAnchor("qty")
+    setStopPrice("")
   }
 
   const accentColor = effectiveSide === "buy" ? "#00d97e" : "#ff4757"
@@ -1098,30 +1107,52 @@ function StandaloneOrderForm({
 
       {/* Order type */}
       <div className="flex gap-0.5 mb-1">
-        {(["limit", "market"] as const).map((t) => (
+        {(["limit", "market", "stop"] as const).map((t) => (
           <button key={t}
             onClick={() => setOrderType(t)}
-            className="px-1.5 py-0.5 text-xs font-mono rounded"
+            className="flex-1 px-1 py-0.5 text-xs font-mono rounded capitalize"
             style={{
               background: orderType === t ? "rgba(30,111,239,0.2)" : "transparent",
               border: `1px solid ${orderType === t ? "#1e6fef" : "rgba(255,255,255,0.1)"}`,
               color: orderType === t ? "#1e6fef" : "rgba(255,255,255,0.4)",
+              fontSize: 10,
             }}
             onMouseDown={stopProp}
           >
-            {t.toUpperCase()}
+            {t}
           </button>
         ))}
       </div>
 
-      {orderType === "limit" && (
+      {/* Stop trigger price */}
+      {orderType === "stop" && (
         <div className="mb-1">
-          <label className="text-xs font-mono" style={{ opacity: 0.5 }}>Price</label>
+          <label className="text-xs font-mono" style={{ opacity: 0.5, fontSize: 10 }}>Stop Price</label>
           <input
+            type="number"
+            value={stopPrice}
+            onChange={(e) => setStopPrice(e.target.value)}
+            placeholder="0.00"
+            className="w-full px-1.5 py-0.5 text-xs font-mono rounded outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.1)", color: "inherit", background: "rgba(255,255,255,0.04)" }}
+            onMouseDown={stopProp}
+          />
+        </div>
+      )}
+
+      {/* Limit / Stop limit price */}
+      {orderType !== "market" && (
+        <div className="mb-1">
+          <label className="text-xs font-mono" style={{ opacity: 0.5, fontSize: 10 }}>
+            {orderType === "stop" ? "Limit Price" : "Price"}
+          </label>
+          <input
+            type="number"
             value={price}
             onChange={(e) => handlePriceChange(e.target.value)}
-            className="w-full px-1.5 py-0.5 text-xs font-mono rounded bg-transparent outline-none"
-            style={{ border: "1px solid rgba(255,255,255,0.1)", color: "inherit" }}
+            placeholder="0.00"
+            className="w-full px-1.5 py-0.5 text-xs font-mono rounded outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.1)", color: "inherit", background: "rgba(255,255,255,0.04)" }}
             onMouseDown={stopProp}
           />
         </div>
@@ -1129,46 +1160,59 @@ function StandaloneOrderForm({
 
       <div className="grid grid-cols-2 gap-0.5 mb-1">
         <div>
-          <label className="text-xs font-mono" style={{ opacity: anchor === "qty" ? 1 : 0.5 }}>Qty</label>
+          <label className="text-xs font-mono" style={{ opacity: anchor === "qty" ? 1 : 0.5, fontSize: 10 }}>Qty</label>
           <input
+            type="number"
             value={qty}
             onChange={(e) => handleQtyChange(e.target.value)}
-            className="w-full px-1.5 py-0.5 text-xs font-mono rounded bg-transparent outline-none"
-            style={{ border: qtyBorder, color: "inherit" }}
+            placeholder="0.00"
+            className="w-full px-1.5 py-0.5 text-xs font-mono rounded outline-none"
+            style={{ border: qtyBorder, color: "inherit", background: "rgba(255,255,255,0.04)" }}
             onMouseDown={stopProp}
           />
         </div>
         <div>
-          <label className="text-xs font-mono" style={{ opacity: anchor === "amount" ? 1 : 0.5 }}>Amount</label>
+          <label className="text-xs font-mono" style={{ opacity: anchor === "amount" ? 1 : 0.5, fontSize: 10 }}>Amount</label>
           <input
+            type="number"
             value={amount}
             onChange={(e) => handleAmountChange(e.target.value)}
-            className="w-full px-1.5 py-0.5 text-xs font-mono rounded bg-transparent outline-none"
-            style={{ border: amtBorder, color: "inherit" }}
+            placeholder="0.00"
+            className="w-full px-1.5 py-0.5 text-xs font-mono rounded outline-none"
+            style={{ border: amtBorder, color: "inherit", background: "rgba(255,255,255,0.04)" }}
             onMouseDown={stopProp}
           />
         </div>
       </div>
 
       {/* Quick % buttons */}
-      {!editingOrder && (
-        <div className="flex gap-0.5 mb-1" onMouseDown={stopProp}>
-          {[25, 50, 75, 100].map((pct) => (
-            <button
-              key={pct}
-              onClick={() => handlePctClick(pct)}
-              className="flex-1 py-0.5 text-xs font-mono rounded"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "rgba(255,255,255,0.4)",
-                fontSize: 10,
-              }}
-              onMouseDown={stopProp}
-            >
-              {pct}%
-            </button>
-          ))}
+      <div className="flex gap-0.5 mb-1" onMouseDown={stopProp}>
+        {[25, 50, 75, 100].map((pct) => (
+          <button
+            key={pct}
+            onClick={() => handlePctClick(pct)}
+            className="flex-1 py-0.5 text-xs font-mono rounded"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(255,255,255,0.4)",
+              fontSize: 10,
+            }}
+            onMouseDown={stopProp}
+          >
+            {pct}%
+          </button>
+        ))}
+      </div>
+
+      {/* Edit mode banner */}
+      {editingOrder && (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded mb-1 text-xs font-mono"
+          style={{ background: "rgba(30,111,239,0.08)", border: "1px solid rgba(30,111,239,0.25)", color: "rgba(30,111,239,0.9)", fontSize: 10 }}
+          onMouseDown={stopProp}
+        >
+          <span style={{ flex: 1 }}>Editing placed order</span>
+          <button onClick={handleCancelEdit} className="opacity-60 hover:opacity-100" onMouseDown={stopProp}>✕</button>
         </div>
       )}
 
@@ -1176,7 +1220,7 @@ function StandaloneOrderForm({
         <div className="flex gap-0.5">
           <button
             onClick={handleSubmit}
-            className="flex-1 py-1.5 text-sm font-mono font-semibold rounded transition-all"
+            className="flex-1 py-1.5 text-xs font-mono font-semibold rounded transition-all"
             style={{
               background: "rgba(30,111,239,0.15)",
               border: "1px solid rgba(30,111,239,0.4)",
@@ -1215,6 +1259,21 @@ function StandaloneOrderForm({
             : (effectiveSide === "buy" ? `Buy / ${ticker}` : `Sell / ${ticker}`)
           }
         </button>
+      )}
+
+      {/* Last result feedback */}
+      {lastResult && (
+        <div
+          className="text-xs font-mono px-2 py-1 rounded text-center mt-1"
+          style={{
+            background: lastResult.success ? "rgba(0,217,126,0.1)" : "rgba(255,71,87,0.1)",
+            color: lastResult.success ? "#00d97e" : "#ff4757",
+            border: `1px solid ${lastResult.success ? "rgba(0,217,126,0.2)" : "rgba(255,71,87,0.2)"}`,
+            fontSize: 10,
+          }}
+        >
+          {lastResult.success ? "✓ " : "✗ "}{lastResult.msg}
+        </div>
       )}
     </div>
   )
