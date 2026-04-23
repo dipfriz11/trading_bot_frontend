@@ -879,7 +879,7 @@ function StandaloneOrderForm({
   const [anchor, setAnchor] = useState<AnchorField>("qty")
   const [lastResult, setLastResult] = useState<{ success: boolean; msg: string } | null>(null)
 
-  const { getBalance } = useTerminal()
+  const { getBalance, refundOrderBalance, deductOrderBalance } = useTerminal()
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
   const { settings: posSettings } = usePositionSettings(symbol)
 
@@ -992,7 +992,13 @@ function StandaloneOrderForm({
     if (orderType !== "market" && !price) return
 
     if (editingOrder && onUpdateOrder) {
-      onUpdateOrder(editingOrder.id, { side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType: orderType === "stop" ? "limit" : orderType })
+      const newNotional = qtyNum * effectivePrice
+      const newMargin = marketType === "futures" ? newNotional / posSettings.leverage : newNotional
+      if (editingOrder.accountId && editingOrder.exchangeId && editingOrder.marketType && editingOrder.margin != null) {
+        refundOrderBalance(editingOrder.accountId, editingOrder.exchangeId, editingOrder.marketType, editingOrder.margin)
+        deductOrderBalance(editingOrder.accountId, editingOrder.exchangeId, editingOrder.marketType, newMargin)
+      }
+      onUpdateOrder(editingOrder.id, { side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType: orderType === "stop" ? "limit" : orderType, margin: newMargin })
       setQty("")
       setAmount("")
       setAnchor("qty")

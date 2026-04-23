@@ -338,11 +338,32 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const updatePlacedOrderPrice = useCallback((chartId: string, orderId: string, price: number) => {
-    setPlacedOrdersMap((prev) => ({
-      ...prev,
-      [chartId]: (prev[chartId] ?? []).map((o) => o.id === orderId ? { ...o, price } : o),
-    }))
-  }, [])
+    setPlacedOrdersMap((prev) => {
+      const orders = prev[chartId] ?? []
+      const order = orders.find((o) => o.id === orderId)
+      if (!order) return prev
+
+      const newNotional = order.qty * price
+      const newMargin = order.marketType === "futures" && order.leverage
+        ? newNotional / order.leverage
+        : newNotional
+
+      // Update balance: refund old margin, deduct new margin
+      if (order.accountId && order.exchangeId && order.marketType && order.margin != null) {
+        const k = balKey(order.accountId, order.exchangeId, order.marketType)
+        setBalances((b) => {
+          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+          const updated = Math.max(0, Math.round((cur.inOrders - order.margin! + newMargin) * 100) / 100)
+          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: updated } }
+        })
+      }
+
+      return {
+        ...prev,
+        [chartId]: orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o),
+      }
+    })
+  }, [setBalances])
 
   const updatePlacedOrder = useCallback((chartId: string, orderId: string, updates: Partial<ChartPlacedOrder>) => {
     setPlacedOrdersMap((prev) => ({

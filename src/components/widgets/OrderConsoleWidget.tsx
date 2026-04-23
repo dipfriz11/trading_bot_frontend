@@ -51,6 +51,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     updateWidget,
     getBalance,
     deductOrderBalance,
+    refundOrderBalance,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "history">("new")
@@ -295,9 +296,23 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const newPrice = parseFloat(price)
     const newQty = parseFloat(qty)
     if (isNaN(newPrice) || newPrice <= 0) return
+
+    const existingOrder = placedOrders[activeChart.id]?.find((o) => o.id === editingOrderId)
+    const effectiveQty = newQty > 0 ? newQty : (existingOrder?.qty ?? 0)
+    const newNotional = effectiveQty * newPrice
+    const newMargin = existingOrder?.marketType === "futures" && existingOrder?.leverage
+      ? newNotional / existingOrder.leverage
+      : newNotional
+
+    if (existingOrder?.accountId && existingOrder?.exchangeId && existingOrder?.marketType && existingOrder?.margin != null) {
+      refundOrderBalance(existingOrder.accountId, existingOrder.exchangeId, existingOrder.marketType, existingOrder.margin)
+      deductOrderBalance(existingOrder.accountId, existingOrder.exchangeId, existingOrder.marketType, newMargin)
+    }
+
     updatePlacedOrder(activeChart.id, editingOrderId, {
       price: newPrice,
       ...(newQty > 0 ? { qty: newQty } : {}),
+      margin: newMargin,
     })
     setEditingOrderId(null)
     setFormEditMode(false)
