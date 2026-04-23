@@ -1252,20 +1252,27 @@ function HeaderDropdown({
   items,
   selected,
   onSelect,
+  onOpenChange,
 }: {
   icon: React.ReactNode
   label: string
   items: { id: string; label: string }[]
   selected: string
   onSelect: (id: string) => void
+  onOpenChange?: (open: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
+
+  const setOpenWithCb = (v: boolean) => {
+    setOpen(v)
+    onOpenChange?.(v)
+  }
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpenWithCb(false)
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
@@ -1276,7 +1283,7 @@ function HeaderDropdown({
   return (
     <div ref={ref} className="relative" style={{ userSelect: "none" }}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpenWithCb(!open)}
         className="flex items-center gap-0.5 px-1.5 py-0.5 font-mono rounded transition-all"
         style={{
           fontSize: 9,
@@ -1305,7 +1312,7 @@ function HeaderDropdown({
           {items.map((item) => (
             <button
               key={item.id}
-              onClick={() => { onSelect(item.id); setOpen(false) }}
+              onClick={() => { onSelect(item.id); setOpenWithCb(false) }}
               className="w-full text-left px-2 py-1 transition-colors"
               style={{
                 fontSize: 10,
@@ -1333,12 +1340,13 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
   const [selectedAccount, setSelectedAccount] = useState("main")
   const [selectedExchange, setSelectedExchange] = useState("binance")
   const [accountHover, setAccountHover] = useState(false)
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
 
   return (
     <div className="flex items-center gap-1" onMouseDown={stopProp}>
-      {/* Account selector with balance tooltip on hover */}
+      {/* Account selector with balance tooltip on hover (hidden when dropdown is open) */}
       <div
         className="relative"
         onMouseEnter={() => setAccountHover(true)}
@@ -1350,8 +1358,9 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
           items={ACCOUNTS}
           selected={selectedAccount}
           onSelect={setSelectedAccount}
+          onOpenChange={setAccountDropdownOpen}
         />
-        {accountHover && <AccountBalanceTooltip accountId={selectedAccount} />}
+        {accountHover && !accountDropdownOpen && <AccountBalanceTooltip accountId={selectedAccount} />}
       </div>
 
       {/* Exchange selector */}
