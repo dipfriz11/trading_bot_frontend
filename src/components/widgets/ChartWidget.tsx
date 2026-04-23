@@ -37,10 +37,10 @@ const CHART_COLORS = {
 
 // Badge for BUY (long) orders — anchored to the LEFT edge
 function BuyOrderBadge({
-  y, label, color, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
+  y, label, color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
   priceTag, onClose, onDragStart, axisX, padLeft, isEditing, isDraft,
 }: {
-  y: number; label: string; color: string
+  y: number; label: string; color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
   priceTag: string; isEditing: boolean; isDraft?: boolean
@@ -56,6 +56,7 @@ function BuyOrderBadge({
   const by = y - badgeH / 2
   const badgeX = padLeft + 4
   const axisPriceW = 56
+  const labelFill = textColor ?? color
 
   return (
     <g>
@@ -70,7 +71,7 @@ function BuyOrderBadge({
         <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
-          <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={color}
+          <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
             fontFamily="Geist Variable, monospace" fontWeight="600"
             style={{ pointerEvents: "none" }}>
             {label}
@@ -80,8 +81,8 @@ function BuyOrderBadge({
         <g style={{ cursor: isEditing ? "grab" : "pointer" }}
           onMouseDown={onDragStart}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
-            fill={isEditing ? `${color}30` : `${color}18`} stroke={color} strokeWidth={1} rx={3} />
-          <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={color}
+            fill={isEditing ? `${color}60` : color} stroke={color} strokeWidth={1} rx={3} />
+          <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
             fontFamily="Geist Variable, monospace" fontWeight="600"
             style={{ pointerEvents: "none" }}>
             {label}
@@ -114,10 +115,10 @@ function BuyOrderBadge({
 
 // Badge for SELL (short) orders — anchored to the RIGHT edge (just before price axis)
 function SellOrderBadge({
-  y, label, color, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
+  y, label, color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
   priceTag, onClose, onDragStart, axisX, isEditing, isDraft,
 }: {
-  y: number; label: string; color: string
+  y: number; label: string; color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
   priceTag: string; isEditing: boolean; isDraft?: boolean
@@ -135,6 +136,7 @@ function SellOrderBadge({
   const badgeRight = axisX - 4
   const closeX = badgeRight - CLOSE_W - labelW
   const labelX = closeX + CLOSE_W
+  const labelFill = textColor ?? color
 
   return (
     <g>
@@ -160,7 +162,7 @@ function SellOrderBadge({
         <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
-          <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={color}
+          <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
             fontFamily="Geist Variable, monospace" fontWeight="600"
             style={{ pointerEvents: "none" }}>
             {label}
@@ -170,8 +172,8 @@ function SellOrderBadge({
         <g style={{ cursor: isEditing ? "grab" : "pointer" }}
           onMouseDown={onDragStart}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
-            fill={isEditing ? `${color}30` : `${color}18`} stroke={color} strokeWidth={1} rx={3} />
-          <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={color}
+            fill={isEditing ? `${color}60` : color} stroke={color} strokeWidth={1} rx={3} />
+          <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
             fontFamily="Geist Variable, monospace" fontWeight="600"
             style={{ pointerEvents: "none" }}>
             {label}
@@ -209,6 +211,7 @@ function renderOrderLine(
   const axisX = width - padding.right
 
   let color: string
+  let textColor: string | undefined
   let closeBtnColor: string
   let closeBtnFg: string
   let priceTagColor: string
@@ -217,18 +220,21 @@ function renderOrderLine(
 
   if (order.isDraft) {
     color = CHART_COLORS.draft
+    textColor = undefined
     closeBtnColor = CHART_COLORS.draftClose
     closeBtnFg = "rgba(200,214,229,0.9)"
     priceTagColor = "rgba(80,95,115,0.9)"
     priceTagFg = "rgba(200,214,229,0.9)"
     label = `${order.side === "buy" ? "BUY" : "SELL"} | ${order.qty} — draft`
   } else {
-    color = order.side === "buy" ? CHART_COLORS.up : CHART_COLORS.down
-    closeBtnColor = color
-    closeBtnFg = "#000"
-    priceTagColor = color
-    priceTagFg = "#000"
-    label = `${order.side === "buy" ? "LONG" : "SHORT"} | ${order.qty}`
+    const isBuy = order.side === "buy"
+    color = isBuy ? "#1a7a5a" : "#7a1a1a"
+    textColor = isBuy ? "#00e5a0" : "#ff4757"
+    closeBtnColor = isBuy ? "#1a7a5a" : "#7a1a1a"
+    closeBtnFg = isBuy ? "#00e5a0" : "#ff4757"
+    priceTagColor = isBuy ? "#1a7a5a" : "#7a1a1a"
+    priceTagFg = isBuy ? "#00e5a0" : "#ff4757"
+    label = `${isBuy ? "LONG" : "SHORT"} | ${order.qty}`
   }
 
   // Estimate badge width for line gap calculation
@@ -248,7 +254,7 @@ function renderOrderLine(
         <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
           stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={order.isDraft ? 0.5 : 0.85} />
         <BuyOrderBadge
-          y={y} label={label} color={color}
+          y={y} label={label} color={color} textColor={textColor}
           closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
           priceTagColor={priceTagColor} priceTagFg={priceTagFg}
           priceTag={formatPrice(orderPrice)}
@@ -271,7 +277,7 @@ function renderOrderLine(
         <line x1={badgeRight + 2} y1={y} x2={axisX - 1} y2={y}
           stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={order.isDraft ? 0.5 : 0.85} />
         <SellOrderBadge
-          y={y} label={label} color={color}
+          y={y} label={label} color={color} textColor={textColor}
           closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
           priceTagColor={priceTagColor} priceTagFg={priceTagFg}
           priceTag={formatPrice(orderPrice)}
