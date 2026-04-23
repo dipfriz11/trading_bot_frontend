@@ -5,6 +5,7 @@ import type { Widget, Candle } from "@/types/terminal"
 import { useTerminal } from "@/contexts/TerminalContext"
 import type { ChartPlacedOrder, ChartDraftOrder } from "@/contexts/TerminalContext"
 import { ChevronDown, User, Building2 } from "lucide-react"
+import { PositionBarCompact } from "./PositionBar"
 
 // Local order shape (same as context but aliased for clarity)
 type PlacedOrder = ChartPlacedOrder
@@ -1018,6 +1019,11 @@ function StandaloneOrderForm({
   return (
     <div className="px-2 py-1.5 flex-shrink-0 text-xs"
       style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+
+      {/* Position context: balance + leverage + margin mode */}
+      <div className="mb-1.5 flex items-center" onMouseDown={stopProp}>
+        <PositionBarCompact symbol={symbol} marketType={marketType} />
+      </div>
 
       {/* Spot: Buy/Sell toggle | Futures: Long/Short toggle */}
       {marketType === "spot" ? (

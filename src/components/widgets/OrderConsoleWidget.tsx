@@ -3,6 +3,7 @@ import { CircleCheck as CheckCircle, Circle as XCircle, Clock } from "lucide-rea
 import type { Widget } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { useTerminal } from "@/contexts/TerminalContext"
+import { PositionBar } from "./PositionBar"
 
 function priceToString(price: number): string {
   if (price >= 1000) return price.toFixed(2)
@@ -426,6 +427,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
               ))}
             </select>
           )}
+
+          {/* Position context: balance + leverage + margin mode */}
+          <PositionBar symbol={symbol} marketType={marketType} />
 
           {/* Side toggle: Spot = Buy/Sell, Futures = Long/Short */}
           {marketType === "spot" ? (
