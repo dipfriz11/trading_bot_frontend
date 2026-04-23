@@ -63,7 +63,7 @@ function BuyOrderBadge({
       {/* Editing highlight ring */}
       {isEditing && (
         <rect x={badgeX - 2} y={by - 2} width={labelW + CLOSE_W + 4} height={badgeH + 4}
-          fill="none" stroke={color} strokeWidth={1.5} rx={4} opacity={0.6}
+          fill="none" stroke={labelFill ?? color} strokeWidth={1.5} rx={4}
           strokeDasharray="3,2" style={{ pointerEvents: "none" }} />
       )}
       {/* Badge body — acts as drag handle for draft, or select area for placed */}
@@ -81,7 +81,7 @@ function BuyOrderBadge({
         <g style={{ cursor: isEditing ? "grab" : "pointer" }}
           onMouseDown={onDragStart}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
-            fill={isEditing ? `${color}60` : color} stroke={color} strokeWidth={1} rx={3} />
+            fill={color} stroke={labelFill ?? color} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
           <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
             fontFamily="Geist Variable, monospace" fontWeight="600"
             style={{ pointerEvents: "none" }}>
@@ -91,7 +91,7 @@ function BuyOrderBadge({
       )}
       <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={badgeX + labelW} y={by} width={CLOSE_W} height={badgeH}
-          fill={closeBtnColor} stroke={closeBtnColor} strokeWidth={1} rx={3} />
+          fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={badgeX + labelW + CLOSE_W / 2} y={y + 4.5}
           textAnchor="middle" dominantBaseline="middle"
           fontSize={11} fill={closeBtnFg}
@@ -142,13 +142,13 @@ function SellOrderBadge({
     <g>
       {isEditing && (
         <rect x={closeX - 2} y={by - 2} width={labelW + CLOSE_W + 4} height={badgeH + 4}
-          fill="none" stroke={color} strokeWidth={1.5} rx={4} opacity={0.6}
+          fill="none" stroke={labelFill ?? color} strokeWidth={1.5} rx={4}
           strokeDasharray="3,2" style={{ pointerEvents: "none" }} />
       )}
       {/* Close button */}
       <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={closeX} y={by} width={CLOSE_W} height={badgeH}
-          fill={closeBtnColor} stroke={closeBtnColor} strokeWidth={1} rx={3} />
+          fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={closeX + CLOSE_W / 2} y={y + 4.5}
           textAnchor="middle" dominantBaseline="middle"
           fontSize={11} fill={closeBtnFg}
@@ -172,7 +172,7 @@ function SellOrderBadge({
         <g style={{ cursor: isEditing ? "grab" : "pointer" }}
           onMouseDown={onDragStart}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
-            fill={isEditing ? `${color}60` : color} stroke={color} strokeWidth={1} rx={3} />
+            fill={color} stroke={labelFill ?? color} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
           <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
             fontFamily="Geist Variable, monospace" fontWeight="600"
             style={{ pointerEvents: "none" }}>
@@ -228,12 +228,15 @@ function renderOrderLine(
     label = `${order.side === "buy" ? "BUY" : "SELL"} | ${order.qty} — draft`
   } else {
     const isBuy = order.side === "buy"
-    color = isBuy ? "#1a7a5a" : "#7a1a1a"
-    textColor = isBuy ? "#00e5a0" : "#ff4757"
-    closeBtnColor = isBuy ? "#1a7a5a" : "#7a1a1a"
-    closeBtnFg = isBuy ? "#00e5a0" : "#ff4757"
+    // placed: dim bg, bright text; editing: slightly brighter bg
+    color = isEditing
+      ? (isBuy ? "#236e52" : "#8a2030")
+      : (isBuy ? "#1a7a5a" : "#7a1a1a")
+    textColor = isBuy ? "#00e5a0" : "#e06070"
+    closeBtnColor = color
+    closeBtnFg = textColor
     priceTagColor = isBuy ? "#1a7a5a" : "#7a1a1a"
-    priceTagFg = isBuy ? "#00e5a0" : "#ff4757"
+    priceTagFg = textColor
     label = `${isBuy ? "LONG" : "SHORT"} | ${order.qty}`
   }
 
