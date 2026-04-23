@@ -75,6 +75,15 @@ export interface ChartPlacedOrder {
   qty: number
   orderType: "limit" | "market"
   isDraft?: boolean
+  // Order metadata for display
+  symbol?: string
+  accountId?: string
+  exchangeId?: string
+  marketType?: "spot" | "futures"
+  leverage?: number
+  margin?: number   // actual margin locked (notional / leverage)
+  time?: string
+  status?: "pending" | "filled" | "cancelled"
 }
 
 // keyed by chartWidgetId

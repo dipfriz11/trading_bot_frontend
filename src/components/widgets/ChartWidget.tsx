@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react"
-import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES, getAccountBalance } from "@/lib/mock-data"
+import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
 import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget, Candle } from "@/types/terminal"
 import { useTerminal } from "@/contexts/TerminalContext"
 import type { ChartPlacedOrder, ChartDraftOrder } from "@/contexts/TerminalContext"
 import { ChevronDown, User, Building2 } from "lucide-react"
 import { PositionBarCompact } from "./PositionBar"
+import { usePositionSettings } from "@/hooks/usePositionSettings"
 
 // Local order shape (same as context but aliased for clarity)
 type PlacedOrder = ChartPlacedOrder
@@ -658,12 +659,12 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   }, [hasOrderConsole, editingOrderId, setEditingOrderId, localEditingOrderId])
 
   // ---- Place order (standalone mode only) ----
-  const handlePlaceOrder = useCallback((order: Omit<PlacedOrder, "id" | "isDraft">): string => {
+  const handlePlaceOrder = useCallback((order: Omit<PlacedOrder, "id" | "isDraft">, margin?: number): string => {
     const id = Math.random().toString(36).slice(2, 10)
     setLocalPlaced((prev) => [...prev, { ...order, id, isDraft: false }])
     setLocalDraft(undefined)
-    const orderValue = order.qty * order.price
-    deductOrderBalance(widget.accountId ?? "main", widget.exchangeId ?? "binance", widget.marketType ?? "spot", orderValue)
+    const deductAmount = margin ?? order.qty * order.price
+    deductOrderBalance(widget.accountId ?? "main", widget.exchangeId ?? "binance", widget.marketType ?? "spot", deductAmount)
     return id
   }, [widget.accountId, widget.exchangeId, widget.marketType, deductOrderBalance])
 
@@ -872,7 +873,7 @@ function StandaloneOrderForm({
   exchangeId?: string
   onFuturesSideChange?: (fs: "long" | "short") => void
   onDraftChange: (draft: DraftOrder | undefined) => void
-  onPlaceOrder: (order: Omit<PlacedOrder, "id" | "isDraft">) => string
+  onPlaceOrder: (order: Omit<PlacedOrder, "id" | "isDraft">, margin?: number) => string
   registerDragPriceHandler: (id: string, fn: (price: number) => void) => void
   registerDraftDragHandler: (fn: (price: number) => void) => void
   editingOrder?: PlacedOrder
@@ -894,6 +895,7 @@ function StandaloneOrderForm({
 
   const { getBalance } = useTerminal()
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
+  const { settings: posSettings } = usePositionSettings(symbol)
 
   // Refs so drag callbacks always read current values without re-registering
   const qtyRef = useRef(qty)
@@ -992,7 +994,9 @@ function StandaloneOrderForm({
       return
     }
 
-    const id = onPlaceOrder({ side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType })
+    const notional = qtyNum * effectivePrice
+    const margin = marketType === "futures" ? notional / posSettings.leverage : notional
+    const id = onPlaceOrder({ side: effectiveSide, price: effectivePrice, qty: qtyNum, orderType }, margin)
     registerDragPriceHandler(id, (newPrice: number) => {
       setPrice(priceToString(newPrice))
       if (anchorRef.current === "qty") {
@@ -1196,9 +1200,10 @@ function AccountBalanceTooltip({
   marketType: "spot" | "futures"
 }) {
   const acc = ACCOUNTS.find((a) => a.id === accountId)
+  const { getBalance } = useTerminal()
   if (!acc) return null
 
-  const { walletBalance, inOrders } = getAccountBalance(accountId, exchangeId, marketType)
+  const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
   const freeMargin = walletBalance - inOrders
   const exLabel = EXCHANGES.find((e) => e.id === exchangeId)?.label ?? exchangeId
 

@@ -4,6 +4,7 @@ import type { Widget } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
+import { usePositionSettings } from "@/hooks/usePositionSettings"
 
 function priceToString(price: number): string {
   if (price >= 1000) return price.toFixed(2)
@@ -83,6 +84,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const accountId = activeChart?.accountId ?? "main"
   const exchangeId = activeChart?.exchangeId ?? "binance"
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
+  const freeMargin = walletBalance - inOrders
+  const { settings: posSettings } = usePositionSettings(symbol)
   // Effective side: futures drives buy/sell from long/short
   const effectiveSide: OrderSide = marketType === "futures"
     ? (futuresSide === "long" ? "buy" : "sell")
@@ -269,8 +272,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const handlePctClick = (pct: number) => {
-    const totalBalance = 10000
-    const a = (pct / 100) * totalBalance
+    const a = (pct / 100) * freeMargin
     setAnchor("amount")
     setAmount(a.toFixed(2))
     if (editingOrderId) setFormEditMode(true)
@@ -324,6 +326,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     // Place on active chart via context
     if (activeChart) {
+      const notional = parseFloat(qty) * effectivePrice
+      const margin = marketType === "futures" ? notional / posSettings.leverage : notional
+
       addPlacedOrder(activeChart.id, {
         id,
         side: effectiveSide,
@@ -331,12 +336,17 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         qty: parseFloat(qty),
         orderType: orderType === "stop" ? "limit" : orderType,
         isDraft: false,
+        symbol,
+        accountId,
+        exchangeId,
+        marketType,
+        leverage: posSettings.leverage,
+        margin,
+        time,
+        status: "pending",
       })
       setDraftOrder(activeChart.id, undefined)
-
-      // Deduct order value from available balance
-      const orderValue = parseFloat(qty) * effectivePrice
-      deductOrderBalance(accountId, exchangeId, marketType, orderValue)
+      deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
 
     const newOrder: Order = {
