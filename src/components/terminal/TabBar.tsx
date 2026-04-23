@@ -1,12 +1,17 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { Plus, X } from "lucide-react"
 import { useTerminal } from "@/contexts/TerminalContext"
 
 export function TabBar() {
-  const { state, addTab, removeTab, setActiveTab, renameTab } = useTerminal()
+  const { state, addTab, removeTab, setActiveTab, renameTab, reorderTabs } = useTerminal()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Drag-and-drop state
+  const dragIndex = useRef<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [, setDragging] = useState(false)
 
   const handleDoubleClick = (tabId: string, label: string) => {
     setEditingId(tabId)
@@ -21,21 +26,65 @@ export function TabBar() {
     setEditingId(null)
   }
 
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    dragIndex.current = index
+    setDragging(true)
+    e.dataTransfer.effectAllowed = "move"
+    // Ghost image: transparent
+    const ghost = document.createElement("div")
+    ghost.style.position = "fixed"
+    ghost.style.top = "-9999px"
+    document.body.appendChild(ghost)
+    e.dataTransfer.setDragImage(ghost, 0, 0)
+    setTimeout(() => document.body.removeChild(ghost), 0)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    setDragOverIndex(index)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent, toIndex: number) => {
+    e.preventDefault()
+    const fromIndex = dragIndex.current
+    if (fromIndex === null || fromIndex === toIndex) return
+
+    reorderTabs(fromIndex, toIndex)
+    dragIndex.current = null
+    setDragOverIndex(null)
+    setDragging(false)
+  }, [state.tabs, reorderTabs])
+
+  const handleDragEnd = useCallback(() => {
+    dragIndex.current = null
+    setDragOverIndex(null)
+    setDragging(false)
+  }, [])
+
   return (
-    <div
-      className="flex items-end gap-0.5 flex-shrink-0 overflow-x-auto"
-      style={{ minHeight: 36, paddingLeft: 8, paddingRight: 4 }}
-    >
-      {state.tabs.map((tab) => {
+    <div className="flex items-end flex-1 min-w-0 overflow-x-auto overflow-y-visible">
+      {state.tabs.map((tab, index) => {
         const isActive = tab.id === state.activeTabId
+        const isDragOver = dragOverIndex === index && dragIndex.current !== index
+
         return (
           <div
             key={tab.id}
-            className={`terminal-tab flex items-center gap-1 px-3 h-8 cursor-pointer select-none flex-shrink-0 rounded-t ${isActive ? "active" : ""}`}
-            style={{ minWidth: 90, maxWidth: 160 }}
+            className="workspace-tab"
+            data-active={isActive}
+            data-dragover={isDragOver}
+            draggable
             onClick={() => setActiveTab(tab.id)}
             onDoubleClick={() => handleDoubleClick(tab.id, tab.label)}
+            onDragStart={(e) => handleDragStart(e, index)}
+            onDragOver={(e) => handleDragOver(e, index)}
+            onDrop={(e) => handleDrop(e, index)}
+            onDragEnd={handleDragEnd}
           >
+            {/* Left curve */}
+            <span className="workspace-tab-curve workspace-tab-curve-left" />
+
             {editingId === tab.id ? (
               <input
                 ref={inputRef}
@@ -47,18 +96,17 @@ export function TabBar() {
                   if (e.key === "Escape") setEditingId(null)
                   e.stopPropagation()
                 }}
-                className="text-xs font-mono bg-transparent outline-none w-full"
-                style={{ color: "inherit", minWidth: 0 }}
+                className="workspace-tab-input"
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
               />
             ) : (
-              <span className="text-xs font-mono truncate flex-1">{tab.label}</span>
+              <span className="workspace-tab-label">{tab.label}</span>
             )}
+
             {state.tabs.length > 1 && (
               <button
-                className="flex-shrink-0 opacity-30 hover:opacity-100 transition-opacity rounded"
-                style={{ width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                className="workspace-tab-close"
                 onClick={(e) => {
                   e.stopPropagation()
                   removeTab(tab.id)
@@ -68,17 +116,19 @@ export function TabBar() {
                 <X size={9} />
               </button>
             )}
+
+            {/* Right curve */}
+            <span className="workspace-tab-curve workspace-tab-curve-right" />
           </div>
         )
       })}
 
-      {/* New tab button */}
       <button
         onClick={addTab}
-        className="flex items-center justify-center h-7 w-7 rounded opacity-40 hover:opacity-100 transition-opacity flex-shrink-0"
-        style={{ marginLeft: 2 }}
+        className="workspace-tab-add"
+        title="New workspace"
       >
-        <Plus size={14} />
+        <Plus size={13} />
       </button>
     </div>
   )

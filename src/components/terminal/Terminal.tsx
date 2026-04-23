@@ -3,7 +3,7 @@ import { useTerminal } from "@/contexts/TerminalContext"
 import { TabBar } from "./TabBar"
 import { AddWidgetMenu } from "./AddWidgetMenu"
 import { WidgetCanvas } from "./WidgetCanvas"
-import { Sparkles, Monitor, Layers, Eye, Settings, X } from "lucide-react"
+import { Sparkles, Monitor, Layers, Eye, Settings, X, User } from "lucide-react"
 import type { TransparentBgPreset } from "@/types/terminal"
 
 const BG_PRESETS: { id: TransparentBgPreset; label: string; color: string; tint: string; grad: string }[] = [
@@ -34,6 +34,8 @@ export function Terminal() {
   const theme = state.theme as ThemeId
   const transparentBg = state.transparentBg ?? "midnight"
   const [tweaksOpen, setTweaksOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const themeClass =
     theme === "cosmic"      ? "cosmic-theme"      :
@@ -147,7 +149,7 @@ export function Terminal() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
           <AddWidgetMenu />
 
           {/* Tweaks button */}
@@ -173,6 +175,39 @@ export function Terminal() {
           >
             <NextIcon size={11} />
             {nextLabel}
+          </button>
+
+          {/* Divider */}
+          <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.10)", marginLeft: 2, marginRight: 2, flexShrink: 0 }} />
+
+          {/* Account button */}
+          <button
+            onClick={() => { setAccountOpen((v) => !v); setSettingsOpen(false) }}
+            className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
+            style={{
+              background: accountOpen ? (isTransparent ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.10)") : btnBg,
+              color: accountOpen ? "#fff" : btnColor,
+              border: accountOpen ? (isTransparent ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(255,255,255,0.22)") : btnBorder,
+              fontSize: 10,
+            }}
+          >
+            <User size={11} />
+            Account
+          </button>
+
+          {/* Settings button */}
+          <button
+            onClick={() => { setSettingsOpen((v) => !v); setAccountOpen(false) }}
+            className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
+            style={{
+              background: settingsOpen ? (isTransparent ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.10)") : btnBg,
+              color: settingsOpen ? "#fff" : btnColor,
+              border: settingsOpen ? (isTransparent ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(255,255,255,0.22)") : btnBorder,
+              fontSize: 10,
+            }}
+          >
+            <Settings size={11} />
+            Settings
           </button>
         </div>
       </div>
