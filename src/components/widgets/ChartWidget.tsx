@@ -1169,10 +1169,72 @@ function StandaloneOrderForm({
 }
 
 const ACCOUNTS = [
-  { id: "main", label: "Main Account" },
-  { id: "test", label: "Test Account" },
-  { id: "scalp", label: "Scalp Account" },
+  { id: "main",  label: "Main Account",  walletBalance: 10000, inOrders: 1250 },
+  { id: "test",  label: "Test Account",  walletBalance: 2500,  inOrders: 0    },
+  { id: "scalp", label: "Scalp Account", walletBalance: 5000,  inOrders: 800  },
 ]
+
+// Hover tooltip shown over the Account button
+function AccountBalanceTooltip({ accountId }: { accountId: string }) {
+  const acc = ACCOUNTS.find((a) => a.id === accountId)
+  if (!acc) return null
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const freeMargin = acc.walletBalance - acc.inOrders
+
+  return (
+    <div
+      className="absolute z-50 flex flex-col gap-1.5 p-3 rounded-lg pointer-events-none"
+      style={{
+        top: "calc(100% + 5px)",
+        left: 0,
+        minWidth: 210,
+        background: "#0a1220",
+        border: "1px solid rgba(255,255,255,0.1)",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+      }}
+    >
+      <span
+        className="font-mono font-semibold"
+        style={{ color: "rgba(200,214,229,0.9)", fontSize: 10, letterSpacing: "0.05em" }}
+      >
+        {acc.label.toUpperCase()}
+      </span>
+
+      <div className="flex flex-col gap-1">
+        <div className="flex justify-between gap-6">
+          <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>
+            Total balance
+          </span>
+          <span className="font-mono font-semibold" style={{ color: "rgba(200,214,229,0.85)", fontSize: 10 }}>
+            {fmt(acc.walletBalance)} USDT
+          </span>
+        </div>
+        <div className="flex justify-between gap-6">
+          <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>
+            In open orders
+          </span>
+          <span className="font-mono" style={{ color: "rgba(255,71,87,0.85)", fontSize: 10 }}>
+            −{fmt(acc.inOrders)} USDT
+          </span>
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }} />
+
+      <div className="flex justify-between gap-6">
+        <span className="font-mono font-semibold" style={{ color: "rgba(255,255,255,0.5)", fontSize: 10 }}>
+          Free margin
+        </span>
+        <span className="font-mono font-bold" style={{ color: "rgba(200,214,229,0.95)", fontSize: 10 }}>
+          {fmt(freeMargin)} USDT
+        </span>
+      </div>
+    </div>
+  )
+}
 
 const EXCHANGES = [
   { id: "binance", label: "Binance" },
@@ -1270,19 +1332,27 @@ export function ChartHeaderExtra({ widget }: { widget: Widget }) {
 
   const [selectedAccount, setSelectedAccount] = useState("main")
   const [selectedExchange, setSelectedExchange] = useState("binance")
+  const [accountHover, setAccountHover] = useState(false)
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
 
   return (
     <div className="flex items-center gap-1" onMouseDown={stopProp}>
-      {/* Account selector */}
-      <HeaderDropdown
-        icon={<User size={8} />}
-        label="Account"
-        items={ACCOUNTS}
-        selected={selectedAccount}
-        onSelect={setSelectedAccount}
-      />
+      {/* Account selector with balance tooltip on hover */}
+      <div
+        className="relative"
+        onMouseEnter={() => setAccountHover(true)}
+        onMouseLeave={() => setAccountHover(false)}
+      >
+        <HeaderDropdown
+          icon={<User size={8} />}
+          label="Account"
+          items={ACCOUNTS}
+          selected={selectedAccount}
+          onSelect={setSelectedAccount}
+        />
+        {accountHover && <AccountBalanceTooltip accountId={selectedAccount} />}
+      </div>
 
       {/* Exchange selector */}
       <HeaderDropdown
