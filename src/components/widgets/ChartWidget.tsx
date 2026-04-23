@@ -971,10 +971,17 @@ function StandaloneOrderForm({
   const handlePctClick = (pct: number) => {
     const freeMargin = Math.max(0, walletBalance - inOrders)
     const availableForOrder = marketType === "futures" ? freeMargin * posSettings.leverage : freeMargin
-    const a = (pct / 100) * availableForOrder
-    setAnchor("amount")
-    setAmount(a.toFixed(2))
-    if (effectivePrice > 0) setQty((a / effectivePrice).toFixed(6))
+    if (anchor === "qty") {
+      const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
+      const q = (pct / 100) * maxQty
+      setQty(q.toFixed(6))
+      if (effectivePrice > 0) setAmount((q * effectivePrice).toFixed(2))
+    } else {
+      const a = (pct / 100) * availableForOrder
+      setAnchor("amount")
+      setAmount(a.toFixed(2))
+      if (effectivePrice > 0) setQty((a / effectivePrice).toFixed(6))
+    }
   }
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
@@ -1047,6 +1054,13 @@ function StandaloneOrderForm({
   const amtBorder = anchor === "amount"
     ? `1px solid ${accentBg}`
     : "1px solid rgba(255,255,255,0.1)"
+
+  const freeMarginCalc = Math.max(0, walletBalance - inOrders)
+  const availableForOrder = marketType === "futures" ? freeMarginCalc * posSettings.leverage : freeMarginCalc
+  const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
+  const maxAmount = availableForOrder
+  const fmtQty = (n: number) => n < 0.001 ? n.toFixed(6) : n < 1 ? n.toFixed(4) : n.toFixed(2)
+  const fmtAmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 })
 
   const ticker = symbol.split("/")[0]
 
@@ -1160,7 +1174,19 @@ function StandaloneOrderForm({
 
       <div className="grid grid-cols-2 gap-0.5 mb-1">
         <div>
-          <label className="text-xs font-mono" style={{ opacity: anchor === "qty" ? 1 : 0.5, fontSize: 10 }}>Qty</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-mono" style={{ opacity: anchor === "qty" ? 1 : 0.5, fontSize: 10 }}>Qty</label>
+            {maxQty > 0 && (
+              <span
+                className="text-xs font-mono cursor-pointer"
+                style={{ opacity: 0.3, fontSize: 9 }}
+                onClick={() => handlePctClick(100)}
+                onMouseDown={stopProp}
+              >
+                max {fmtQty(maxQty)}
+              </span>
+            )}
+          </div>
           <input
             type="number"
             value={qty}
@@ -1172,7 +1198,19 @@ function StandaloneOrderForm({
           />
         </div>
         <div>
-          <label className="text-xs font-mono" style={{ opacity: anchor === "amount" ? 1 : 0.5, fontSize: 10 }}>Amount</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-mono" style={{ opacity: anchor === "amount" ? 1 : 0.5, fontSize: 10 }}>Amount</label>
+            {maxAmount > 0 && (
+              <span
+                className="text-xs font-mono cursor-pointer"
+                style={{ opacity: 0.3, fontSize: 9 }}
+                onClick={() => handlePctClick(100)}
+                onMouseDown={stopProp}
+              >
+                max {fmtAmt(maxAmount)}
+              </span>
+            )}
+          </div>
           <input
             type="number"
             value={amount}

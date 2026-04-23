@@ -273,11 +273,20 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   const handlePctClick = (pct: number) => {
     const availableForOrder = marketType === "futures" ? freeMargin * posSettings.leverage : freeMargin
-    const a = (pct / 100) * availableForOrder
-    setAnchor("amount")
-    setAmount(a.toFixed(2))
     if (editingOrderId) setFormEditMode(true)
-    if (effectivePrice > 0) setQty((a / effectivePrice).toFixed(6))
+    if (anchor === "qty") {
+      // % of max buyable qty
+      const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
+      const q = (pct / 100) * maxQty
+      setQty(q.toFixed(6))
+      if (effectivePrice > 0) setAmount((q * effectivePrice).toFixed(2))
+    } else {
+      // % of available amount
+      const a = (pct / 100) * availableForOrder
+      setAnchor("amount")
+      setAmount(a.toFixed(2))
+      if (effectivePrice > 0) setQty((a / effectivePrice).toFixed(6))
+    }
   }
 
   // ---- Save changes to a placed order ----
@@ -380,6 +389,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   const qtyBorder = anchor === "qty"    ? `1px solid ${effectiveSide === "buy" ? "rgba(0,217,126,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
   const amtBorder = anchor === "amount" ? `1px solid ${effectiveSide === "buy" ? "rgba(0,217,126,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
+
+  const availableForOrder = marketType === "futures" ? Math.max(0, freeMargin) * posSettings.leverage : Math.max(0, freeMargin)
+  const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
+  const maxAmount = availableForOrder
+
+  const fmtQty = (n: number) => n < 0.001 ? n.toFixed(6) : n < 1 ? n.toFixed(4) : n.toFixed(2)
+  const fmtAmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 })
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -557,7 +573,19 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           {/* Qty + Amount */}
           <div className="grid grid-cols-2 gap-1">
             <div className="flex flex-col gap-0.5">
-              <label className="text-xs font-mono" style={{ opacity: anchor === "qty" ? 1 : 0.4, fontSize: 10 }}>Qty</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono" style={{ opacity: anchor === "qty" ? 1 : 0.4, fontSize: 10 }}>Qty</label>
+                {maxQty > 0 && (
+                  <span
+                    className="text-xs font-mono cursor-pointer"
+                    style={{ opacity: 0.3, fontSize: 9 }}
+                    onClick={() => handlePctClick(100)}
+                    onMouseDown={stopProp}
+                  >
+                    max {fmtQty(maxQty)}
+                  </span>
+                )}
+              </div>
               <input
                 type="number"
                 value={qty}
@@ -569,7 +597,19 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
               />
             </div>
             <div className="flex flex-col gap-0.5">
-              <label className="text-xs font-mono" style={{ opacity: anchor === "amount" ? 1 : 0.4, fontSize: 10 }}>Amount</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono" style={{ opacity: anchor === "amount" ? 1 : 0.4, fontSize: 10 }}>Amount</label>
+                {maxAmount > 0 && (
+                  <span
+                    className="text-xs font-mono cursor-pointer"
+                    style={{ opacity: 0.3, fontSize: 9 }}
+                    onClick={() => handlePctClick(100)}
+                    onMouseDown={stopProp}
+                  >
+                    max {fmtAmt(maxAmount)}
+                  </span>
+                )}
+              </div>
               <input
                 type="number"
                 value={amount}
