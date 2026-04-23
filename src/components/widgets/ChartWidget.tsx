@@ -979,6 +979,15 @@ function StandaloneOrderForm({
     else if (v === "") setQty("")
   }
 
+  const handlePctClick = (pct: number) => {
+    const freeMargin = Math.max(0, walletBalance - inOrders)
+    const availableForOrder = marketType === "futures" ? freeMargin * posSettings.leverage : freeMargin
+    const a = (pct / 100) * availableForOrder
+    setAnchor("amount")
+    setAmount(a.toFixed(2))
+    if (effectivePrice > 0) setQty((a / effectivePrice).toFixed(6))
+  }
+
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
 
   const handleSubmit = () => {
@@ -1140,6 +1149,28 @@ function StandaloneOrderForm({
           />
         </div>
       </div>
+
+      {/* Quick % buttons */}
+      {!editingOrder && (
+        <div className="flex gap-0.5 mb-1" onMouseDown={stopProp}>
+          {[25, 50, 75, 100].map((pct) => (
+            <button
+              key={pct}
+              onClick={() => handlePctClick(pct)}
+              className="flex-1 py-0.5 text-xs font-mono rounded"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "rgba(255,255,255,0.4)",
+                fontSize: 10,
+              }}
+              onMouseDown={stopProp}
+            >
+              {pct}%
+            </button>
+          ))}
+        </div>
+      )}
 
       {editingOrder ? (
         <div className="flex gap-0.5">
