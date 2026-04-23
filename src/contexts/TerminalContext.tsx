@@ -2,6 +2,28 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset } from "@/types/terminal"
 import { WIDGET_LABELS, WIDGET_MIN_SIZE } from "@/types/terminal"
 import { nanoid } from "@/lib/nanoid"
+import { ACCOUNTS } from "@/lib/mock-data"
+
+// ---- Account balance store ----
+// key: `${accountId}:${exchangeId}:${marketType}`
+type BalanceKey = string
+interface BalanceEntry { walletBalance: number; inOrders: number }
+type BalanceStore = Record<BalanceKey, BalanceEntry>
+
+function balKey(accountId: string, exchangeId: string, marketType: "spot" | "futures"): BalanceKey {
+  return `${accountId}:${exchangeId}:${marketType}`
+}
+
+function buildInitialBalances(): BalanceStore {
+  const store: BalanceStore = {}
+  for (const acc of ACCOUNTS) {
+    for (const [exId, markets] of Object.entries(acc.balances)) {
+      store[balKey(acc.id, exId, "spot")]    = { ...markets.spot }
+      store[balKey(acc.id, exId, "futures")] = { ...markets.futures }
+    }
+  }
+  return store
+}
 
 const STORAGE_KEY = "crypto-terminal-v1"
 
@@ -95,6 +117,11 @@ interface TerminalContextValue {
   // ID of the placed order currently being edited (via drag or form); null = new-order mode
   editingOrderId: string | null
   setEditingOrderId: (id: string | null) => void
+
+  // Live account balances (updated when orders are placed/cancelled)
+  getBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures") => BalanceEntry
+  deductOrderBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => void
+  refundOrderBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => void
 }
 
 const TerminalContext = createContext<TerminalContextValue | null>(null)
@@ -106,6 +133,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [placedOrders, setPlacedOrdersMap] = useState<PlacedOrderMap>({})
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
+  const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
 
   useEffect(() => {
     try {
@@ -260,6 +288,27 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  // Balance helpers
+  const getBalance = useCallback((accountId: string, exchangeId: string, marketType: "spot" | "futures"): BalanceEntry => {
+    return balances[balKey(accountId, exchangeId, marketType)] ?? { walletBalance: 0, inOrders: 0 }
+  }, [balances])
+
+  const deductOrderBalance = useCallback((accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => {
+    const k = balKey(accountId, exchangeId, marketType)
+    setBalances((prev) => {
+      const cur = prev[k] ?? { walletBalance: 0, inOrders: 0 }
+      return { ...prev, [k]: { walletBalance: cur.walletBalance - amount, inOrders: cur.inOrders + amount } }
+    })
+  }, [])
+
+  const refundOrderBalance = useCallback((accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => {
+    const k = balKey(accountId, exchangeId, marketType)
+    setBalances((prev) => {
+      const cur = prev[k] ?? { walletBalance: 0, inOrders: 0 }
+      return { ...prev, [k]: { walletBalance: cur.walletBalance + amount, inOrders: Math.max(0, cur.inOrders - amount) } }
+    })
+  }, [])
+
   // Order bridge setters
   const setDraftOrder = useCallback((chartId: string, draft: ChartDraftOrder | undefined) => {
     setDraftOrders((prev) => ({ ...prev, [chartId]: draft }))
@@ -323,6 +372,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         setIsDraggingOrder,
         editingOrderId,
         setEditingOrderId,
+        getBalance,
+        deductOrderBalance,
+        refundOrderBalance,
       }}
     >
       {children}

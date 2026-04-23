@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { CircleCheck as CheckCircle, Circle as XCircle, Clock } from "lucide-react"
 import type { Widget } from "@/types/terminal"
-import { SYMBOLS, getAccountBalance } from "@/lib/mock-data"
+import { SYMBOLS } from "@/lib/mock-data"
 import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 
@@ -48,6 +48,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     editingOrderId, setEditingOrderId,
     updatePlacedOrder,
     updateWidget,
+    getBalance,
+    deductOrderBalance,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "history">("new")
@@ -80,7 +82,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const futuresSide = activeChart?.futuresSide ?? "long"
   const accountId = activeChart?.accountId ?? "main"
   const exchangeId = activeChart?.exchangeId ?? "binance"
-  const { walletBalance, inOrders } = getAccountBalance(accountId, exchangeId, marketType)
+  const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
   // Effective side: futures drives buy/sell from long/short
   const effectiveSide: OrderSide = marketType === "futures"
     ? (futuresSide === "long" ? "buy" : "sell")
@@ -331,6 +333,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         isDraft: false,
       })
       setDraftOrder(activeChart.id, undefined)
+
+      // Deduct order value from available balance
+      const orderValue = parseFloat(qty) * effectivePrice
+      deductOrderBalance(accountId, exchangeId, marketType, orderValue)
     }
 
     const newOrder: Order = {

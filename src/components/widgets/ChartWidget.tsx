@@ -481,6 +481,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     removePlacedOrder: ctxRemovePlaced, updatePlacedOrderPrice: ctxUpdatePrice,
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
+    deductOrderBalance,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -661,8 +662,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     const id = Math.random().toString(36).slice(2, 10)
     setLocalPlaced((prev) => [...prev, { ...order, id, isDraft: false }])
     setLocalDraft(undefined)
+    const orderValue = order.qty * order.price
+    deductOrderBalance(widget.accountId ?? "main", widget.exchangeId ?? "binance", widget.marketType ?? "spot", orderValue)
     return id
-  }, [])
+  }, [widget.accountId, widget.exchangeId, widget.marketType, deductOrderBalance])
 
   const registerDragPriceHandler = useCallback((id: string, fn: (p: number) => void) => {
     localDragHandlers.current.set(id, fn)
@@ -889,6 +892,9 @@ function StandaloneOrderForm({
   const [orderType, setOrderType] = useState<"limit" | "market">("limit")
   const [anchor, setAnchor] = useState<AnchorField>("qty")
 
+  const { getBalance } = useTerminal()
+  const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
+
   // Refs so drag callbacks always read current values without re-registering
   const qtyRef = useRef(qty)
   const amountRef = useRef(amount)
@@ -1031,8 +1037,8 @@ function StandaloneOrderForm({
         <PositionBarCompact
           symbol={symbol}
           marketType={marketType}
-          availableBalance={getAccountBalance(accountId, exchangeId, marketType).walletBalance}
-          inOrders={getAccountBalance(accountId, exchangeId, marketType).inOrders}
+          availableBalance={walletBalance}
+          inOrders={inOrders}
         />
       </div>
 
