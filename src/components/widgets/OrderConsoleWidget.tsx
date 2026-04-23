@@ -272,7 +272,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const handlePctClick = (pct: number) => {
-    const a = (pct / 100) * freeMargin
+    const availableForOrder = marketType === "futures" ? freeMargin * posSettings.leverage : freeMargin
+    const a = (pct / 100) * availableForOrder
     setAnchor("amount")
     setAmount(a.toFixed(2))
     if (editingOrderId) setFormEditMode(true)
