@@ -193,65 +193,90 @@ function SellOrderBadge({
   )
 }
 
-function renderOrderLine(
-  order: PlacedOrder,
-  orderPrice: number,
-  toY: (p: number) => number,
-  minPrice: number,
-  maxPrice: number,
-  padding: { left: number; right: number; top: number; bottom: number },
-  width: number,
-  onClose: () => void,
-  onDragStart: (e: React.MouseEvent) => void,
-  _onSelect?: () => void,
-  isEditing?: boolean,
-) {
-  if (orderPrice < minPrice || orderPrice > maxPrice) return null
-  const y = toY(orderPrice)
-  const axisX = width - padding.right
+interface OrderLineProps {
+  order: PlacedOrder
+  orderPrice: number
+  toY: (p: number) => number
+  minPrice: number
+  maxPrice: number
+  padding: { left: number; right: number; top: number; bottom: number }
+  width: number
+  isEditing: boolean
+  onClose: () => void
+  onDragStart: (e: React.MouseEvent) => void
+  // Called once on mount so the drag handler can move the element imperatively
+  registerImperativeMove?: (id: string, fn: (newY: number) => void) => void
+}
 
-  let color: string
-  let textColor: string | undefined
-  let closeBtnColor: string
-  let closeBtnFg: string
-  let priceTagColor: string
-  let priceTagFg: string
-  let label: string
-
+function getOrderColors(order: PlacedOrder, isEditing: boolean) {
   if (order.isDraft) {
-    color = CHART_COLORS.draft
-    textColor = undefined
-    closeBtnColor = CHART_COLORS.draftClose
-    closeBtnFg = "rgba(200,214,229,0.9)"
-    priceTagColor = "rgba(80,95,115,0.9)"
-    priceTagFg = "rgba(200,214,229,0.9)"
-    label = `${order.side === "buy" ? "BUY" : "SELL"} | ${order.qty} — draft`
-  } else {
-    const isBuy = order.side === "buy"
-    // placed: dim bg, bright text; editing: slightly brighter bg
-    color = isEditing
-      ? (isBuy ? "#236e52" : "#8a2030")
-      : (isBuy ? "#1a7a5a" : "#7a1a1a")
-    textColor = isBuy ? "#00e5a0" : "#e06070"
-    closeBtnColor = color
-    closeBtnFg = textColor
-    priceTagColor = isBuy ? "#1a7a5a" : "#7a1a1a"
-    priceTagFg = textColor
-    label = `${isBuy ? "LONG" : "SHORT"} | ${order.qty}`
+    return {
+      color: CHART_COLORS.draft,
+      textColor: undefined as string | undefined,
+      closeBtnColor: CHART_COLORS.draftClose,
+      closeBtnFg: "rgba(200,214,229,0.9)",
+      priceTagColor: "rgba(80,95,115,0.9)",
+      priceTagFg: "rgba(200,214,229,0.9)",
+      label: `${order.side === "buy" ? "BUY" : "SELL"} | ${order.qty} — draft`,
+    }
   }
+  const isBuy = order.side === "buy"
+  const color = isEditing ? (isBuy ? "#236e52" : "#8a2030") : (isBuy ? "#1a7a5a" : "#7a1a1a")
+  const textColor = isBuy ? "#00e5a0" : "#e06070"
+  return {
+    color,
+    textColor,
+    closeBtnColor: color,
+    closeBtnFg: textColor,
+    priceTagColor: isBuy ? "#1a7a5a" : "#7a1a1a",
+    priceTagFg: textColor,
+    label: `${isBuy ? "LONG" : "SHORT"} | ${order.qty}`,
+  }
+}
 
-  // Estimate badge width for line gap calculation
+function OrderLine({ order, orderPrice, toY, minPrice, maxPrice, padding, width, isEditing, onClose, onDragStart, registerImperativeMove }: OrderLineProps) {
+  const groupRef = useRef<SVGGElement>(null)
+  const renderedYRef = useRef(toY(orderPrice))
+  // Keep toY stable reference for imperative handler
+  const toYRef = useRef(toY)
+  toYRef.current = toY
+
+  useEffect(() => {
+    if (!registerImperativeMove) return
+    // Handler receives price (not y) — convert imperatively via current toY
+    registerImperativeMove(order.id, (newPrice: number) => {
+      const el = groupRef.current
+      if (!el) return
+      const newY = toYRef.current(newPrice)
+      const delta = newY - renderedYRef.current
+      el.setAttribute("transform", `translate(0, ${delta})`)
+    })
+  }, [order.id, registerImperativeMove])
+
+  if (orderPrice < minPrice || orderPrice > maxPrice) return null
+
+  const y = toY(orderPrice)
+  // When React re-renders with the committed price, reset any imperative transform
+  useEffect(() => {
+    if (groupRef.current) {
+      groupRef.current.removeAttribute("transform")
+    }
+    renderedYRef.current = toY(orderPrice)
+  })
+
+  renderedYRef.current = y
+  const axisX = width - padding.right
+  const { color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg, label } = getOrderColors(order, isEditing)
   const PAD = 8
   const CLOSE_W = 20
   const labelW = PAD + label.length * 5.8 + PAD
   const badgeW = labelW + CLOSE_W
   const padLeft = padding.left
-  const editing = isEditing ?? false
 
   if (order.side === "buy") {
     const badgeX = padLeft + 4
     return (
-      <g key={order.id}>
+      <g ref={groupRef}>
         <line x1={padLeft} y1={y} x2={badgeX - 1} y2={y}
           stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={order.isDraft ? 0.5 : 0.85} />
         <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
@@ -262,7 +287,7 @@ function renderOrderLine(
           priceTagColor={priceTagColor} priceTagFg={priceTagFg}
           priceTag={formatPrice(orderPrice)}
           onClose={onClose} onDragStart={onDragStart}
-          axisX={axisX} padLeft={padLeft} isEditing={editing}
+          axisX={axisX} padLeft={padLeft} isEditing={isEditing}
           isDraft={order.isDraft}
         />
       </g>
@@ -274,7 +299,7 @@ function renderOrderLine(
     const badgeRight = axisX - 4
     const badgeLeft = badgeRight - sellBadgeW
     return (
-      <g key={order.id}>
+      <g ref={groupRef}>
         <line x1={padLeft} y1={y} x2={badgeLeft - 2} y2={y}
           stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={order.isDraft ? 0.5 : 0.85} />
         <line x1={badgeRight + 2} y1={y} x2={axisX - 1} y2={y}
@@ -285,12 +310,39 @@ function renderOrderLine(
           priceTagColor={priceTagColor} priceTagFg={priceTagFg}
           priceTag={formatPrice(orderPrice)}
           onClose={onClose} onDragStart={onDragStart}
-          axisX={axisX} isEditing={editing}
+          axisX={axisX} isEditing={isEditing}
           isDraft={order.isDraft}
         />
       </g>
     )
   }
+}
+
+// Keep renderOrderLine as a thin wrapper for backward compat within OrdersOverlay
+function renderOrderLine(
+  order: PlacedOrder,
+  orderPrice: number,
+  toY: (p: number) => number,
+  minPrice: number,
+  maxPrice: number,
+  padding: { left: number; right: number; top: number; bottom: number },
+  width: number,
+  onClose: () => void,
+  onDragStart: (e: React.MouseEvent) => void,
+  registerImperativeMove?: (id: string, fn: (newY: number) => void) => void,
+  isEditing?: boolean,
+) {
+  return (
+    <OrderLine
+      key={order.id}
+      order={order} orderPrice={orderPrice}
+      toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+      padding={padding} width={width}
+      isEditing={isEditing ?? false}
+      onClose={onClose} onDragStart={onDragStart}
+      registerImperativeMove={registerImperativeMove}
+    />
+  )
 }
 
 interface ChartProps {
@@ -302,6 +354,7 @@ interface ChartProps {
   onOrderClose: (id: string) => void
   onOrderDragStart: (id: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
   onBackgroundClick?: () => void
+  dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
 }
 
 interface OrdersOverlayProps {
@@ -318,9 +371,15 @@ interface OrdersOverlayProps {
   padding: { left: number; right: number; top: number; bottom: number }
   onOrderClose: (id: string) => void
   onOrderDragStart: (id: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+  // Shared map: ChartWidget registers imperative move handlers here; OrderLine writes to it
+  dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
 }
 
-function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice, minPrice, maxPrice, chartHeight, padTop, padding, onOrderClose, onOrderDragStart }: OrdersOverlayProps) {
+function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice, minPrice, maxPrice, chartHeight, padTop, padding, onOrderClose, onOrderDragStart, dragHandlers }: OrdersOverlayProps) {
+  const registerImperativeMove = useCallback((id: string, fn: (newY: number) => void) => {
+    dragHandlers.current.set(id, fn)
+  }, [dragHandlers])
+
   if (!allOrders.length) return null
   return (
     <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
@@ -330,7 +389,7 @@ function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice,
           order, price, toY, minPrice, maxPrice, padding, width,
           () => onOrderClose(order.id),
           (e) => onOrderDragStart(order.id, e, toPrice, minPrice, maxPrice, chartHeight, padTop),
-          undefined,
+          registerImperativeMove,
           editingOrderId === order.id,
         )
       })}
@@ -423,7 +482,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -446,6 +505,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         chartHeight={chartHeight} padTop={padding.top}
         padding={padding}
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
+        dragHandlers={dragHandlers}
       />
     </div>
   )
@@ -520,7 +580,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -541,6 +601,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         chartHeight={chartHeight} padTop={padding.top}
         padding={padding}
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
+        dragHandlers={dragHandlers}
       />
     </div>
   )
@@ -660,6 +721,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (isPlacedOrder) setEditingOrderId(id)
     }
 
+    // Track final price during drag without triggering React re-renders
+    const finalPriceRef = { current: startPrice }
+
     const onMove = (mv: MouseEvent) => {
       const dy = mv.clientY - startY
       if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) startDrag()
@@ -667,19 +731,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
       const pricePerPx = (maxP - minP) / chartH
       const newPrice = Math.max(minP, Math.min(maxP, startPrice - dy * pricePerPx))
+      finalPriceRef.current = newPrice
 
-      if (isDraftOrder) {
-        if (hasOrderConsole) {
-          const d = draftOrders[widget.id]
-          if (d) ctxSetDraft(widget.id, { ...d, price: newPrice })
-        } else {
-          setLocalDraft((d) => d ? { ...d, price: newPrice } : d)
-          localDragHandlers.current.get(LOCAL_DRAFT_ID)?.(newPrice)
-        }
-      } else {
-        ctxUpdatePrice(widget.id, id, newPrice)
-        localDragHandlers.current.get(id)?.(newPrice)
-      }
+      // Move the SVG element imperatively — no React state, no re-render
+      localDragHandlers.current.get(isDraftOrder ? LOCAL_DRAFT_ID : id)?.(newPrice)
     }
 
     const onUp = () => {
@@ -689,6 +744,18 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       isDraggingRef.current = false
 
       if (dragStarted) {
+        // Commit final price to state only once on mouseup
+        const finalPrice = finalPriceRef.current
+        if (isDraftOrder) {
+          if (hasOrderConsole) {
+            const d = draftOrders[widget.id]
+            if (d) ctxSetDraft(widget.id, { ...d, price: finalPrice })
+          } else {
+            setLocalDraft((d) => d ? { ...d, price: finalPrice } : d)
+          }
+        } else {
+          ctxUpdatePrice(widget.id, id, finalPrice)
+        }
         setIsDraggingOrder(false)
         if (isPlacedOrder) setEditingOrderId(null)
       } else {
@@ -807,6 +874,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onOrderClose={handleOrderClose}
                     onOrderDragStart={handleOrderDragStart}
                     onBackgroundClick={handleBackgroundClick}
+                    dragHandlers={localDragHandlers}
                   />
                 : <LineChart
                     candles={candles} width={size.width} height={Math.max(chartAreaHeight, 80)}
@@ -815,6 +883,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onOrderClose={handleOrderClose}
                     onOrderDragStart={handleOrderDragStart}
                     onBackgroundClick={handleBackgroundClick}
+                    dragHandlers={localDragHandlers}
                   />
             )}
           </div>
