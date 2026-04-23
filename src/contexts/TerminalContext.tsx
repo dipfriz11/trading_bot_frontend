@@ -348,20 +348,24 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         ? newNotional / order.leverage
         : newNotional
 
-      // Update balance: refund old margin, deduct new margin
-      if (order.accountId && order.exchangeId && order.marketType && order.margin != null) {
+      const updatedOrders = orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o)
+      const newMap = { ...prev, [chartId]: updatedOrders }
+
+      // Recompute inOrders as sum of all order margins for this account/exchange/marketType
+      if (order.accountId && order.exchangeId && order.marketType) {
         const k = balKey(order.accountId, order.exchangeId, order.marketType)
+        const totalInOrders = Object.values(newMap)
+          .flat()
+          .filter((o) => o.accountId === order.accountId && o.exchangeId === order.exchangeId && o.marketType === order.marketType && o.margin != null)
+          .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+
         setBalances((b) => {
           const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-          const updated = Math.max(0, Math.round((cur.inOrders - order.margin! + newMargin) * 100) / 100)
-          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: updated } }
+          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } }
         })
       }
 
-      return {
-        ...prev,
-        [chartId]: orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o),
-      }
+      return newMap
     })
   }, [setBalances])
 
