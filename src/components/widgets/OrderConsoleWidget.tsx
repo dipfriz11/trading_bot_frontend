@@ -84,7 +84,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const accountId = activeChart?.accountId ?? "main"
   const exchangeId = activeChart?.exchangeId ?? "binance"
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
-  const freeMargin = walletBalance - inOrders
+  const freeMargin = Math.max(0, walletBalance - inOrders)
   const { settings: posSettings } = usePositionSettings(symbol)
   // Effective side: futures drives buy/sell from long/short
   const effectiveSide: OrderSide = marketType === "futures"
