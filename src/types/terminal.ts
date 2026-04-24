@@ -44,7 +44,7 @@ export interface Tab {
   nextZIndex: number
 }
 
-export type GlassGraphiteBg = "graphite" | "blue-mist"
+export type GlassGraphiteBg = "graphite" | "blue-mist" | "pure-black"
 
 export interface TerminalState {
   tabs: Tab[]

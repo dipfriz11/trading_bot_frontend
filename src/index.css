@@ -855,6 +855,10 @@
   background: linear-gradient(160deg, #0D1721 0%, #091220 50%, #060E18 100%);
 }
 
+.glass-graphite-theme[data-bg="pure-black"] {
+  background: #080a10;
+}
+
 
 /* ===== END GLASS GRAPHITE THEME ===== */
 
