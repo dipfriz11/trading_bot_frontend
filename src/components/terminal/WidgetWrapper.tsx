@@ -7,11 +7,10 @@ import { useTerminal } from "@/contexts/TerminalContext"
 
 // Border colours per preset — widgets are transparent, only the border is coloured
 const TRANSPARENT_BDR: Record<string, { bdr: string; bdr2: string; header: string }> = {
-  midnight: { bdr: "rgba(70,110,200,0.35)",  bdr2: "rgba(90,140,255,0.55)",  header: "rgba(255,255,255,0.04)" },
-  navy:     { bdr: "rgba(40,110,240,0.4)",   bdr2: "rgba(60,140,255,0.6)",   header: "rgba(255,255,255,0.04)" },
-  forest:   { bdr: "rgba(25,160,80,0.38)",   bdr2: "rgba(34,197,94,0.55)",   header: "rgba(255,255,255,0.04)" },
-  wine:     { bdr: "rgba(200,45,65,0.38)",   bdr2: "rgba(240,80,80,0.55)",   header: "rgba(255,255,255,0.04)" },
-  slate:    { bdr: "rgba(110,135,180,0.38)", bdr2: "rgba(148,170,215,0.55)", header: "rgba(255,255,255,0.04)" },
+  slate:     { bdr: "rgba(110,135,180,0.38)", bdr2: "rgba(148,170,215,0.55)", header: "rgba(255,255,255,0.04)" },
+  grey:      { bdr: "rgba(100,110,120,0.35)", bdr2: "rgba(140,150,160,0.50)", header: "rgba(255,255,255,0.04)" },
+  lightgrey: { bdr: "rgba(140,150,160,0.35)", bdr2: "rgba(180,188,196,0.50)", header: "rgba(255,255,255,0.04)" },
+  steelblue: { bdr: "rgba(58,90,120,0.40)",  bdr2: "rgba(90,130,170,0.55)",  header: "rgba(255,255,255,0.04)" },
 }
 
 interface WidgetWrapperProps {
@@ -92,8 +91,9 @@ export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: Widg
   }, [widget, canvasRef, updateWidget])
 
   const { rect, zIndex } = widget
-  const isTransparent = state.theme === "transparent"
-  const p = TRANSPARENT_BDR[state.transparentBg ?? "midnight"] ?? TRANSPARENT_BDR.midnight
+  const isTransparent   = state.theme === "transparent"
+  const isGlassGraphite = state.theme === "glass-graphite"
+  const p = TRANSPARENT_BDR[state.transparentBg ?? "slate"] ?? TRANSPARENT_BDR["slate"]
 
   // Transparent theme: widget is fully see-through — only border + header separator visible
   const containerStyle: React.CSSProperties = isTransparent ? {
@@ -101,6 +101,11 @@ export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: Widg
     border: `1px solid ${p.bdr2}`,
     borderRadius: 6,
     boxShadow: `0 0 0 1px ${p.bdr}`,
+  } : isGlassGraphite ? {
+    background: "transparent",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 8,
+    boxShadow: "0 18px 45px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06)",
   } : {}
 
   const headerStyle: React.CSSProperties = isTransparent ? {
@@ -108,6 +113,13 @@ export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: Widg
     borderBottom: `1px solid ${p.bdr}`,
     color: "#e2e8f0",
     borderRadius: "5px 5px 0 0",
+  } : isGlassGraphite ? {
+    background: "linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.025))",
+    backdropFilter: "blur(18px)",
+    WebkitBackdropFilter: "blur(18px)",
+    borderBottom: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: "7px 7px 0 0",
+    color: "#E6EDF3",
   } : {}
 
   return (
