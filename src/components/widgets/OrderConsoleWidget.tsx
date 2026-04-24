@@ -775,7 +775,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       ) : (
         /* Grid Config */
         <div className="flex-1 overflow-auto min-h-0">
-          <GridConfigTab />
+          <GridConfigTab
+            symbol={symbol}
+            marketType={marketType}
+            futuresSide={futuresSide}
+            entryPrice={mockPrice}
+            availableBalance={freeMargin}
+            leverage={posSettings.leverage}
+            onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
+          />
         </div>
       )}
     </div>

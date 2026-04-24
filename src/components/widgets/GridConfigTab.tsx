@@ -1,29 +1,21 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Download, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
 import type { GridConfig, GridLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
 import { generateLevels, calcDerivedStats, exportGridConfig } from "@/lib/grid-helpers"
 
-// ---- Micro UI primitives matching OrderConsoleWidget style ----
+// ---- Micro UI primitives ----
 
 const inputStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 4,
   color: "rgba(200,214,229,0.9)",
   background: "rgba(255,255,255,0.04)",
-  padding: "3px 6px",
+  padding: "4px 8px",
   fontSize: 11,
   fontFamily: "monospace",
   width: "100%",
   outline: "none",
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 10,
-  fontFamily: "monospace",
-  opacity: 0.4,
-  marginBottom: 2,
-  display: "block",
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -32,29 +24,52 @@ const sectionStyle: React.CSSProperties = {
   marginBottom: 8,
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col" style={{ gap: 2 }}>
-      <label style={labelStyle}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function NumInput({ value, onChange, placeholder }: { value: number | string; onChange: (v: number) => void; placeholder?: string }) {
+function NumInput({
+  value, onChange, placeholder, style,
+}: {
+  value: number | string
+  onChange: (v: number) => void
+  placeholder?: string
+  style?: React.CSSProperties
+}) {
   return (
     <input
       type="number"
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
       placeholder={placeholder ?? "0"}
+      style={{ ...inputStyle, ...style }}
+      onMouseDown={(e) => e.stopPropagation()}
+    />
+  )
+}
+
+function TextInput({
+  value, onChange, placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder ?? ""}
       style={inputStyle}
       onMouseDown={(e) => e.stopPropagation()}
     />
   )
 }
 
-function SegmentedControl<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+function SegmentedControl<T extends string>({
+  options, value, onChange,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
   return (
     <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
       {options.map((o) => (
@@ -89,24 +104,16 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
     >
       <div
         style={{
-          width: 28,
-          height: 14,
-          borderRadius: 7,
+          width: 28, height: 14, borderRadius: 7,
           background: checked ? "rgba(30,111,239,0.4)" : "rgba(255,255,255,0.1)",
           border: `1px solid ${checked ? "rgba(30,111,239,0.6)" : "rgba(255,255,255,0.15)"}`,
-          position: "relative",
-          flexShrink: 0,
-          transition: "background 0.15s",
+          position: "relative", flexShrink: 0, transition: "background 0.15s",
         }}
       >
         <div
           style={{
-            position: "absolute",
-            top: 1,
-            left: checked ? 13 : 1,
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
+            position: "absolute", top: 1, left: checked ? 13 : 1,
+            width: 10, height: 10, borderRadius: "50%",
             background: checked ? "#1e6fef" : "rgba(255,255,255,0.35)",
             transition: "left 0.15s",
           }}
@@ -133,27 +140,26 @@ function SectionHeader({ title, expanded, onToggle }: { title: string; expanded:
   )
 }
 
-// ---- Read-only preview field ----
-function ReadonlyField({ label, value }: { label: string; value: string | number }) {
+function ReadonlyField({ placeholder, value }: { placeholder: string; value: string | number }) {
   return (
-    <div className="flex flex-col" style={{ gap: 2 }}>
-      <label style={labelStyle}>{label}</label>
-      <div
-        style={{
-          ...inputStyle,
-          background: "rgba(30,111,239,0.05)",
-          border: "1px solid rgba(30,111,239,0.15)",
-          color: "rgba(100,160,255,0.8)",
-          cursor: "default",
-        }}
-      >
-        {typeof value === "number" ? value.toFixed(6) : value}
-      </div>
+    <div
+      style={{
+        ...inputStyle,
+        background: "rgba(30,111,239,0.05)",
+        border: "1px solid rgba(30,111,239,0.15)",
+        color: "rgba(100,160,255,0.8)",
+        cursor: "default",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      <span style={{ opacity: 0.4, fontSize: 10 }}>{placeholder}</span>
+      <span style={{ marginLeft: "auto" }}>{typeof value === "number" ? value.toFixed(6) : value}</span>
     </div>
   )
 }
 
-// ---- Inline editable cell ----
 function EditableCell({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <input
@@ -161,15 +167,9 @@ function EditableCell({ value, onChange }: { value: number; onChange: (v: number
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
       style={{
-        width: "100%",
-        fontSize: 10,
-        fontFamily: "monospace",
-        background: "transparent",
-        border: "1px solid transparent",
-        borderRadius: 3,
-        color: "rgba(200,214,229,0.8)",
-        padding: "1px 3px",
-        outline: "none",
+        width: "100%", fontSize: 10, fontFamily: "monospace",
+        background: "transparent", border: "1px solid transparent",
+        borderRadius: 3, color: "rgba(200,214,229,0.8)", padding: "1px 3px", outline: "none",
       }}
       onFocus={(e) => { e.target.style.borderColor = "rgba(30,111,239,0.4)" }}
       onBlur={(e) => { e.target.style.borderColor = "transparent" }}
@@ -178,12 +178,62 @@ function EditableCell({ value, onChange }: { value: number; onChange: (v: number
   )
 }
 
+// ---- Props ----
+
+interface GridConfigTabProps {
+  // Passed from OrderConsoleWidget to sync chart data
+  symbol?: string
+  marketType?: "spot" | "futures"
+  futuresSide?: "long" | "short"
+  entryPrice?: number
+  availableBalance?: number
+  leverage?: number
+  onSideChange?: (side: "long" | "short") => void
+}
+
 // ---- Main component ----
 
-export function GridConfigTab() {
-  const [cfg, setCfg] = useState<GridConfig>(DEFAULT_GRID_CONFIG)
+export function GridConfigTab({
+  symbol: externalSymbol,
+  marketType: _marketType,
+  futuresSide: externalFuturesSide,
+  entryPrice: externalEntryPrice,
+  availableBalance = 0,
+  leverage: externalLeverage,
+  onSideChange,
+}: GridConfigTabProps) {
+  const [cfg, setCfg] = useState<GridConfig>({
+    ...DEFAULT_GRID_CONFIG,
+    symbol: externalSymbol ?? DEFAULT_GRID_CONFIG.symbol,
+    side: externalFuturesSide ?? DEFAULT_GRID_CONFIG.side,
+    entryPrice: externalEntryPrice ?? DEFAULT_GRID_CONFIG.entryPrice,
+    leverage: externalLeverage ?? DEFAULT_GRID_CONFIG.leverage,
+  })
 
-  // Collapsible sections
+  // Sync symbol from active chart
+  useEffect(() => {
+    if (externalSymbol) setCfg((prev) => ({ ...prev, symbol: externalSymbol }))
+  }, [externalSymbol])
+
+  // Sync entry price from active chart
+  useEffect(() => {
+    if (externalEntryPrice && externalEntryPrice > 0) {
+      setCfg((prev) => ({ ...prev, entryPrice: externalEntryPrice }))
+    }
+  }, [externalEntryPrice])
+
+  // Sync leverage from active chart
+  useEffect(() => {
+    if (externalLeverage && externalLeverage > 0) {
+      setCfg((prev) => ({ ...prev, leverage: externalLeverage }))
+    }
+  }, [externalLeverage])
+
+  // Sync futures side from active chart
+  useEffect(() => {
+    if (externalFuturesSide) setCfg((prev) => ({ ...prev, side: externalFuturesSide }))
+  }, [externalFuturesSide])
+
   const [sections, setSections] = useState({
     general: true,
     levels: true,
@@ -224,158 +274,202 @@ export function GridConfigTab() {
     URL.revokeObjectURL(url)
   }
 
+  const handlePctClick = (pct: number) => {
+    const total = availableBalance * cfg.leverage
+    const amount = (pct / 100) * total
+    update("totalQuote", parseFloat(amount.toFixed(2)))
+  }
+
   const derived = calcDerivedStats(cfg)
+
+  // Side button style (matching New Order LONG/SHORT style)
+  const sideBtn = (s: "long" | "short") => {
+    const active = cfg.side === s
+    const isLong = s === "long"
+    const activeColor = isLong ? "#00e5a0" : "#ff4757"
+    const activeBg = isLong ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)"
+    const activeBorder = isLong ? "#1a7a5a" : "#c02030"
+    return {
+      flex: 1,
+      fontSize: 11,
+      fontFamily: "monospace",
+      fontWeight: 700,
+      padding: "6px 0",
+      background: active ? activeBg : "transparent",
+      color: active ? activeColor : "rgba(255,255,255,0.3)",
+      border: "none",
+      borderBottom: active ? `2px solid ${activeBorder}` : "2px solid transparent",
+      cursor: "pointer",
+      letterSpacing: "0.05em",
+      transition: "all 0.15s",
+      textTransform: "uppercase" as const,
+    }
+  }
+
+  const stopProp = (e: React.MouseEvent) => e.stopPropagation()
 
   return (
     <div
       className="flex flex-col h-full overflow-auto"
       style={{ padding: "8px 10px", gap: 0 }}
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={stopProp}
     >
-
-      {/* ---- 1. General params ---- */}
+      {/* ---- 1. General ---- */}
       <div style={sectionStyle}>
         <SectionHeader title="General" expanded={sections.general} onToggle={() => toggleSection("general")} />
         {sections.general && (
-          <div className="flex flex-col" style={{ gap: 6 }}>
+          <div className="flex flex-col" style={{ gap: 5 }}>
             <Toggle checked={cfg.enabled} onChange={(v) => update("enabled", v)} label="Grid Enabled" />
 
-            <div className="grid grid-cols-2" style={{ gap: 6 }}>
-              <Field label="Symbol">
-                <input
-                  value={cfg.symbol}
-                  onChange={(e) => update("symbol", e.target.value)}
-                  style={inputStyle}
-                  onMouseDown={(e) => e.stopPropagation()}
-                />
-              </Field>
-              <Field label="Side">
-                <SegmentedControl
-                  options={[{ value: "long", label: "Long" }, { value: "short", label: "Short" }]}
-                  value={cfg.side}
-                  onChange={(v) => update("side", v)}
-                />
-              </Field>
+            {/* Symbol (synced from chart, readonly if external) */}
+            <TextInput
+              value={cfg.symbol}
+              onChange={(v) => update("symbol", v)}
+              placeholder="Symbol"
+            />
+
+            {/* Side: Long / Short — full width, styled like New Order */}
+            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+              {(["long", "short"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    update("side", s)
+                    onSideChange?.(s)
+                  }}
+                  style={sideBtn(s)}
+                  onMouseDown={stopProp}
+                >
+                  {s === "long" ? "Long" : "Short"}
+                </button>
+              ))}
             </div>
 
-            <div className="grid grid-cols-2" style={{ gap: 6 }}>
-              <Field label="Orders Count">
-                <NumInput value={cfg.ordersCount} onChange={(v) => update("ordersCount", Math.max(1, Math.round(v)))} />
-              </Field>
-              <Field label="Leverage ×">
-                <NumInput value={cfg.leverage} onChange={(v) => update("leverage", Math.max(1, v))} />
-              </Field>
+            {/* Orders Count + Leverage */}
+            <div className="grid grid-cols-2" style={{ gap: 5 }}>
+              <NumInput
+                value={cfg.ordersCount}
+                onChange={(v) => update("ordersCount", Math.max(1, Math.round(v)))}
+                placeholder="Orders Count"
+              />
+              <NumInput
+                value={cfg.leverage}
+                onChange={(v) => update("leverage", Math.max(1, v))}
+                placeholder="Leverage ×"
+              />
             </div>
 
-            <div className="grid grid-cols-3" style={{ gap: 6 }}>
-              <Field label="Entry Price">
-                <NumInput value={cfg.entryPrice} onChange={(v) => update("entryPrice", v)} />
-              </Field>
-              <Field label="Top Price">
-                <NumInput value={cfg.topPrice} onChange={(v) => update("topPrice", v)} />
-              </Field>
-              <Field label="Bottom Price">
-                <NumInput value={cfg.bottomPrice} onChange={(v) => update("bottomPrice", v)} />
-              </Field>
+            {/* Entry / Top / Bottom price */}
+            <div className="grid grid-cols-3" style={{ gap: 5 }}>
+              <NumInput value={cfg.entryPrice} onChange={(v) => update("entryPrice", v)} placeholder="Entry Price" />
+              <NumInput value={cfg.topPrice} onChange={(v) => update("topPrice", v)} placeholder="Top Price" />
+              <NumInput value={cfg.bottomPrice} onChange={(v) => update("bottomPrice", v)} placeholder="Bottom Price" />
             </div>
 
-            <div className="grid grid-cols-2" style={{ gap: 6 }}>
-              <Field label="Total Quote (USDT)">
-                <NumInput value={cfg.totalQuote} onChange={(v) => update("totalQuote", v)} />
-              </Field>
-              <Field label="Qty Mode">
-                <SegmentedControl
-                  options={[{ value: "fixed", label: "Fixed" }, { value: "multiplier", label: "Multi" }, { value: "custom", label: "Custom" }]}
-                  value={cfg.qtyMode}
-                  onChange={(v) => update("qtyMode", v)}
-                />
-              </Field>
+            {/* Total Quote + % buttons */}
+            <div className="flex flex-col" style={{ gap: 3 }}>
+              <NumInput
+                value={cfg.totalQuote}
+                onChange={(v) => update("totalQuote", v)}
+                placeholder="Total Quote (USDT)"
+              />
+              <div className="flex gap-1">
+                {[25, 50, 75, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => handlePctClick(pct)}
+                    className="flex-1 transition-colors"
+                    style={{
+                      fontSize: 10, fontFamily: "monospace", padding: "3px 0",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "rgba(255,255,255,0.4)",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      borderRadius: 3, cursor: "pointer",
+                    }}
+                    onMouseDown={stopProp}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Qty Mode */}
+            <SegmentedControl
+              options={[{ value: "fixed", label: "Fixed" }, { value: "multiplier", label: "Multiplier" }, { value: "custom", label: "Custom" }]}
+              value={cfg.qtyMode}
+              onChange={(v) => update("qtyMode", v)}
+            />
           </div>
         )}
       </div>
 
-      {/* ---- 2. Level logic ---- */}
+      {/* ---- 2. Level Logic ---- */}
       <div style={sectionStyle}>
         <SectionHeader title="Level Logic" expanded={sections.levels} onToggle={() => toggleSection("levels")} />
         {sections.levels && (
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            <Field label="Grid Mode">
-              <SegmentedControl
-                options={[
-                  { value: "arithmetic", label: "Arith" },
-                  { value: "geometric", label: "Geo" },
-                  { value: "custom", label: "Custom" },
-                ]}
-                value={cfg.gridMode}
-                onChange={(v) => update("gridMode", v)}
-              />
-            </Field>
+          <div className="flex flex-col" style={{ gap: 5 }}>
+            <SegmentedControl
+              options={[
+                { value: "arithmetic", label: "Arith" },
+                { value: "geometric", label: "Geo" },
+                { value: "custom", label: "Custom" },
+              ]}
+              value={cfg.gridMode}
+              onChange={(v) => update("gridMode", v)}
+            />
 
-            <div className="grid grid-cols-2" style={{ gap: 6 }}>
-              <Field label="Step %">
-                <NumInput value={cfg.stepPercent} onChange={(v) => update("stepPercent", v)} placeholder="1.0" />
-              </Field>
+            <div className="grid grid-cols-2" style={{ gap: 5 }}>
+              <NumInput value={cfg.stepPercent} onChange={(v) => update("stepPercent", v)} placeholder="Step %" />
               {cfg.qtyMode === "multiplier" && (
-                <Field label="Multiplier">
-                  <NumInput value={cfg.multiplier} onChange={(v) => update("multiplier", v)} placeholder="1.1" />
-                </Field>
+                <NumInput value={cfg.multiplier} onChange={(v) => update("multiplier", v)} placeholder="Multiplier" />
               )}
             </div>
 
-            <ReadonlyField label="Base Order Size (preview)" value={derived.baseOrderSize} />
+            <ReadonlyField placeholder="Base Order Size" value={derived.baseOrderSize} />
 
+            {/* Generate Levels — styled like Submit button */}
             <button
               onClick={handleGenerate}
-              className="flex items-center justify-center gap-1.5 w-full transition-colors"
+              className="flex items-center justify-center gap-1.5 w-full transition-all"
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 fontFamily: "monospace",
-                fontWeight: 600,
-                padding: "6px 0",
+                fontWeight: 700,
+                padding: "8px 0",
                 borderRadius: 4,
-                background: "rgba(30,111,239,0.12)",
+                background: "rgba(30,111,239,0.15)",
                 color: "#1e6fef",
-                border: "1px solid rgba(30,111,239,0.3)",
+                border: "1px solid rgba(30,111,239,0.4)",
                 cursor: "pointer",
+                letterSpacing: "0.03em",
               }}
-              onMouseDown={(e) => e.stopPropagation()}
+              onMouseDown={stopProp}
             >
-              <RefreshCw size={11} />
+              <RefreshCw size={12} />
               Generate Levels
             </button>
           </div>
         )}
       </div>
 
-      {/* ---- 3. TP/SL ---- */}
+      {/* ---- 3. TP / SL ---- */}
       <div style={sectionStyle}>
         <SectionHeader title="TP / SL" expanded={sections.tpsl} onToggle={() => toggleSection("tpsl")} />
         {sections.tpsl && (
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            <div className="grid grid-cols-2" style={{ gap: 6 }}>
-              <Field label="TP %">
-                <NumInput value={cfg.tpPercent} onChange={(v) => update("tpPercent", v)} placeholder="3.0" />
-              </Field>
-              <Field label="SL %">
-                <NumInput value={cfg.slPercent} onChange={(v) => update("slPercent", v)} placeholder="5.0" />
-              </Field>
+          <div className="flex flex-col" style={{ gap: 5 }}>
+            <div className="grid grid-cols-2" style={{ gap: 5 }}>
+              <NumInput value={cfg.tpPercent} onChange={(v) => update("tpPercent", v)} placeholder="TP %" />
+              <NumInput value={cfg.slPercent} onChange={(v) => update("slPercent", v)} placeholder="SL %" />
             </div>
-
-            <Field label="TP Update Mode">
-              <SegmentedControl
-                options={[{ value: "fixed", label: "Fixed" }, { value: "reprice", label: "Reprice" }]}
-                value={cfg.tpUpdateMode}
-                onChange={(v) => update("tpUpdateMode", v)}
-              />
-            </Field>
-
+            <SegmentedControl
+              options={[{ value: "fixed", label: "Fixed" }, { value: "reprice", label: "Reprice" }]}
+              value={cfg.tpUpdateMode}
+              onChange={(v) => update("tpUpdateMode", v)}
+            />
             <Toggle checked={cfg.trailingEnabled} onChange={(v) => update("trailingEnabled", v)} label="Trailing Stop" />
-
             {cfg.trailingEnabled && (
-              <Field label="Trailing Step %">
-                <NumInput value={cfg.trailingStepPercent} onChange={(v) => update("trailingStepPercent", v)} placeholder="0.5" />
-              </Field>
+              <NumInput value={cfg.trailingStepPercent} onChange={(v) => update("trailingStepPercent", v)} placeholder="Trailing Step %" />
             )}
           </div>
         )}
@@ -385,20 +479,14 @@ export function GridConfigTab() {
       <div style={sectionStyle}>
         <SectionHeader title="Reset TP" expanded={sections.resetTp} onToggle={() => toggleSection("resetTp")} />
         {sections.resetTp && (
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            <Toggle checked={cfg.resetTpEnabled} onChange={(v) => update("resetTpEnabled", v)} label="Reset TP Enabled (global)" />
-
-            <div className="grid grid-cols-2" style={{ gap: 6 }}>
-              <Field label="Default Reset TP %">
-                <NumInput value={cfg.defaultResetTpPercent} onChange={(v) => update("defaultResetTpPercent", v)} placeholder="1.5" />
-              </Field>
-              <Field label="Default Close %">
-                <NumInput value={cfg.defaultResetTpClosePercent} onChange={(v) => update("defaultResetTpClosePercent", v)} placeholder="50" />
-              </Field>
+          <div className="flex flex-col" style={{ gap: 5 }}>
+            <Toggle checked={cfg.resetTpEnabled} onChange={(v) => update("resetTpEnabled", v)} label="Reset TP (global)" />
+            <div className="grid grid-cols-2" style={{ gap: 5 }}>
+              <NumInput value={cfg.defaultResetTpPercent} onChange={(v) => update("defaultResetTpPercent", v)} placeholder="Reset TP %" />
+              <NumInput value={cfg.defaultResetTpClosePercent} onChange={(v) => update("defaultResetTpClosePercent", v)} placeholder="Close %" />
             </div>
-
-            <p style={{ fontSize: 10, fontFamily: "monospace", opacity: 0.35, lineHeight: 1.4 }}>
-              Per-level reset TP overrides are editable in the table below.
+            <p style={{ fontSize: 10, fontFamily: "monospace", opacity: 0.3, lineHeight: 1.4 }}>
+              Per-level overrides in the table below.
             </p>
           </div>
         )}
@@ -406,19 +494,23 @@ export function GridConfigTab() {
 
       {/* ---- 5. Levels Table ---- */}
       <div style={sectionStyle}>
-        <SectionHeader title={`Levels Table (${cfg.levels.length})`} expanded={sections.table} onToggle={() => toggleSection("table")} />
+        <SectionHeader
+          title={`Levels Table (${cfg.levels.length})`}
+          expanded={sections.table}
+          onToggle={() => toggleSection("table")}
+        />
         {sections.table && (
           cfg.levels.length === 0 ? (
-            <div style={{ fontSize: 10, fontFamily: "monospace", opacity: 0.3, textAlign: "center", padding: "12px 0" }}>
-              No levels yet — click Generate Levels
+            <div style={{ fontSize: 10, fontFamily: "monospace", opacity: 0.3, textAlign: "center", padding: "10px 0" }}>
+              No levels — click Generate Levels above
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, fontFamily: "monospace" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                    {["#", "Price", "Qty", "RTP", "RTP%", "Close%"].map((h) => (
-                      <th key={h} style={{ padding: "3px 4px", opacity: 0.4, textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>
+                    {["#", "Price", "Qty", "RTP", "TP%", "Cls%"].map((h) => (
+                      <th key={h} style={{ padding: "2px 3px", opacity: 0.4, textAlign: "right", fontWeight: 500 }}>
                         {h}
                       </th>
                     ))}
@@ -426,39 +518,34 @@ export function GridConfigTab() {
                 </thead>
                 <tbody>
                   {cfg.levels.map((level) => (
-                    <tr
-                      key={level.index}
-                      style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}
-                    >
-                      <td style={{ padding: "2px 4px", opacity: 0.4, textAlign: "right" }}>{level.index}</td>
-                      <td style={{ padding: "2px 4px", textAlign: "right" }}>
+                    <tr key={level.index} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                      <td style={{ padding: "1px 3px", opacity: 0.4, textAlign: "right" }}>{level.index}</td>
+                      <td style={{ padding: "1px 3px" }}>
                         <EditableCell value={level.price} onChange={(v) => updateLevel(level.index, { price: v })} />
                       </td>
-                      <td style={{ padding: "2px 4px", textAlign: "right" }}>
+                      <td style={{ padding: "1px 3px" }}>
                         <EditableCell value={level.qty} onChange={(v) => updateLevel(level.index, { qty: v })} />
                       </td>
-                      <td style={{ padding: "2px 4px", textAlign: "center" }}>
+                      <td style={{ padding: "1px 3px", textAlign: "center" }}>
                         <input
                           type="checkbox"
                           checked={level.useResetTp}
                           onChange={(e) => updateLevel(level.index, { useResetTp: e.target.checked })}
                           style={{ accentColor: "#1e6fef", cursor: "pointer" }}
-                          onMouseDown={(e) => e.stopPropagation()}
+                          onMouseDown={stopProp}
                         />
                       </td>
-                      <td style={{ padding: "2px 4px", textAlign: "right", opacity: level.useResetTp ? 1 : 0.3 }}>
-                        {level.useResetTp ? (
-                          <EditableCell value={level.resetTpPercent} onChange={(v) => updateLevel(level.index, { resetTpPercent: v })} />
-                        ) : (
-                          <span>{level.resetTpPercent}</span>
-                        )}
+                      <td style={{ padding: "1px 3px", opacity: level.useResetTp ? 1 : 0.3 }}>
+                        {level.useResetTp
+                          ? <EditableCell value={level.resetTpPercent} onChange={(v) => updateLevel(level.index, { resetTpPercent: v })} />
+                          : <span style={{ paddingLeft: 3 }}>{level.resetTpPercent}</span>
+                        }
                       </td>
-                      <td style={{ padding: "2px 4px", textAlign: "right", opacity: level.useResetTp ? 1 : 0.3 }}>
-                        {level.useResetTp ? (
-                          <EditableCell value={level.resetTpClosePercent} onChange={(v) => updateLevel(level.index, { resetTpClosePercent: v })} />
-                        ) : (
-                          <span>{level.resetTpClosePercent}</span>
-                        )}
+                      <td style={{ padding: "1px 3px", opacity: level.useResetTp ? 1 : 0.3 }}>
+                        {level.useResetTp
+                          ? <EditableCell value={level.resetTpClosePercent} onChange={(v) => updateLevel(level.index, { resetTpClosePercent: v })} />
+                          : <span style={{ paddingLeft: 3 }}>{level.resetTpClosePercent}</span>
+                        }
                       </td>
                     </tr>
                   ))}
@@ -473,8 +560,7 @@ export function GridConfigTab() {
       <div style={{ ...sectionStyle, borderBottom: "none", paddingBottom: 0 }}>
         <SectionHeader title="Preview" expanded={sections.preview} onToggle={() => toggleSection("preview")} />
         {sections.preview && (
-          <div className="flex flex-col" style={{ gap: 6 }}>
-            {/* Stats row */}
+          <div className="flex flex-col" style={{ gap: 5 }}>
             <div className="grid grid-cols-2" style={{ gap: 4 }}>
               {[
                 { label: "Total Levels", value: derived.totalLevels },
@@ -484,58 +570,38 @@ export function GridConfigTab() {
               ].map(({ label, value }) => (
                 <div
                   key={label}
-                  className="flex flex-col"
                   style={{ padding: "4px 6px", borderRadius: 4, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
                 >
-                  <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.4 }}>{label}</span>
-                  <span style={{ fontSize: 11, fontFamily: "monospace", color: "rgba(200,214,229,0.9)", fontWeight: 600 }}>{value}</span>
+                  <div style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.4 }}>{label}</div>
+                  <div style={{ fontSize: 11, fontFamily: "monospace", color: "rgba(200,214,229,0.9)", fontWeight: 600 }}>{value}</div>
                 </div>
               ))}
             </div>
-
-            {/* JSON preview */}
-            <div style={{ position: "relative" }}>
-              <label style={labelStyle}>Config JSON</label>
-              <pre
-                style={{
-                  fontSize: 9,
-                  fontFamily: "monospace",
-                  color: "rgba(100,160,255,0.7)",
-                  background: "rgba(30,111,239,0.04)",
-                  border: "1px solid rgba(30,111,239,0.12)",
-                  borderRadius: 4,
-                  padding: "6px 8px",
-                  overflowX: "auto",
-                  maxHeight: 140,
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
-              >
-                {JSON.stringify({ ...cfg, levels: cfg.levels.slice(0, 3).concat(cfg.levels.length > 3 ? [{ "...": `${cfg.levels.length - 3} more` }] as unknown as GridLevel[] : []) }, null, 2)}
-              </pre>
-            </div>
+            <pre
+              style={{
+                fontSize: 9, fontFamily: "monospace", color: "rgba(100,160,255,0.7)",
+                background: "rgba(30,111,239,0.04)", border: "1px solid rgba(30,111,239,0.12)",
+                borderRadius: 4, padding: "6px 8px", overflowX: "auto",
+                maxHeight: 120, overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all",
+              }}
+            >
+              {JSON.stringify({ ...cfg, levels: cfg.levels.slice(0, 3) }, null, 2)}
+            </pre>
           </div>
         )}
       </div>
 
-      {/* ---- Export button ---- */}
+      {/* ---- Export ---- */}
       <button
         onClick={handleExport}
-        className="flex items-center justify-center gap-1.5 w-full transition-colors mt-2"
+        className="flex items-center justify-center gap-1.5 w-full transition-all mt-2"
         style={{
-          fontSize: 11,
-          fontFamily: "monospace",
-          fontWeight: 600,
-          padding: "7px 0",
-          borderRadius: 4,
-          background: "rgba(0,229,160,0.08)",
-          color: "#00e5a0",
-          border: "1px solid rgba(0,229,160,0.25)",
-          cursor: "pointer",
-          flexShrink: 0,
+          fontSize: 11, fontFamily: "monospace", fontWeight: 700,
+          padding: "7px 0", borderRadius: 4,
+          background: "rgba(0,229,160,0.08)", color: "#00e5a0",
+          border: "1px solid rgba(0,229,160,0.25)", cursor: "pointer", flexShrink: 0,
         }}
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={stopProp}
       >
         <Download size={12} />
         Export Grid Config
