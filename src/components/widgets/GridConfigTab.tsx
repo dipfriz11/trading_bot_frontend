@@ -376,16 +376,19 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 2. GRID SETUP ────────────────────────────── */}
+      {/* ── GRID SETUP ───────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="2. GRID SETUP" expanded={open.gridSetup} onToggle={() => tog("gridSetup")} />
-        {open.gridSetup && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} placeholder="Orders Count" title="Number of grid levels (3–100)" min={3} />
-            <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} placeholder="Total Budget (USDT)" title="Total capital for this grid" min={0} />
-            <PctBtns onPct={handlePct} />
+        <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Orders</div>
+            <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} placeholder="8" title="Number of grid levels (3–100)" min={3} />
           </div>
-        )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Budget (USDT)</div>
+            <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} placeholder="1000" title="Total capital for this grid" min={0} />
+          </div>
+        </div>
+        <PctBtns onPct={handlePct} />
       </div>
       <Divider />
 
