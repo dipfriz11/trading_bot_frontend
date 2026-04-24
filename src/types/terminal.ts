@@ -128,6 +128,117 @@ export interface ScreenerRow {
   low24h: number
 }
 
+// ---- DCA Order Types ----
+
+export type DcaEntryType = "market" | "limit"
+export type DcaPlacementMode = "step_percent" | "price_range"
+export type DcaQtyMode = "fixed" | "multiplier"
+export type DcaTpMode = "avg_entry"
+export type DcaSlMode = "avg_entry" | "extreme_order"
+export type DcaRebuildMode = "from_avg_entry"
+
+export interface DcaMultiTpLevel {
+  tpPercent: number
+  closePercent: number
+}
+
+export interface DcaPerLevelResetSetting {
+  level: number
+  resetTpPercent: number
+  closePercent: number
+}
+
+export interface DcaConfig {
+  strategy: "dca"
+  account_id: string
+  exchange: string
+  symbol: string
+  position_side: "LONG" | "SHORT"
+  leverage: number
+  entry: {
+    type: DcaEntryType
+    price: number
+  }
+  dca: {
+    orders_count: number
+    total_budget: number
+    placement_mode: DcaPlacementMode
+    first_offset_percent: number
+    step_percent: number
+    price_range_from?: number
+    price_range_to?: number
+    qty_mode: DcaQtyMode
+    qty_multiplier: number
+  }
+  take_profit: {
+    enabled: boolean
+    mode: DcaTpMode
+    percent: number
+    close_percent: number
+    multi_tp_enabled: boolean
+    levels: DcaMultiTpLevel[]
+  }
+  stop_loss: {
+    enabled: boolean
+    mode: DcaSlMode
+    percent: number
+    close_percent: number
+  }
+  reset_tp: {
+    enabled: boolean
+    trigger_levels: number[]
+    reset_tp_percent: number
+    reset_close_percent: number
+    rebuild_tail: boolean
+    rebuild_mode: DcaRebuildMode
+    per_level_settings_enabled: boolean
+    per_level_settings: DcaPerLevelResetSetting[]
+  }
+}
+
+export const DEFAULT_DCA_CONFIG: DcaConfig = {
+  strategy: "dca",
+  account_id: "main",
+  exchange: "binance",
+  symbol: "BTC/USDT",
+  position_side: "LONG",
+  leverage: 5,
+  entry: { type: "limit", price: 67500 },
+  dca: {
+    orders_count: 5,
+    total_budget: 100,
+    placement_mode: "step_percent",
+    first_offset_percent: 0.5,
+    step_percent: 1.0,
+    qty_mode: "multiplier",
+    qty_multiplier: 1.25,
+  },
+  take_profit: {
+    enabled: true,
+    mode: "avg_entry",
+    percent: 1.2,
+    close_percent: 100,
+    multi_tp_enabled: false,
+    levels: [],
+  },
+  stop_loss: {
+    enabled: true,
+    mode: "extreme_order",
+    percent: 2.5,
+    close_percent: 100,
+  },
+  reset_tp: {
+    enabled: false,
+    trigger_levels: [3, 4, 5],
+    reset_tp_percent: 0.6,
+    reset_close_percent: 35,
+    rebuild_tail: true,
+    rebuild_mode: "from_avg_entry",
+    per_level_settings_enabled: false,
+    per_level_settings: [],
+  },
+}
+
 // ---- Grid Order Types ----
 
 export type GridMode = "arithmetic" | "geometric" | "custom"

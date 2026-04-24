@@ -6,6 +6,7 @@ import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
+import { DcaTab } from "./DcaTab"
 
 function priceToString(price: number): string {
   if (price >= 1000) return price.toFixed(2)
@@ -55,7 +56,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     refundOrderBalance,
   } = useTerminal()
 
-  const [tab, setTab] = useState<"new" | "history" | "grid">("new")
+  const [tab, setTab] = useState<"new" | "history" | "grid" | "dca">("new")
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
@@ -417,7 +418,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tab toggle */}
       <div className="flex-shrink-0 flex" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        {(["new", "history", "grid"] as const).map((t) => (
+        {(["new", "history", "grid", "dca"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -426,10 +427,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
               borderBottom: tab === t ? "2px solid #1e6fef" : "2px solid transparent",
               color: tab === t ? "#1e6fef" : "rgba(255,255,255,0.4)",
               background: "transparent",
+              whiteSpace: "nowrap",
             }}
             onMouseDown={stopProp}
           >
-            {t === "new" ? "New Order" : t === "history" ? "History" : "Grid Config"}
+            {t === "new" ? "New Order" : t === "history" ? "History" : t === "grid" ? "Grid" : "DCA"}
           </button>
         ))}
       </div>
@@ -772,10 +774,23 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             </div>
           ))}
         </div>
-      ) : (
+      ) : tab === "grid" ? (
         /* Grid Config */
         <div className="flex-1 overflow-auto min-h-0">
           <GridConfigTab
+            symbol={symbol}
+            marketType={marketType}
+            futuresSide={futuresSide}
+            entryPrice={mockPrice}
+            availableBalance={freeMargin}
+            leverage={posSettings.leverage}
+            onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
+          />
+        </div>
+      ) : (
+        /* DCA */
+        <div className="flex-1 overflow-auto min-h-0">
+          <DcaTab
             symbol={symbol}
             marketType={marketType}
             futuresSide={futuresSide}
