@@ -1,6 +1,6 @@
-export type Theme = "terminal" | "cosmic" | "slate" | "transparent" | "glass-graphite"
+export type Theme = "transparent" | "glass-graphite"
 
-export type TransparentBgPreset = "midnight" | "navy" | "forest" | "wine" | "slate" | "grey" | "lightgrey" | "steelblue"
+export type TransparentBgPreset = "slate" | "grey" | "lightgrey" | "steelblue"
 
 export type WidgetType =
   | "chart"

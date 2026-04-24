@@ -3,115 +3,73 @@ import { useTerminal } from "@/contexts/TerminalContext"
 import { TabBar } from "./TabBar"
 import { AddWidgetMenu } from "./AddWidgetMenu"
 import { WidgetCanvas } from "./WidgetCanvas"
-import { Sparkles, Monitor, Layers, Eye, Settings, X, User } from "lucide-react"
+import { Layers, Eye, Settings, X, User } from "lucide-react"
 import type { TransparentBgPreset } from "@/types/terminal"
 
 const BG_PRESETS: { id: TransparentBgPreset; label: string; color: string; tint: string; grad: string }[] = [
-  { id: "midnight",  label: "Midnight",   color: "#06090f", tint: "#1e3c78", grad: "" },
-  { id: "navy",      label: "Navy",       color: "#020d1f", tint: "#0a50c8", grad: "" },
-  { id: "forest",    label: "Forest",     color: "#030e07", tint: "#0a7846", grad: "" },
-  { id: "wine",      label: "Wine",       color: "#110409", tint: "#8a1020", grad: "" },
   { id: "slate",     label: "Slate",      color: "#080a10", tint: "#506488", grad: "" },
   { id: "grey",      label: "Grey",       color: "#141414", tint: "#4a4a4a", grad: "" },
   { id: "lightgrey", label: "Light Grey", color: "#1c1c1c", tint: "#787878", grad: "" },
   { id: "steelblue", label: "Steel Blue", color: "#0d1620", tint: "#3a5a78", grad: "" },
 ]
 
-
-
-const THEMES = ["terminal", "cosmic", "slate", "transparent", "glass-graphite"] as const
+const THEMES = ["transparent", "glass-graphite"] as const
 type ThemeId = typeof THEMES[number]
 
 const THEME_META: Record<ThemeId, { label: string; icon: React.ElementType }> = {
-  terminal:        { label: "Terminal",    icon: Monitor    },
-  cosmic:          { label: "Cosmic",      icon: Sparkles   },
-  slate:           { label: "Slate",       icon: Layers     },
-  transparent:     { label: "Transparent", icon: Eye        },
-  "glass-graphite": { label: "Premium",   icon: Layers     },
+  transparent:      { label: "Transparent", icon: Eye    },
+  "glass-graphite": { label: "Premium",     icon: Layers },
 }
 
 export function Terminal() {
   const { state, setTheme, setTransparentBg, setGgBg } = useTerminal()
   const theme = state.theme as ThemeId
-  const transparentBg = state.transparentBg ?? "midnight"
+  const transparentBg = state.transparentBg ?? "slate"
   const [tweaksOpen, setTweaksOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const themeClass =
-    theme === "cosmic"           ? "cosmic-theme"          :
-    theme === "slate"            ? "slate-theme"           :
-    theme === "transparent"      ? "transparent-theme"     :
-    theme === "glass-graphite"   ? "glass-graphite-theme"  :
-    "terminal-theme"
+    theme === "glass-graphite" ? "glass-graphite-theme" :
+    "transparent-theme"
 
-  const isTransparent    = theme === "transparent"
-  const isCosmicTheme    = theme === "cosmic"
-  const isSlateTheme     = theme === "slate"
-  const isGlassGraphite  = theme === "glass-graphite"
+  const isTransparent   = theme === "transparent"
+  const isGlassGraphite = theme === "glass-graphite"
 
   const toolbarBg =
-    isCosmicTheme    ? "rgba(8,3,20,0.92)"              :
-    isSlateTheme     ? "#1e2636"                         :
-    isTransparent    ? "rgba(10,14,26,0.85)"             :
-    isGlassGraphite  ? "rgba(11,15,20,0.88)"             :
-    "var(--terminal-header)"
+    isGlassGraphite ? "rgba(11,15,20,0.88)" :
+    "rgba(10,14,26,0.85)"
 
   const toolbarBorder =
-    isCosmicTheme    ? "1px solid rgba(150,80,255,0.2)"   :
-    isSlateTheme     ? "1px solid rgba(255,255,255,0.10)" :
-    isTransparent    ? "1px solid rgba(42,58,80,0.65)"    :
-    isGlassGraphite  ? "1px solid rgba(255,255,255,0.10)" :
-    "1px solid var(--terminal-border)"
+    isGlassGraphite ? "1px solid rgba(255,255,255,0.10)" :
+    "1px solid rgba(42,58,80,0.65)"
 
   const logoBg =
-    isCosmicTheme    ? "linear-gradient(135deg, rgba(150,60,255,0.6), rgba(80,20,180,0.5))" :
-    isSlateTheme     ? "rgba(74,144,217,0.25)"         :
-    isTransparent    ? "rgba(59,130,246,0.2)"           :
-    isGlassGraphite  ? "rgba(58,124,165,0.18)"          :
-    "rgba(30,111,239,0.2)"
+    isGlassGraphite ? "rgba(58,124,165,0.18)" :
+    "rgba(59,130,246,0.2)"
 
   const logoBorder =
-    isCosmicTheme    ? "1px solid rgba(180,100,255,0.4)"  :
-    isSlateTheme     ? "1px solid rgba(74,144,217,0.45)"  :
-    isTransparent    ? "1px solid rgba(59,130,246,0.35)"  :
-    isGlassGraphite  ? "1px solid rgba(58,124,165,0.35)"  :
-    "1px solid rgba(30,111,239,0.3)"
+    isGlassGraphite ? "1px solid rgba(58,124,165,0.35)" :
+    "1px solid rgba(59,130,246,0.35)"
 
   const logoColor =
-    isCosmicTheme    ? "rgba(200,160,255,0.9)" :
-    isSlateTheme     ? "#4a90d9"               :
-    isTransparent    ? "#3b82f6"               :
-    isGlassGraphite  ? "#3A7CA5"               :
-    "#1e6fef"
+    isGlassGraphite ? "#3A7CA5" : "#3b82f6"
 
   const logoTextColor =
-    isCosmicTheme    ? "rgba(200,160,255,0.85)"  :
-    isSlateTheme     ? "rgba(220,230,245,0.85)"  :
-    isTransparent    ? "rgba(203,213,225,0.9)"   :
-    isGlassGraphite  ? "rgba(230,237,243,0.80)"  :
-    "rgba(255,255,255,0.7)"
+    isGlassGraphite ? "rgba(230,237,243,0.80)" :
+    "rgba(203,213,225,0.9)"
 
   const btnBg =
-    isCosmicTheme    ? "rgba(120,50,220,0.2)"    :
-    isSlateTheme     ? "rgba(255,255,255,0.10)"  :
-    isTransparent    ? "rgba(255,255,255,0.06)"  :
-    isGlassGraphite  ? "rgba(255,255,255,0.05)"  :
-    "rgba(255,255,255,0.05)"
+    isGlassGraphite ? "rgba(255,255,255,0.05)" :
+    "rgba(255,255,255,0.06)"
 
   const btnColor =
-    isCosmicTheme    ? "rgba(200,160,255,0.85)"  :
-    isSlateTheme     ? "rgba(220,230,245,0.8)"   :
-    isTransparent    ? "rgba(203,213,225,0.85)"  :
-    isGlassGraphite  ? "rgba(154,164,174,0.90)"  :
-    "rgba(255,255,255,0.5)"
+    isGlassGraphite ? "rgba(154,164,174,0.90)" :
+    "rgba(203,213,225,0.85)"
 
   const btnBorder =
-    isCosmicTheme    ? "1px solid rgba(150,80,255,0.3)"   :
-    isSlateTheme     ? "1px solid rgba(255,255,255,0.18)" :
-    isTransparent    ? "1px solid rgba(42,58,80,0.65)"    :
-    isGlassGraphite  ? "1px solid rgba(255,255,255,0.10)" :
-    "1px solid rgba(255,255,255,0.08)"
+    isGlassGraphite ? "1px solid rgba(255,255,255,0.10)" :
+    "1px solid rgba(42,58,80,0.65)"
 
   const ThemeIcon = THEME_META[theme].icon
   const nextTheme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
@@ -135,7 +93,7 @@ export function Terminal() {
         style={{
           borderBottom: toolbarBorder,
           background: toolbarBg,
-          backdropFilter: (isCosmicTheme || isTransparent || isGlassGraphite) ? "blur(10px)" : undefined,
+          backdropFilter: "blur(10px)",
         }}
       >
         {/* Logo */}
@@ -171,9 +129,9 @@ export function Terminal() {
             onClick={() => setTweaksOpen((v) => !v)}
             className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
             style={{
-              background: tweaksOpen ? (isTransparent ? "rgba(59,130,246,0.15)" : btnBg) : btnBg,
-              color: tweaksOpen ? (isTransparent ? "#60a5fa" : btnColor) : btnColor,
-              border: tweaksOpen ? (isTransparent ? "1px solid rgba(59,130,246,0.5)" : btnBorder) : btnBorder,
+              background: tweaksOpen ? "rgba(255,255,255,0.10)" : btnBg,
+              color: tweaksOpen ? "#fff" : btnColor,
+              border: tweaksOpen ? "1px solid rgba(255,255,255,0.22)" : btnBorder,
               fontSize: 10,
             }}
           >
@@ -199,9 +157,9 @@ export function Terminal() {
             onClick={() => { setAccountOpen((v) => !v); setSettingsOpen(false) }}
             className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
             style={{
-              background: accountOpen ? (isTransparent ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.10)") : btnBg,
+              background: accountOpen ? "rgba(255,255,255,0.10)" : btnBg,
               color: accountOpen ? "#fff" : btnColor,
-              border: accountOpen ? (isTransparent ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(255,255,255,0.22)") : btnBorder,
+              border: accountOpen ? "1px solid rgba(255,255,255,0.22)" : btnBorder,
               fontSize: 10,
             }}
           >
@@ -214,9 +172,9 @@ export function Terminal() {
             onClick={() => { setSettingsOpen((v) => !v); setAccountOpen(false) }}
             className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded transition-all"
             style={{
-              background: settingsOpen ? (isTransparent ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.10)") : btnBg,
+              background: settingsOpen ? "rgba(255,255,255,0.10)" : btnBg,
               color: settingsOpen ? "#fff" : btnColor,
-              border: settingsOpen ? (isTransparent ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(255,255,255,0.22)") : btnBorder,
+              border: settingsOpen ? "1px solid rgba(255,255,255,0.22)" : btnBorder,
               fontSize: 10,
             }}
           >
@@ -233,8 +191,8 @@ export function Terminal() {
           style={{
             top: 42,
             minWidth: 220,
-            background: isGlassGraphite ? "rgba(11,15,20,0.95)" : isTransparent ? "rgba(10,14,26,0.88)" : isCosmicTheme ? "rgba(8,3,20,0.95)" : isSlateTheme ? "#1e2636" : "var(--terminal-header)",
-            border: isGlassGraphite ? "1px solid rgba(255,255,255,0.12)" : isTransparent ? "1px solid rgba(42,58,80,0.7)" : isCosmicTheme ? "1px solid rgba(150,80,255,0.25)" : isSlateTheme ? "1px solid rgba(255,255,255,0.12)" : "1px solid var(--terminal-border)",
+            background: isGlassGraphite ? "rgba(11,15,20,0.95)" : "rgba(10,14,26,0.88)",
+            border: isGlassGraphite ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(42,58,80,0.7)",
             backdropFilter: "blur(16px)",
             boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
           }}
@@ -260,8 +218,8 @@ export function Terminal() {
                     className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-all"
                     style={{
                       fontSize: 10,
-                      background: active ? (isCosmicTheme ? "rgba(150,80,255,0.25)" : isTransparent ? "rgba(59,130,246,0.2)" : "rgba(255,255,255,0.12)") : "rgba(255,255,255,0.04)",
-                      border: active ? (isCosmicTheme ? "1px solid rgba(150,80,255,0.5)" : isTransparent ? "1px solid rgba(59,130,246,0.45)" : "1px solid rgba(255,255,255,0.2)") : "1px solid rgba(255,255,255,0.06)",
+                      background: active ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
+                      border: active ? "1px solid rgba(255,255,255,0.22)" : "1px solid rgba(255,255,255,0.06)",
                       color: active ? "#fff" : btnColor,
                     }}
                   >

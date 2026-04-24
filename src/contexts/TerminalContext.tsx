@@ -43,7 +43,7 @@ function getDefaultState(): TerminalState {
       createDefaultTab("tab-2", "Workspace 2"),
     ],
     activeTabId: "tab-1",
-    theme: "terminal",
+    theme: "glass-graphite",
   }
 }
 
