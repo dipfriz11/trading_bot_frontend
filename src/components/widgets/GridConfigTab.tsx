@@ -277,8 +277,8 @@ export function GridConfigTab({
     <div className="flex flex-col h-full overflow-auto" style={{ padding: "8px 10px" }} onMouseDown={stopProp}>
 
       {/* ── Side toggle — matches New Order style exactly ── */}
-      <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", marginBottom: 6 }}>
-        {(["long", "short"] as const).map((s) => (
+      <div style={{ display: "flex", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, marginBottom: 6 }}>
+        {(["long", "short"] as const).map((s, i) => (
           <button
             key={s}
             onClick={() => { upd("side", s); onSideChange?.(s) }}
@@ -292,6 +292,8 @@ export function GridConfigTab({
               textTransform: "uppercase",
               cursor: "pointer",
               border: "none",
+              borderLeft: i === 1 ? "1px solid rgba(255,255,255,0.1)" : "none",
+              borderRadius: i === 0 ? "3px 0 0 3px" : "0 3px 3px 0",
               transition: "background 0.15s, color 0.15s",
               background: cfg.side === s
                 ? (s === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
