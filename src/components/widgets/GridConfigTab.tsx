@@ -466,8 +466,8 @@ export function GridConfigTab({
             {cfg.placementMode === "step_percent" && (
               <div className="grid grid-cols-3" style={{ gap: 4 }}>
                 <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} label="1st order %" min={0} step={0.1} title="Distance from entry price to 1st order" />
-                <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} label="Step %" min={0.01} step={0.1} title="Price step between each grid level" />
                 <NI value={cfg.lastOffsetPercent} onChange={(v) => upd("lastOffsetPercent", v)} label="Last order %" min={0} step={0.1} title="Distance from entry to last order" />
+                <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} label="Step %" min={0.01} step={0.1} title="Price step between each grid level" />
               </div>
             )}
 
@@ -486,14 +486,6 @@ export function GridConfigTab({
               value={cfg.direction}
               onChange={(v) => upd("direction", v)}
             />
-
-            <div style={{
-              fontSize: 9, fontFamily: "monospace", color: "#60a5fa", opacity: 0.7,
-              background: "rgba(30,111,239,0.06)", border: "1px solid rgba(30,111,239,0.15)",
-              borderRadius: 4, padding: "4px 7px", lineHeight: 1.5,
-            }}>
-              Grid will be placed {cfg.direction === "below_price" ? "below" : "above"} current price for {cfg.side.toUpperCase()} position
-            </div>
           </div>
         )}
       </div>
