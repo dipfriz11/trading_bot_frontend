@@ -29,17 +29,31 @@ const readonlyBase: React.CSSProperties = {
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
 
 function NI({
-  value, onChange, placeholder, title, min, step, suffix,
+  value, onChange, placeholder, title, min, suffix,
 }: {
   value: number | string; onChange: (v: number) => void
   placeholder?: string; title?: string; min?: number; step?: number; suffix?: string
 }) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9.]/g, "")
+    const parsed = parseFloat(raw)
+    if (!isNaN(parsed)) onChange(min !== undefined ? Math.max(min, parsed) : parsed)
+    else if (raw === "" || raw === ".") onChange(0)
+  }
+  const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const delta = e.deltaY < 0 ? 1 : -1
+    const current = typeof value === "number" ? value : parseFloat(String(value)) || 0
+    const next = current + delta
+    onChange(min !== undefined ? Math.max(min, next) : next)
+  }
   if (suffix) {
     return (
       <div style={{ position: "relative" }}>
         <input
-          type="number" value={value} min={min} step={step}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          type="text" inputMode="decimal" value={value}
+          onChange={handleChange}
+          onWheel={handleWheel}
           placeholder={placeholder ?? "0"} title={title ?? placeholder}
           style={{ ...inputBase, paddingRight: 22 }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -52,8 +66,9 @@ function NI({
   }
   return (
     <input
-      type="number" value={value} min={min} step={step}
-      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      type="text" inputMode="decimal" value={value}
+      onChange={handleChange}
+      onWheel={handleWheel}
       placeholder={placeholder ?? "0"} title={title ?? placeholder}
       style={inputBase}
       onMouseDown={(e) => e.stopPropagation()}
