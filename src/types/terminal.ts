@@ -244,11 +244,30 @@ export const DEFAULT_DCA_CONFIG: DcaConfig = {
 export type GridMode = "arithmetic" | "geometric" | "custom"
 export type QtyMode = "fixed" | "multiplier" | "custom"
 export type TpUpdateMode = "fixed" | "reprice"
+export type GridPlacementMode = "step_percent" | "price_range" | "manual"
+export type GridDirection = "below_price" | "above_price"
+export type GridType = "simple" | "custom"
+export type GridEntryType = "market" | "limit"
+export type GridTpMode = "avg_entry" | "breakeven_offset"
+export type GridSlMode = "avg_entry" | "extreme_order"
+
+export interface GridMultiTpLevel {
+  tpPercent: number
+  closePercent: number
+}
+
+export interface GridResetTpLevel {
+  level: number
+  resetTpPercent: number
+  resetClosePercent: number
+}
 
 export interface GridLevel {
   index: number
   price: number
   qty: number
+  notional: number
+  cumExposure: number
   useResetTp: boolean
   resetTpPercent: number
   resetTpClosePercent: number
@@ -265,24 +284,53 @@ export interface GridConfig {
   bottomPrice: number
   totalQuote: number
   leverage: number
-  qtyMode: QtyMode
+  gridType: GridType
 
-  // Level logic
-  gridMode: GridMode
+  // Entry
+  entryType: GridEntryType
+
+  // Placement
+  placementMode: GridPlacementMode
+  firstOffsetPercent: number
   stepPercent: number
-  multiplier: number
+  lastOffsetPercent: number
+  direction: GridDirection
 
-  // TP/SL
+  // Qty / multiplier
+  qtyMode: QtyMode
+  multiplier: number
+  multiplierEnabled: boolean
+
+  // Level logic (for level table)
+  gridMode: GridMode
+
+  // TP
+  tpEnabled: boolean
+  tpMode: GridTpMode
   tpPercent: number
+  tpClosePercent: number
+  multiTpEnabled: boolean
+  multiTpLevels: GridMultiTpLevel[]
+
+  // SL
+  slEnabled: boolean
+  slMode: GridSlMode
   slPercent: number
+  slClosePercent: number
+
+  // TP/SL legacy (kept for compatibility)
   tpUpdateMode: TpUpdateMode
   trailingEnabled: boolean
   trailingStepPercent: number
 
-  // Reset TP
+  // Reset TP (pro)
   resetTpEnabled: boolean
+  resetTpTriggerLevels: number[]
   defaultResetTpPercent: number
   defaultResetTpClosePercent: number
+  resetTpRebuildTail: boolean
+  resetTpPerLevelEnabled: boolean
+  resetTpPerLevelSettings: GridResetTpLevel[]
 
   // Generated levels
   levels: GridLevel[]
@@ -292,24 +340,55 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   enabled: false,
   symbol: "BTC/USDT",
   side: "long",
-  ordersCount: 5,
-  entryPrice: 67500,
+  ordersCount: 8,
+  entryPrice: 67432,
   topPrice: 70000,
   bottomPrice: 65000,
   totalQuote: 1000,
   leverage: 5,
-  qtyMode: "fixed",
-  gridMode: "arithmetic",
+  gridType: "simple",
+
+  entryType: "market",
+
+  placementMode: "step_percent",
+  firstOffsetPercent: 0.5,
   stepPercent: 1,
-  multiplier: 1.1,
-  tpPercent: 3,
-  slPercent: 5,
+  lastOffsetPercent: 5,
+  direction: "below_price",
+
+  qtyMode: "multiplier",
+  multiplier: 1.25,
+  multiplierEnabled: true,
+
+  gridMode: "arithmetic",
+
+  tpEnabled: true,
+  tpMode: "avg_entry",
+  tpPercent: 1.2,
+  tpClosePercent: 100,
+  multiTpEnabled: false,
+  multiTpLevels: [
+    { tpPercent: 0.8, closePercent: 50 },
+    { tpPercent: 1.5, closePercent: 50 },
+  ],
+
+  slEnabled: true,
+  slMode: "extreme_order",
+  slPercent: 2.5,
+  slClosePercent: 100,
+
   tpUpdateMode: "fixed",
   trailingEnabled: false,
   trailingStepPercent: 0.5,
+
   resetTpEnabled: false,
-  defaultResetTpPercent: 1.5,
-  defaultResetTpClosePercent: 50,
+  resetTpTriggerLevels: [3, 4, 5],
+  defaultResetTpPercent: 0.6,
+  defaultResetTpClosePercent: 35,
+  resetTpRebuildTail: true,
+  resetTpPerLevelEnabled: false,
+  resetTpPerLevelSettings: [],
+
   levels: [],
 }
 
