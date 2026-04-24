@@ -302,9 +302,6 @@ export interface GridConfig {
   multiplier: number
   multiplierEnabled: boolean
 
-  // Density
-  density: number
-
   // Level logic (for level table)
   gridMode: GridMode
 
@@ -364,7 +361,6 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   qtyMode: "multiplier",
   multiplier: 1.25,
   multiplierEnabled: true,
-  density: 1,
 
   gridMode: "arithmetic",
 

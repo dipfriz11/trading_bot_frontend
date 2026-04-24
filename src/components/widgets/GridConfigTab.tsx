@@ -82,48 +82,6 @@ function NI({
   )
 }
 
-function NITooltip({
-  value, onChange, label, min, step, title, tooltip,
-}: {
-  value: number; onChange: (v: number) => void
-  label?: string; min?: number; step?: number; title?: string; tooltip: string
-}) {
-  const [show, setShow] = useState(false)
-  return (
-    <div style={{ position: "relative" }}>
-      <NI value={value} onChange={onChange} label={label} min={min} step={step} title={title} />
-      <button
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={() => setShow((s) => !s)}
-        style={{
-          position: "absolute", left: 5, top: "50%", transform: "translateY(-50%)",
-          background: "none", border: "none", cursor: "pointer", padding: 0,
-          display: "flex", alignItems: "center",
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.4 }}>
-          <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
-          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.7)" fontFamily="monospace">?</text>
-        </svg>
-      </button>
-      {show && (
-        <div style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: 0, zIndex: 999,
-          background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
-          borderRadius: 5, padding: "7px 9px", width: 200,
-          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-          pointerEvents: "none",
-        }}>
-          {tooltip}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function BudgetInput({
   value, onChange, mode, onModeChange, baseSymbol,
 }: {
@@ -357,6 +315,7 @@ export function GridConfigTab({
   const [open, setOpen] = useState({
     entry: true,
     gridSetup: true,
+    multiplier: true,
     sizePreview: false,
     summary: false,
     tp: true,
@@ -518,22 +477,30 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── MULTIPLIER + DENSITY ─────────────────────── */}
+      {/* ── 4. MULTIPLIER ────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <div style={{ ...gap4 }}>
-          <div className="grid grid-cols-2" style={{ gap: 4 }}>
-            <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} label="Multiplier" min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
-            <NITooltip
-              value={cfg.density ?? 1}
-              onChange={(v) => upd("density", Math.max(0.01, v))}
-              label="Density"
-              min={0.01}
-              step={0.05}
-              title="Density"
-              tooltip={`Если выбрана "Плотность" равная 1, то ордера будут распределены в сетке равномерно, если больше 1, то ордера будут сконцентрированы ближе к концу сетки, если меньше 1, то ближе к началу.`}
-            />
+        <SectionHead
+          title="4. MULTIPLIER"
+          expanded={open.multiplier}
+          onToggle={() => tog("multiplier")}
+          rightSlot={<MiniToggle checked={cfg.multiplierEnabled} onChange={(v) => upd("multiplierEnabled", v)} />}
+        />
+        {open.multiplier && (
+          <div style={{ ...gap4, marginTop: 4 }}>
+            {cfg.multiplierEnabled ? (
+              <>
+                <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} label="Multiplier" min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
+                <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.4)", lineHeight: 1.5 }}>
+                  each next order = prev × {cfg.multiplier}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.35)", lineHeight: 1.5 }}>
+                Equal distribution — all orders same size
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
       <Divider />
 
