@@ -196,7 +196,7 @@ function Divider() {
 function PctBtns({ onPct }: { onPct: (p: number) => void }) {
   return (
     <div className="flex gap-1">
-      {[25, 50, 75, 100].map((p) => (
+      {[10, 20, 30, 50, 75, 100].map((p) => (
         <button key={p} onClick={() => onPct(p)} title={`${p}% of available balance`}
           style={{
             flex: 1, fontSize: 9, fontFamily: "monospace", padding: "1px 0",
@@ -381,22 +381,8 @@ export function GridConfigTab({
         <SectionHead title="2. GRID SETUP" expanded={open.gridSetup} onToggle={() => tog("gridSetup")} />
         {open.gridSetup && (
           <div style={{ ...gap4, marginTop: 4 }}>
-            <Seg
-              options={[
-                { v: "simple", label: "Simple", title: "Automatic equal-step grid" },
-                { v: "custom", label: "Custom", pro: true, title: "Custom per-level configuration (PRO)" },
-              ]}
-              value={cfg.gridType}
-              onChange={(v) => upd("gridType", v)}
-            />
-            <div>
-              <LabelRow label="Orders Count" tooltip="Number of limit orders in the grid (3–100)" />
-              <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} placeholder="Orders" title="Number of grid levels (3–100)" min={3} />
-            </div>
-            <div>
-              <LabelRow label="Total Budget (USDT)" tooltip="Total capital allocated across all grid orders" />
-              <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} placeholder="Budget" title="Total capital for this grid" min={0} />
-            </div>
+            <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} placeholder="Orders Count" title="Number of grid levels (3–100)" min={3} />
+            <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} placeholder="Total Budget (USDT)" title="Total capital for this grid" min={0} />
             <PctBtns onPct={handlePct} />
           </div>
         )}
