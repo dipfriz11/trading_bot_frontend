@@ -107,10 +107,10 @@ function RO({ label, value, accent }: { label: string; value: string | number; a
 }
 
 function Seg<T extends string>({
-  options, value, onChange,
-}: { options: { v: T; label: string; title?: string; pro?: boolean }[]; value: T; onChange: (v: T) => void }) {
+  options, value, onChange, style,
+}: { options: { v: T; label: string; title?: string; pro?: boolean }[]; value: T; onChange: (v: T) => void; style?: React.CSSProperties }) {
   return (
-    <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+    <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0, ...style }}>
       {options.map((o) => (
         <button key={o.v} onClick={() => onChange(o.v)} title={o.title}
           style={{
@@ -353,32 +353,32 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 1. ENTRY ─────────────────────────────────── */}
+      {/* ── ENTRY ────────────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="1. ENTRY" expanded={open.entry} onToggle={() => tog("entry")} />
-        {open.entry && (
-          <div style={{ ...gap4, marginTop: 4 }}>
+        <div style={{ ...gap4, marginTop: 0 }}>
+          {/* Current Price row with order type switcher */}
+          <div style={{ ...readonlyBase, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "3px 6px" }}>
+            <span style={{ fontSize: 9, opacity: 0.4, whiteSpace: "nowrap", fontFamily: "monospace" }}>Current Price</span>
+            <span style={{ fontWeight: 700, color: "#00e5a0", fontSize: 11, flex: 1, textAlign: "right", marginRight: 6 }}>
+              {cfg.entryPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <Seg
               options={[
-                { v: "market", label: "Market", title: "Enter at current market price" },
                 { v: "limit", label: "Limit", title: "Enter at a specific limit price" },
+                { v: "market", label: "Stop", title: "Enter with a stop order" },
               ]}
               value={cfg.entryType}
               onChange={(v) => upd("entryType", v)}
+              style={{ minWidth: 90 }}
             />
-            {cfg.entryType === "limit" ? (
-              <div>
-                <LabelRow label="Entry Price (USDT)" />
-                <NI value={cfg.entryPrice} onChange={(v) => upd("entryPrice", v)} placeholder="Entry price" title="Limit price for first entry order" min={0} />
-              </div>
-            ) : (
-              <div style={{ ...readonlyBase, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10, opacity: 0.45 }}>Current Price</span>
-                <span style={{ fontWeight: 700, color: "#00e5a0" }}>{cfg.entryPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            )}
           </div>
-        )}
+          {cfg.entryType === "limit" && (
+            <div>
+              <LabelRow label="Entry Price (USDT)" />
+              <NI value={cfg.entryPrice} onChange={(v) => upd("entryPrice", v)} placeholder="Entry price" title="Limit price for first entry order" min={0} />
+            </div>
+          )}
+        </div>
       </div>
       <Divider />
 
