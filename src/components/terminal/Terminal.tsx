@@ -236,7 +236,7 @@ export function Terminal() {
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-mono" style={{ color: btnColor, opacity: 0.6, fontSize: 10 }}>Background</span>
               <div className="flex gap-1.5 flex-wrap">
-                {([ { id: "graphite", label: "Graphite", color1: "#101823", color2: "#05080C" }, { id: "blue-mist", label: "Blue Mist", color1: "#0D1721", color2: "#060E18" }, { id: "pure-black", label: "Pure Black", color1: "#080a10", color2: "#020305" } ] as const).map((p) => {
+                {([ { id: "graphite", label: "Graphite", color1: "#101823", color2: "#05080C" }, { id: "blue-mist", label: "Blue Mist", color1: "#0D1721", color2: "#060E18" }, { id: "pure-black", label: "Pure Black", color1: "#080a10", color2: "#020305" }, { id: "graphite-flat", label: "Graphite", color1: "#101823", color2: "#101823" } ] as const).map((p) => {
                   const active = ggBg === p.id
                   return (
                     <button
