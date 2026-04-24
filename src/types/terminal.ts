@@ -128,6 +128,80 @@ export interface ScreenerRow {
   low24h: number
 }
 
+// ---- Grid Order Types ----
+
+export type GridMode = "arithmetic" | "geometric" | "custom"
+export type QtyMode = "fixed" | "multiplier" | "custom"
+export type TpUpdateMode = "fixed" | "reprice"
+
+export interface GridLevel {
+  index: number
+  price: number
+  qty: number
+  useResetTp: boolean
+  resetTpPercent: number
+  resetTpClosePercent: number
+}
+
+export interface GridConfig {
+  // General
+  enabled: boolean
+  symbol: string
+  side: "long" | "short"
+  ordersCount: number
+  entryPrice: number
+  topPrice: number
+  bottomPrice: number
+  totalQuote: number
+  leverage: number
+  qtyMode: QtyMode
+
+  // Level logic
+  gridMode: GridMode
+  stepPercent: number
+  multiplier: number
+
+  // TP/SL
+  tpPercent: number
+  slPercent: number
+  tpUpdateMode: TpUpdateMode
+  trailingEnabled: boolean
+  trailingStepPercent: number
+
+  // Reset TP
+  resetTpEnabled: boolean
+  defaultResetTpPercent: number
+  defaultResetTpClosePercent: number
+
+  // Generated levels
+  levels: GridLevel[]
+}
+
+export const DEFAULT_GRID_CONFIG: GridConfig = {
+  enabled: false,
+  symbol: "BTC/USDT",
+  side: "long",
+  ordersCount: 5,
+  entryPrice: 67500,
+  topPrice: 70000,
+  bottomPrice: 65000,
+  totalQuote: 1000,
+  leverage: 5,
+  qtyMode: "fixed",
+  gridMode: "arithmetic",
+  stepPercent: 1,
+  multiplier: 1.1,
+  tpPercent: 3,
+  slPercent: 5,
+  tpUpdateMode: "fixed",
+  trailingEnabled: false,
+  trailingStepPercent: 0.5,
+  resetTpEnabled: false,
+  defaultResetTpPercent: 1.5,
+  defaultResetTpClosePercent: 50,
+  levels: [],
+}
+
 export const WIDGET_LABELS: Record<WidgetType, string> = {
   chart: "Price Chart",
   orderbook: "Order Book",

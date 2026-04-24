@@ -5,6 +5,7 @@ import { SYMBOLS } from "@/lib/mock-data"
 import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
+import { GridConfigTab } from "./GridConfigTab"
 
 function priceToString(price: number): string {
   if (price >= 1000) return price.toFixed(2)
@@ -54,7 +55,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     refundOrderBalance,
   } = useTerminal()
 
-  const [tab, setTab] = useState<"new" | "history">("new")
+  const [tab, setTab] = useState<"new" | "history" | "grid">("new")
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
@@ -416,7 +417,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tab toggle */}
       <div className="flex-shrink-0 flex" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        {(["new", "history"] as const).map((t) => (
+        {(["new", "history", "grid"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -428,7 +429,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             }}
             onMouseDown={stopProp}
           >
-            {t === "new" ? "New Order" : "History"}
+            {t === "new" ? "New Order" : t === "history" ? "History" : "Grid Config"}
           </button>
         ))}
       </div>
@@ -730,7 +731,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === "history" ? (
         /* History */
         <div className="flex-1 overflow-auto min-h-0">
           <div className="flex gap-1 px-2 py-0.5 text-xs font-mono"
@@ -770,6 +771,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
               {o.status !== "pending" && <span style={{ width: 20 }} />}
             </div>
           ))}
+        </div>
+      ) : (
+        /* Grid Config */
+        <div className="flex-1 overflow-auto min-h-0">
+          <GridConfigTab />
         </div>
       )}
     </div>
