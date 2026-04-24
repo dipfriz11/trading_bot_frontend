@@ -707,7 +707,6 @@
     0 18px 45px rgba(0,0,0,0.32),
     inset 0 1px 0 rgba(255,255,255,0.06);
   /* NO backdrop-filter here — content must stay sharp */
-  position: relative;
 }
 
 /* Edge highlight pseudo-element — glass shimmer on frame only, never blurs content */
