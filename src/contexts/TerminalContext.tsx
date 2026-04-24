@@ -96,6 +96,7 @@ interface TerminalContextValue {
   setTheme: (theme: Theme) => void
   setTransparentBg: (bg: TransparentBgPreset) => void
   setGgBg: (bg: GlassGraphiteBg) => void
+  setCustomBgColor: (color: string | undefined) => void
   addTab: () => void
   removeTab: (tabId: string) => void
   renameTab: (tabId: string, label: string) => void
@@ -177,7 +178,11 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setGgBg = useCallback((bg: GlassGraphiteBg) => {
-    setState((s) => ({ ...s, ggBg: bg }))
+    setState((s) => ({ ...s, ggBg: bg, customBgColor: undefined }))
+  }, [])
+
+  const setCustomBgColor = useCallback((color: string | undefined) => {
+    setState((s) => ({ ...s, customBgColor: color }))
   }, [])
 
   const addTab = useCallback(() => {
@@ -389,6 +394,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         setTheme,
         setTransparentBg,
         setGgBg,
+        setCustomBgColor,
         addTab,
         removeTab,
         renameTab,

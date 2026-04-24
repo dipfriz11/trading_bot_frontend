@@ -22,7 +22,7 @@ const THEME_META: Record<ThemeId, { label: string; icon: React.ElementType }> = 
 }
 
 export function Terminal() {
-  const { state, setTheme, setTransparentBg, setGgBg } = useTerminal()
+  const { state, setTheme, setTransparentBg, setGgBg, setCustomBgColor } = useTerminal()
   const theme = state.theme as ThemeId
   const transparentBg = state.transparentBg ?? "slate"
   const [tweaksOpen, setTweaksOpen] = useState(false)
@@ -80,12 +80,19 @@ export function Terminal() {
   const rootBg = isTransparent ? preset.color : undefined
 
   const ggBg = state.ggBg ?? "graphite"
+  const customBgColor = state.customBgColor
+
+  const rootStyle: React.CSSProperties = customBgColor && isGlassGraphite
+    ? { background: customBgColor }
+    : rootBg
+      ? { background: rootBg }
+      : {}
 
   return (
     <div
       className={`${themeClass} flex flex-col h-screen overflow-hidden relative`}
-      data-bg={isTransparent ? transparentBg : isGlassGraphite ? ggBg : undefined}
-      style={rootBg ? { background: rootBg } : undefined}
+      data-bg={isTransparent ? transparentBg : isGlassGraphite && !customBgColor ? ggBg : undefined}
+      style={rootStyle}
     >
       {/* Toolbar */}
       <div
@@ -237,7 +244,7 @@ export function Terminal() {
               <span className="text-xs font-mono" style={{ color: btnColor, opacity: 0.6, fontSize: 10 }}>Background</span>
               <div className="flex gap-1.5 flex-wrap">
                 {([ { id: "graphite", label: "Graphite", color1: "#101823", color2: "#05080C" }, { id: "blue-mist", label: "Blue Mist", color1: "#0D1721", color2: "#060E18" }, { id: "pure-black", label: "Pure Black", color1: "#080a10", color2: "#020305" }, { id: "dark-grey", label: "Dark Grey", color1: "#111111", color2: "#111111" } ] as const).map((p) => {
-                  const active = ggBg === p.id
+                  const active = !customBgColor && ggBg === p.id
                   return (
                     <button
                       key={p.id}
@@ -255,6 +262,35 @@ export function Terminal() {
                     </button>
                   )
                 })}
+
+                {/* Custom color picker */}
+                <label
+                  className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer"
+                  style={{
+                    fontSize: 10,
+                    background: customBgColor ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    border: customBgColor ? "1px solid rgba(58,124,165,0.55)" : "1px solid rgba(255,255,255,0.07)",
+                    color: customBgColor ? "#fff" : "rgba(154,164,174,0.75)",
+                  }}
+                  title="Custom color"
+                >
+                  <span
+                    className="rounded-sm inline-block flex-shrink-0"
+                    style={{
+                      width: 12, height: 12,
+                      background: customBgColor ?? "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)",
+                      border: "1px solid rgba(255,255,255,0.20)",
+                      borderRadius: 3,
+                    }}
+                  />
+                  Custom
+                  <input
+                    type="color"
+                    className="sr-only"
+                    value={customBgColor ?? "#1a1a2e"}
+                    onChange={(e) => setCustomBgColor(e.target.value)}
+                  />
+                </label>
               </div>
             </div>
           )}

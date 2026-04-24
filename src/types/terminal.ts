@@ -52,6 +52,7 @@ export interface TerminalState {
   theme: Theme
   transparentBg?: TransparentBgPreset
   ggBg?: GlassGraphiteBg
+  customBgColor?: string
 }
 
 export type ResizeHandle =
