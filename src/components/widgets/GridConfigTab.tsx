@@ -372,12 +372,6 @@ export function GridConfigTab({
               style={{ minWidth: 90 }}
             />
           </div>
-          {cfg.entryType === "limit" && (
-            <div>
-              <LabelRow label="Entry Price (USDT)" />
-              <NI value={cfg.entryPrice} onChange={(v) => upd("entryPrice", v)} placeholder="Entry price" title="Limit price for first entry order" min={0} />
-            </div>
-          )}
         </div>
       </div>
       <Divider />
