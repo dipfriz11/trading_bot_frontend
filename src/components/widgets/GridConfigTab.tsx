@@ -315,7 +315,6 @@ export function GridConfigTab({
   const [open, setOpen] = useState({
     entry: true,
     gridSetup: true,
-    placement: true,
     multiplier: true,
     sizePreview: false,
     summary: false,
@@ -450,44 +449,31 @@ export function GridConfigTab({
 
       {/* ── GRID PLACEMENT ───────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="GRID PLACEMENT" expanded={open.placement} onToggle={() => tog("placement")} />
-        {open.placement && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            <Seg
-              options={[
-                { v: "step_percent", label: "Step %", title: "Place orders at equal percentage steps" },
-                { v: "price_range", label: "Price Range", title: "Distribute orders across a price range" },
-                { v: "manual", label: "Manual", pro: true, title: "Set each level manually (PRO)" },
-              ]}
-              value={cfg.placementMode}
-              onChange={(v) => upd("placementMode", v)}
-            />
+        <div style={{ ...gap4, marginTop: 0 }}>
+          <Seg
+            options={[
+              { v: "step_percent", label: "Step %", title: "Place orders at equal percentage steps" },
+              { v: "price_range", label: "Price Range", title: "Distribute orders across a price range" },
+            ]}
+            value={cfg.placementMode}
+            onChange={(v) => upd("placementMode", v)}
+          />
 
-            {cfg.placementMode === "step_percent" && (
-              <div className="grid grid-cols-3" style={{ gap: 4 }}>
-                <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} label="1st order %" min={0} step={0.1} title="Distance from entry price to 1st order" />
-                <NI value={cfg.lastOffsetPercent} onChange={(v) => upd("lastOffsetPercent", v)} label="Last order %" min={0} step={0.1} title="Distance from entry to last order" />
-                <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} label="Step %" min={0.01} step={0.1} title="Price step between each grid level" />
-              </div>
-            )}
+          {cfg.placementMode === "step_percent" && (
+            <div className="grid grid-cols-3" style={{ gap: 4 }}>
+              <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} label="1st order %" min={0} step={0.1} title="Distance from entry price to 1st order" />
+              <NI value={cfg.lastOffsetPercent} onChange={(v) => upd("lastOffsetPercent", v)} label="Last order %" min={0} step={0.1} title="Distance from entry to last order" />
+              <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} label="Step %" min={0.01} step={0.1} title="Price step between each grid level" />
+            </div>
+          )}
 
-            {cfg.placementMode === "price_range" && (
-              <div className="grid grid-cols-2" style={{ gap: 4 }}>
-                <NI value={cfg.topPrice} onChange={(v) => upd("topPrice", v)} label="Top Price" title="Upper boundary of the grid" />
-                <NI value={cfg.bottomPrice} onChange={(v) => upd("bottomPrice", v)} label="Bottom Price" title="Lower boundary of the grid" />
-              </div>
-            )}
-
-            <Seg
-              options={[
-                { v: "below_price", label: "Below Price", title: "Orders placed below current price (LONG strategy)" },
-                { v: "above_price", label: "Above Price", title: "Orders placed above current price (SHORT strategy)" },
-              ]}
-              value={cfg.direction}
-              onChange={(v) => upd("direction", v)}
-            />
-          </div>
-        )}
+          {cfg.placementMode === "price_range" && (
+            <div className="grid grid-cols-2" style={{ gap: 4 }}>
+              <NI value={cfg.topPrice} onChange={(v) => upd("topPrice", v)} label="Top Price" title="Upper boundary of the grid" />
+              <NI value={cfg.bottomPrice} onChange={(v) => upd("bottomPrice", v)} label="Bottom Price" title="Lower boundary of the grid" />
+            </div>
+          )}
+        </div>
       </div>
       <Divider />
 
