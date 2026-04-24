@@ -90,9 +90,6 @@ function NITooltip({
 }) {
   const [show, setShow] = useState(false)
   const labelText = label ?? ""
-  const labelW = labelText.length * 6 + 10
-  const iconW = 14
-  const totalPad = labelW + iconW + 4
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/[^0-9.]/g, "")
@@ -107,37 +104,37 @@ function NITooltip({
         type="text" inputMode="decimal" value={value}
         onChange={handleChange}
         placeholder="0" title={title ?? label}
-        style={{ ...inputBase, paddingRight: totalPad }}
+        style={{ ...inputBase, paddingRight: 60 }}
         onMouseDown={(e) => e.stopPropagation()}
       />
-      {/* ? icon — sits right before the label text */}
-      <button
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={() => setShow((s) => !s)}
+      {/* ? icon + label as one flex group on the right */}
+      <div
         style={{
-          position: "absolute",
-          right: labelW + 3,
-          top: "50%", transform: "translateY(-50%)",
-          background: "none", border: "none", cursor: "pointer", padding: 0,
-          display: "flex", alignItems: "center",
+          position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)",
+          display: "flex", alignItems: "center", gap: 3, pointerEvents: "none",
         }}
-        onMouseDown={(e) => e.stopPropagation()}
       >
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45 }}>
-          <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
-          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.75)" fontFamily="monospace">?</text>
-        </svg>
-      </button>
-      {/* Label text */}
-      <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em" }}>
-        {labelText}
-      </span>
+        <button
+          onMouseEnter={() => setShow(true)}
+          onMouseLeave={() => setShow(false)}
+          onClick={() => setShow((s) => !s)}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", pointerEvents: "auto" }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.5 }}>
+            <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
+            <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.8)" fontFamily="monospace">?</text>
+          </svg>
+        </button>
+        <span style={{ fontSize: 7.5, opacity: 0.32, fontFamily: "monospace", whiteSpace: "nowrap", letterSpacing: "0.03em" }}>
+          {labelText}
+        </span>
+      </div>
       {show && (
         <div style={{
-          position: "absolute", bottom: "calc(100% + 6px)", right: 0, zIndex: 999,
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 999,
           background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
-          borderRadius: 5, padding: "7px 9px", width: 210,
+          borderRadius: 5, padding: "7px 9px",
           fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
           boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
           pointerEvents: "none",
