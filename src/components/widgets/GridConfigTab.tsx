@@ -271,47 +271,43 @@ export function GridConfigTab({
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
 
   // Side button
-  const sideBtn = (s: "long" | "short") => {
-    const active = cfg.side === s
-    const isLong = s === "long"
-    return {
-      flex: 1, fontSize: 10, fontFamily: "monospace", fontWeight: 700, padding: "3px 0",
-      background: active ? (isLong ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
-      color: active ? (isLong ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
-      border: "none", borderBottom: active ? `2px solid ${isLong ? "#1a7a5a" : "#c02030"}` : "2px solid transparent",
-      cursor: "pointer", letterSpacing: "0.05em", transition: "all 0.15s",
-    }
-  }
-
   const gap4: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4 }
 
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ padding: "8px 10px" }} onMouseDown={stopProp}>
 
-      {/* ── Pro mode toggle + side strip ─────────────── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        {/* Side pill */}
-        <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
-          {(["long", "short"] as const).map((s) => (
-            <button key={s} style={{ ...sideBtn(s), padding: "2px 10px", fontSize: 9 }}
-              onClick={() => { upd("side", s); onSideChange?.(s) }}
-              title={s === "long" ? "Long: profit when price goes up" : "Short: profit when price goes down"}
-              onMouseDown={stopProp}
-            >
-              {marketType === "spot" ? (s === "long" ? "BUY" : "SELL") : (s === "long" ? "LONG" : "SHORT")}
-            </button>
-          ))}
-        </div>
+      {/* ── Side toggle — matches New Order style exactly ── */}
+      <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)", marginBottom: 6 }}>
+        {(["long", "short"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => { upd("side", s); onSideChange?.(s) }}
+            className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
+            style={{
+              background: cfg.side === s
+                ? (s === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
+                : "transparent",
+              color: cfg.side === s
+                ? (s === "long" ? "#00e5a0" : "#ff4757")
+                : "rgba(255,255,255,0.3)",
+              fontSize: 10,
+            }}
+            title={s === "long" ? "Long: profit when price goes up" : "Short: profit when price goes down"}
+            onMouseDown={stopProp}
+          >
+            {marketType === "spot" ? (s === "long" ? "BUY" : "SELL") : (s === "long" ? "LONG" : "SHORT")}
+          </button>
+        ))}
+      </div>
 
-        {/* Leverage compact */}
+      {/* ── LEV + PRO row ─────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>LEV</span>
           <div style={{ width: 44 }}>
             <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} min={1} suffix="×" title="Leverage multiplier" />
           </div>
         </div>
-
-        {/* Pro mode toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
           <MiniToggle checked={proMode} onChange={setProMode} />
