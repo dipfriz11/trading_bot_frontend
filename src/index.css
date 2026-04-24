@@ -653,6 +653,182 @@
   border-radius: 2px;
 }
 
+/* ===== GLASS GRAPHITE THEME ===== */
+
+:root {
+  --gg-bg-1: #101823;
+  --gg-bg-2: #05080C;
+  --gg-surface-1: #11151A;
+  --gg-surface-2: #1A1F26;
+  --gg-surface-3: #232A33;
+  --gg-text-primary: #E6EDF3;
+  --gg-text-secondary: #9AA4AE;
+  --gg-accent: #3A7CA5;
+  --gg-accent-soft: #2F5F7A;
+  --gg-green: #3FAF7F;
+  --gg-green-hover: #4FCF95;
+  --gg-green-bg: rgba(63,175,127,0.15);
+  --gg-red: #D45C5C;
+  --gg-red-hover: #E57373;
+  --gg-red-bg: rgba(212,92,92,0.15);
+  --gg-border: rgba(255,255,255,0.10);
+  --gg-border-hover: rgba(255,255,255,0.18);
+  --gg-glass-body: rgba(255,255,255,0.04);
+  --gg-glass-header: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+  --gg-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  --gg-inner-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  --gg-scrollbar-thumb: rgba(255,255,255,0.12);
+}
+
+.glass-graphite-theme {
+  font-family: var(--font-mono);
+  background: linear-gradient(160deg, var(--gg-bg-1) 0%, var(--gg-bg-2) 100%);
+  color: var(--gg-text-primary);
+}
+
+/* Soft ambient light overlays */
+.glass-graphite-theme::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 10%, rgba(58,124,165,0.07) 0%, transparent 55%),
+    radial-gradient(ellipse at 75% 80%, rgba(26,31,38,0.60) 0%, transparent 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Widget glass body */
+.glass-graphite-theme .widget-container {
+  background: var(--gg-glass-body);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--gg-border);
+  border-radius: 8px;
+  box-shadow: var(--gg-shadow), var(--gg-inner-shadow);
+}
+
+/* Widget header — stronger glass gradient */
+.glass-graphite-theme .widget-header {
+  background: var(--gg-glass-header);
+  border-bottom: 1px solid var(--gg-border);
+  border-radius: 7px 7px 0 0;
+  color: var(--gg-text-primary);
+}
+
+/* Tab bar */
+.glass-graphite-theme .tab-bar {
+  background: rgba(11,15,20,0.85);
+  border-bottom: 1px solid var(--gg-border);
+  backdrop-filter: blur(10px);
+}
+
+.glass-graphite-theme .tab-active {
+  background: rgba(255,255,255,0.07);
+  border-bottom: 2px solid var(--gg-accent);
+  color: var(--gg-text-primary);
+}
+
+.glass-graphite-theme .tab-inactive {
+  background: transparent;
+  color: var(--gg-text-secondary);
+}
+
+.glass-graphite-theme .tab-inactive:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--gg-text-primary);
+}
+
+.glass-graphite-theme .terminal-tab {
+  background: transparent;
+  color: var(--gg-text-secondary);
+}
+
+.glass-graphite-theme .terminal-tab.active {
+  background: rgba(255,255,255,0.07);
+  border-bottom: 2px solid var(--gg-accent);
+  color: var(--gg-text-primary);
+}
+
+.glass-graphite-theme .terminal-tab:hover:not(.active) {
+  background: rgba(255,255,255,0.04);
+  color: var(--gg-text-primary);
+}
+
+/* Workspace tabs */
+.glass-graphite-theme .workspace-tab {
+  background: rgba(255,255,255,0.02);
+  color: var(--gg-text-secondary);
+  border: 1px solid transparent;
+  border-bottom: none;
+}
+
+.glass-graphite-theme .workspace-tab:hover:not([data-active="true"]) {
+  background: rgba(255,255,255,0.05);
+  color: var(--gg-text-primary);
+}
+
+.glass-graphite-theme .workspace-tab[data-active="true"] {
+  background: rgba(11,15,20,0.70);
+  color: var(--gg-text-primary);
+  border: 1px solid var(--gg-border);
+  border-bottom: none;
+  box-shadow: inset 0 -2px 0 0 var(--gg-accent);
+  z-index: 2;
+}
+
+.glass-graphite-theme .workspace-tab[data-dragover="true"] {
+  background: rgba(58,124,165,0.12);
+  border: 1px solid rgba(58,124,165,0.35);
+  border-bottom: none;
+}
+
+/* Add tab button */
+.glass-graphite-theme .workspace-tab-add {
+  color: var(--gg-text-secondary);
+}
+
+.glass-graphite-theme .workspace-tab-add:hover {
+  opacity: 0.9;
+  background: rgba(255,255,255,0.06);
+  color: var(--gg-text-primary);
+}
+
+/* Resize handle */
+.glass-graphite-theme .widget-resize-handle:hover {
+  background: rgba(58,124,165,0.25);
+}
+
+/* Scrollbar */
+.glass-graphite-theme ::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.glass-graphite-theme ::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.12);
+}
+
+.glass-graphite-theme ::-webkit-scrollbar-thumb {
+  background: var(--gg-scrollbar-thumb);
+  border-radius: 2px;
+}
+
+.glass-graphite-theme ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+/* Background variants for glass-graphite */
+.glass-graphite-theme[data-bg="graphite"] {
+  background: linear-gradient(160deg, #101823 0%, #05080C 100%);
+}
+
+.glass-graphite-theme[data-bg="blue-mist"] {
+  background: linear-gradient(160deg, #0D1721 0%, #091220 50%, #060E18 100%);
+}
+
+/* ===== END GLASS GRAPHITE THEME ===== */
+
 /* Hide number input spinners */
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button {

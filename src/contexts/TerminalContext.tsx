@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
-import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset } from "@/types/terminal"
+import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg } from "@/types/terminal"
 import { WIDGET_LABELS, WIDGET_MIN_SIZE } from "@/types/terminal"
 import { nanoid } from "@/lib/nanoid"
 import { ACCOUNTS } from "@/lib/mock-data"
@@ -95,6 +95,7 @@ interface TerminalContextValue {
   activeTab: Tab | undefined
   setTheme: (theme: Theme) => void
   setTransparentBg: (bg: TransparentBgPreset) => void
+  setGgBg: (bg: GlassGraphiteBg) => void
   addTab: () => void
   removeTab: (tabId: string) => void
   renameTab: (tabId: string, label: string) => void
@@ -173,6 +174,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   const setTransparentBg = useCallback((bg: TransparentBgPreset) => {
     setState((s) => ({ ...s, transparentBg: bg }))
+  }, [])
+
+  const setGgBg = useCallback((bg: GlassGraphiteBg) => {
+    setState((s) => ({ ...s, ggBg: bg }))
   }, [])
 
   const addTab = useCallback(() => {
@@ -383,6 +388,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         activeTab,
         setTheme,
         setTransparentBg,
+        setGgBg,
         addTab,
         removeTab,
         renameTab,

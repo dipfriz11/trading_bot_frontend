@@ -1,4 +1,4 @@
-export type Theme = "terminal" | "cosmic" | "slate" | "transparent"
+export type Theme = "terminal" | "cosmic" | "slate" | "transparent" | "glass-graphite"
 
 export type TransparentBgPreset = "midnight" | "navy" | "forest" | "wine" | "slate" | "grey" | "lightgrey" | "steelblue"
 
@@ -44,11 +44,14 @@ export interface Tab {
   nextZIndex: number
 }
 
+export type GlassGraphiteBg = "graphite" | "blue-mist"
+
 export interface TerminalState {
   tabs: Tab[]
   activeTabId: string
   theme: Theme
   transparentBg?: TransparentBgPreset
+  ggBg?: GlassGraphiteBg
 }
 
 export type ResizeHandle =
