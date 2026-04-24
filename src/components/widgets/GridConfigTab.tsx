@@ -25,12 +25,13 @@ const sectionStyle: React.CSSProperties = {
 }
 
 function NumInput({
-  value, onChange, placeholder, style,
+  value, onChange, placeholder, style, title,
 }: {
   value: number | string
   onChange: (v: number) => void
   placeholder?: string
   style?: React.CSSProperties
+  title?: string
 }) {
   return (
     <input
@@ -38,6 +39,7 @@ function NumInput({
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
       placeholder={placeholder ?? "0"}
+      title={title ?? placeholder}
       style={{ ...inputStyle, ...style }}
       onMouseDown={(e) => e.stopPropagation()}
     />
@@ -45,11 +47,12 @@ function NumInput({
 }
 
 function TextInput({
-  value, onChange, placeholder,
+  value, onChange, placeholder, title,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
+  title?: string
 }) {
   return (
     <input
@@ -57,6 +60,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder ?? ""}
+      title={title ?? placeholder}
       style={inputStyle}
       onMouseDown={(e) => e.stopPropagation()}
     />
@@ -66,7 +70,7 @@ function TextInput({
 function SegmentedControl<T extends string>({
   options, value, onChange,
 }: {
-  options: { value: T; label: string }[]
+  options: { value: T; label: string; title?: string }[]
   value: T
   onChange: (v: T) => void
 }) {
@@ -77,14 +81,17 @@ function SegmentedControl<T extends string>({
           key={o.value}
           onClick={() => onChange(o.value)}
           className="flex-1 transition-colors"
+          title={o.title}
           style={{
-            fontSize: 10,
+            fontSize: 9,
             fontFamily: "monospace",
-            padding: "3px 0",
+            padding: "2px 0",
             background: value === o.value ? "rgba(30,111,239,0.15)" : "transparent",
             color: value === o.value ? "#1e6fef" : "rgba(255,255,255,0.35)",
             border: "none",
             cursor: "pointer",
+            fontWeight: value === o.value ? 700 : 400,
+            letterSpacing: "0.04em",
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -318,52 +325,72 @@ export function GridConfigTab({
       <div style={sectionStyle}>
         <SectionHeader title="General" expanded={sections.general} onToggle={() => toggleSection("general")} />
         {sections.general && (
-          <div className="flex flex-col" style={{ gap: 5 }}>
+          <div className="flex flex-col" style={{ gap: 4 }}>
             <Toggle checked={cfg.enabled} onChange={(v) => update("enabled", v)} label="Grid Enabled" />
 
-            {/* Symbol (synced from chart, readonly if external) */}
-            <TextInput
-              value={cfg.symbol}
-              onChange={(v) => update("symbol", v)}
-              placeholder="Symbol"
-            />
-
-            {/* Side: Long / Short — full width, styled like New Order */}
-            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+            {/* Side: Long / Short — FIRST, user decides direction */}
+            <div
+              className="flex rounded overflow-hidden"
+              style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+              title="Direction: Long profits when price rises, Short when it falls"
+            >
               {(["long", "short"] as const).map((s) => (
                 <button
                   key={s}
-                  onClick={() => {
-                    update("side", s)
-                    onSideChange?.(s)
-                  }}
-                  style={sideBtn(s)}
+                  onClick={() => { update("side", s); onSideChange?.(s) }}
+                  title={s === "long" ? "Long — buy low, profit when price goes up" : "Short — sell high, profit when price goes down"}
+                  style={{ ...sideBtn(s), fontSize: 10, padding: "3px 0" }}
                   onMouseDown={stopProp}
                 >
-                  {s === "long" ? "Long" : "Short"}
+                  {s === "long" ? "LONG" : "SHORT"}
                 </button>
               ))}
             </div>
 
-            {/* Orders Count + Leverage */}
-            <div className="grid grid-cols-2" style={{ gap: 5 }}>
-              <NumInput
-                value={cfg.ordersCount}
-                onChange={(v) => update("ordersCount", Math.max(1, Math.round(v)))}
-                placeholder="Orders Count"
+            {/* Symbol + Leverage */}
+            <div className="grid grid-cols-2" style={{ gap: 4 }}>
+              <TextInput
+                value={cfg.symbol}
+                onChange={(v) => update("symbol", v)}
+                placeholder="Symbol"
+                title="Trading pair (e.g. BTC/USDT)"
               />
               <NumInput
                 value={cfg.leverage}
                 onChange={(v) => update("leverage", Math.max(1, v))}
                 placeholder="Leverage ×"
+                title="Leverage multiplier (1× = no leverage)"
               />
             </div>
 
+            {/* Orders Count */}
+            <NumInput
+              value={cfg.ordersCount}
+              onChange={(v) => update("ordersCount", Math.max(1, Math.round(v)))}
+              placeholder="Orders Count"
+              title="Total number of limit orders in the grid"
+            />
+
             {/* Entry / Top / Bottom price */}
-            <div className="grid grid-cols-3" style={{ gap: 5 }}>
-              <NumInput value={cfg.entryPrice} onChange={(v) => update("entryPrice", v)} placeholder="Entry Price" />
-              <NumInput value={cfg.topPrice} onChange={(v) => update("topPrice", v)} placeholder="Top Price" />
-              <NumInput value={cfg.bottomPrice} onChange={(v) => update("bottomPrice", v)} placeholder="Bottom Price" />
+            <div className="grid grid-cols-3" style={{ gap: 4 }}>
+              <NumInput
+                value={cfg.entryPrice}
+                onChange={(v) => update("entryPrice", v)}
+                placeholder="Entry"
+                title="First order price (entry point)"
+              />
+              <NumInput
+                value={cfg.topPrice}
+                onChange={(v) => update("topPrice", v)}
+                placeholder="Top"
+                title="Upper price boundary of the grid"
+              />
+              <NumInput
+                value={cfg.bottomPrice}
+                onChange={(v) => update("bottomPrice", v)}
+                placeholder="Bottom"
+                title="Lower price boundary of the grid"
+              />
             </div>
 
             {/* Total Quote + % buttons */}
@@ -372,6 +399,7 @@ export function GridConfigTab({
                 value={cfg.totalQuote}
                 onChange={(v) => update("totalQuote", v)}
                 placeholder="Total Quote (USDT)"
+                title="Total capital to allocate across all grid orders"
               />
               <div className="flex gap-1">
                 {[25, 50, 75, 100].map((pct) => (
@@ -379,9 +407,10 @@ export function GridConfigTab({
                     key={pct}
                     onClick={() => handlePctClick(pct)}
                     className="flex-1 transition-colors"
+                    title={`Set total quote to ${pct}% of available balance`}
                     style={{
-                      fontSize: 10, fontFamily: "monospace", padding: "3px 0",
-                      background: "rgba(255,255,255,0.05)",
+                      fontSize: 9, fontFamily: "monospace", padding: "1px 0",
+                      background: "rgba(255,255,255,0.04)",
                       color: "rgba(255,255,255,0.4)",
                       border: "1px solid rgba(255,255,255,0.07)",
                       borderRadius: 3, cursor: "pointer",
@@ -396,7 +425,11 @@ export function GridConfigTab({
 
             {/* Qty Mode */}
             <SegmentedControl
-              options={[{ value: "fixed", label: "Fixed" }, { value: "multiplier", label: "Multiplier" }, { value: "custom", label: "Custom" }]}
+              options={[
+                { value: "fixed", label: "Fixed", title: "Equal quantity on each grid order" },
+                { value: "multiplier", label: "Multiplier", title: "Each order is larger by a set multiplier" },
+                { value: "custom", label: "Custom", title: "Set quantity for each level manually" },
+              ]}
               value={cfg.qtyMode}
               onChange={(v) => update("qtyMode", v)}
             />
@@ -411,18 +444,28 @@ export function GridConfigTab({
           <div className="flex flex-col" style={{ gap: 5 }}>
             <SegmentedControl
               options={[
-                { value: "arithmetic", label: "Arith" },
-                { value: "geometric", label: "Geo" },
-                { value: "custom", label: "Custom" },
+                { value: "arithmetic", label: "Arith", title: "Equal price distance between levels" },
+                { value: "geometric", label: "Geo", title: "Equal percentage distance between levels" },
+                { value: "custom", label: "Custom", title: "Set each level price manually" },
               ]}
               value={cfg.gridMode}
               onChange={(v) => update("gridMode", v)}
             />
 
             <div className="grid grid-cols-2" style={{ gap: 5 }}>
-              <NumInput value={cfg.stepPercent} onChange={(v) => update("stepPercent", v)} placeholder="Step %" />
+              <NumInput
+                value={cfg.stepPercent}
+                onChange={(v) => update("stepPercent", v)}
+                placeholder="Step %"
+                title="Percentage distance between each grid level"
+              />
               {cfg.qtyMode === "multiplier" && (
-                <NumInput value={cfg.multiplier} onChange={(v) => update("multiplier", v)} placeholder="Multiplier" />
+                <NumInput
+                  value={cfg.multiplier}
+                  onChange={(v) => update("multiplier", v)}
+                  placeholder="Multiplier"
+                  title="Each order is this many times larger than the previous"
+                />
               )}
             </div>
 
@@ -459,17 +502,35 @@ export function GridConfigTab({
         {sections.tpsl && (
           <div className="flex flex-col" style={{ gap: 5 }}>
             <div className="grid grid-cols-2" style={{ gap: 5 }}>
-              <NumInput value={cfg.tpPercent} onChange={(v) => update("tpPercent", v)} placeholder="TP %" />
-              <NumInput value={cfg.slPercent} onChange={(v) => update("slPercent", v)} placeholder="SL %" />
+              <NumInput
+                value={cfg.tpPercent}
+                onChange={(v) => update("tpPercent", v)}
+                placeholder="TP %"
+                title="Take Profit: close position when price rises by this % above average entry"
+              />
+              <NumInput
+                value={cfg.slPercent}
+                onChange={(v) => update("slPercent", v)}
+                placeholder="SL %"
+                title="Stop Loss: close position when price falls by this % below average entry"
+              />
             </div>
             <SegmentedControl
-              options={[{ value: "fixed", label: "Fixed" }, { value: "reprice", label: "Reprice" }]}
+              options={[
+                { value: "fixed", label: "Fixed", title: "Keep TP at the original price level" },
+                { value: "reprice", label: "Reprice", title: "Recalculate TP as new orders fill" },
+              ]}
               value={cfg.tpUpdateMode}
               onChange={(v) => update("tpUpdateMode", v)}
             />
             <Toggle checked={cfg.trailingEnabled} onChange={(v) => update("trailingEnabled", v)} label="Trailing Stop" />
             {cfg.trailingEnabled && (
-              <NumInput value={cfg.trailingStepPercent} onChange={(v) => update("trailingStepPercent", v)} placeholder="Trailing Step %" />
+              <NumInput
+                value={cfg.trailingStepPercent}
+                onChange={(v) => update("trailingStepPercent", v)}
+                placeholder="Trailing Step %"
+                title="Trail stop follows price by this percentage distance"
+              />
             )}
           </div>
         )}

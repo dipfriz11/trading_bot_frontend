@@ -30,10 +30,10 @@ const labelStyle: React.CSSProperties = {
 }
 
 function NumInput({
-  value, onChange, placeholder, min, step, disabled,
+  value, onChange, placeholder, min, step, disabled, title,
 }: {
   value: number | string; onChange: (v: number) => void
-  placeholder?: string; min?: number; step?: number; disabled?: boolean
+  placeholder?: string; min?: number; step?: number; disabled?: boolean; title?: string
 }) {
   return (
     <input
@@ -44,6 +44,7 @@ function NumInput({
       min={min}
       step={step}
       disabled={disabled}
+      title={title ?? placeholder}
       style={{ ...inputBase, opacity: disabled ? 0.4 : 1 }}
       onMouseDown={(e) => e.stopPropagation()}
     />
@@ -51,11 +52,10 @@ function NumInput({
 }
 
 function Seg<T extends string>({
-  options, value, onChange, size = "sm",
+  options, value, onChange,
 }: {
-  options: { v: T; label: string }[]
+  options: { v: T; label: string; title?: string }[]
   value: T; onChange: (v: T) => void
-  size?: "sm" | "md"
 }) {
   return (
     <div
@@ -66,17 +66,19 @@ function Seg<T extends string>({
         <button
           key={o.v}
           onClick={() => onChange(o.v)}
+          title={o.title}
           style={{
             flex: 1,
-            fontSize: size === "md" ? 11 : 10,
+            fontSize: 9,
             fontFamily: "monospace",
-            padding: size === "md" ? "5px 0" : "3px 0",
+            padding: "2px 0",
             background: value === o.v ? "rgba(30,111,239,0.15)" : "transparent",
             color: value === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)",
             border: "none",
             cursor: "pointer",
             transition: "all 0.1s",
             fontWeight: value === o.v ? 700 : 400,
+            letterSpacing: "0.04em",
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -87,9 +89,25 @@ function Seg<T extends string>({
   )
 }
 
-function SideToggle({ value, onChange }: { value: "LONG" | "SHORT"; onChange: (v: "LONG" | "SHORT") => void }) {
+function SideToggle({
+  value, onChange, marketType = "futures",
+}: {
+  value: "LONG" | "SHORT"
+  onChange: (v: "LONG" | "SHORT") => void
+  marketType?: "spot" | "futures"
+}) {
+  const labels: Record<"LONG" | "SHORT", string> = marketType === "spot"
+    ? { LONG: "BUY", SHORT: "SELL" }
+    : { LONG: "LONG", SHORT: "SHORT" }
+  const tooltips: Record<"LONG" | "SHORT", string> = marketType === "spot"
+    ? { LONG: "Buy — open long position", SHORT: "Sell — open short position" }
+    : { LONG: "Long — profit when price goes up", SHORT: "Short — profit when price goes down" }
   return (
-    <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+    <div
+      className="flex rounded overflow-hidden"
+      style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+      title={tooltips[value]}
+    >
       {(["LONG", "SHORT"] as const).map((s) => {
         const active = value === s
         const isLong = s === "LONG"
@@ -97,9 +115,10 @@ function SideToggle({ value, onChange }: { value: "LONG" | "SHORT"; onChange: (v
           <button
             key={s}
             onClick={() => onChange(s)}
+            title={tooltips[s]}
             style={{
-              flex: 1, fontSize: 11, fontFamily: "monospace", fontWeight: 700,
-              padding: "6px 0", border: "none", cursor: "pointer",
+              flex: 1, fontSize: 10, fontFamily: "monospace", fontWeight: 700,
+              padding: "3px 0", border: "none", cursor: "pointer",
               background: active ? (isLong ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
               color: active ? (isLong ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
               borderBottom: active ? `2px solid ${isLong ? "#1a7a5a" : "#c02030"}` : "2px solid transparent",
@@ -108,7 +127,7 @@ function SideToggle({ value, onChange }: { value: "LONG" | "SHORT"; onChange: (v
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {s}
+            {labels[s]}
           </button>
         )
       })}
@@ -162,13 +181,14 @@ function SectionHeader({ title, expanded, onToggle, badge }: { title: string; ex
 
 function PctButtons({ onPct }: { onPct: (pct: number) => void }) {
   return (
-    <div className="flex gap-1 mt-1">
+    <div className="flex gap-1 mt-0.5">
       {[25, 50, 75, 100].map((p) => (
         <button
           key={p}
           onClick={() => onPct(p)}
+          title={`Set budget to ${p}% of available balance`}
           style={{
-            flex: 1, fontSize: 10, fontFamily: "monospace", padding: "2px 0",
+            flex: 1, fontSize: 9, fontFamily: "monospace", padding: "1px 0",
             background: "rgba(255,255,255,0.04)",
             color: "rgba(255,255,255,0.4)",
             border: "1px solid rgba(255,255,255,0.07)",
@@ -395,15 +415,27 @@ export function DcaTab({
       onMouseDown={stopProp}
     >
       {/* ── 1. Header context ─────────────────────────── */}
-      <div style={{ marginBottom: 8 }}>
-        {/* Symbol row */}
-        <div className="flex gap-2 mb-1.5">
+      <div style={{ marginBottom: 6 }}>
+        {/* Long / Short — first, user decides direction before anything else */}
+        <div className="mb-1.5">
+          <SideToggle
+            value={cfg.position_side}
+            onChange={(s) => {
+              setCfg((p) => ({ ...p, position_side: s }))
+              onSideChange?.(s.toLowerCase() as "long" | "short")
+            }}
+          />
+        </div>
+
+        {/* Symbol + Leverage */}
+        <div className="flex gap-2">
           <div className="flex-1">
             <input
               type="text"
               value={cfg.symbol}
               onChange={(e) => setCfg((p) => ({ ...p, symbol: e.target.value }))}
               placeholder="Symbol"
+              title="Trading pair (e.g. BTC/USDT)"
               style={{ ...inputBase, fontWeight: 700, color: "rgba(200,214,229,0.95)" }}
               onMouseDown={stopProp}
             />
@@ -412,38 +444,24 @@ export function DcaTab({
             value={cfg.leverage}
             onChange={(v) => setCfg((p) => ({ ...p, leverage: Math.max(1, v) }))}
             placeholder="Lev×"
+            title="Leverage multiplier (1× = no leverage)"
             min={1}
           />
         </div>
-
-        {/* Long / Short */}
-        <SideToggle
-          value={cfg.position_side}
-          onChange={(s) => {
-            setCfg((p) => ({ ...p, position_side: s }))
-            onSideChange?.(s.toLowerCase() as "long" | "short")
-          }}
-        />
       </div>
 
       {/* ── 2. Entry ──────────────────────────────────── */}
-      <div style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 8, marginBottom: 8 }}>
+      <div style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 6, marginBottom: 6 }}>
         <SectionHeader title="Entry" expanded={sections.entry} onToggle={() => toggle("entry")} />
         {sections.entry && (
           <div className="flex flex-col gap-1.5 mt-1">
-            <Seg
-              options={[{ v: "limit", label: "Limit" }, { v: "market", label: "Market" }] as const}
-              value={cfg.entry.type}
-              onChange={(v) => setEntry("type", v)}
+            <NumInput
+              value={cfg.entry.price}
+              onChange={(v) => setEntry("price", v)}
+              placeholder="Entry Price"
+              title="Limit price for the first (entry) order"
+              min={0}
             />
-            {cfg.entry.type === "limit" && (
-              <NumInput
-                value={cfg.entry.price}
-                onChange={(v) => setEntry("price", v)}
-                placeholder="Entry Price"
-                min={0}
-              />
-            )}
           </div>
         )}
       </div>
@@ -458,6 +476,7 @@ export function DcaTab({
               value={cfg.dca.total_budget}
               onChange={(v) => setDca("total_budget", v)}
               placeholder="Total Budget (USDT)"
+              title="Total capital to allocate across all DCA orders"
               min={0}
             />
             <PctButtons onPct={handleBudgetPct} />
@@ -467,14 +486,15 @@ export function DcaTab({
               value={cfg.dca.orders_count}
               onChange={(v) => setDca("orders_count", Math.max(1, Math.round(v)))}
               placeholder="Orders Count"
+              title="Number of limit orders in the DCA grid"
               min={1}
             />
 
             {/* Placement mode */}
             <Seg
               options={[
-                { v: "step_percent", label: "Step %" },
-                { v: "price_range", label: "Range" },
+                { v: "step_percent", label: "Step %", title: "Place orders at equal percentage steps below entry" },
+                { v: "price_range", label: "Range", title: "Distribute orders evenly across a price range" },
               ] as const}
               value={cfg.dca.placement_mode}
               onChange={(v) => setDca("placement_mode", v)}
@@ -486,12 +506,14 @@ export function DcaTab({
                   value={cfg.dca.first_offset_percent}
                   onChange={(v) => setDca("first_offset_percent", v)}
                   placeholder="First Offset %"
+                  title="Price distance (%) from entry to 2nd order"
                   step={0.1}
                 />
                 <NumInput
                   value={cfg.dca.step_percent}
                   onChange={(v) => setDca("step_percent", v)}
                   placeholder="Step %"
+                  title="Price step (%) between consecutive DCA orders"
                   step={0.1}
                 />
               </div>
@@ -501,18 +523,23 @@ export function DcaTab({
                   value={cfg.dca.price_range_from ?? cfg.entry.price * 0.99}
                   onChange={(v) => setDca("price_range_from", v)}
                   placeholder="Range From"
+                  title="Upper price bound for order distribution"
                 />
                 <NumInput
                   value={cfg.dca.price_range_to ?? cfg.entry.price * 0.95}
                   onChange={(v) => setDca("price_range_to", v)}
                   placeholder="Range To"
+                  title="Lower price bound for order distribution"
                 />
               </div>
             )}
 
             {/* Qty mode */}
             <Seg
-              options={[{ v: "fixed", label: "Fixed" }, { v: "multiplier", label: "Multiplier" }] as const}
+              options={[
+                { v: "fixed", label: "Fixed", title: "Equal quantity on every order" },
+                { v: "multiplier", label: "Multiplier", title: "Each order is larger than the previous by a multiplier" },
+              ] as const}
               value={cfg.dca.qty_mode}
               onChange={(v) => setDca("qty_mode", v)}
             />
@@ -521,6 +548,7 @@ export function DcaTab({
                 value={cfg.dca.qty_multiplier}
                 onChange={(v) => setDca("qty_multiplier", Math.max(1, v))}
                 placeholder="Multiplier"
+                title="Each subsequent order is this many times larger than the previous"
                 step={0.05}
               />
             )}
