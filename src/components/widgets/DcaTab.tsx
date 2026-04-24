@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react"
-import { ChevronDown, ChevronUp, AlertTriangle, Play, BookOpen, Save } from "lucide-react"
+import { ChevronDown, ChevronUp, TriangleAlert as AlertTriangle, Play, BookOpen, Save } from "lucide-react"
 import type { DcaConfig, DcaMultiTpLevel, DcaPerLevelResetSetting } from "@/types/terminal"
 import { DEFAULT_DCA_CONFIG } from "@/types/terminal"
 
