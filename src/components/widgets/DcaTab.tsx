@@ -259,7 +259,6 @@ function validateDca(cfg: DcaConfig): string[] {
 
 interface DcaTabProps {
   symbol?: string
-  marketType?: "spot" | "futures"
   futuresSide?: "long" | "short"
   entryPrice?: number
   availableBalance?: number
