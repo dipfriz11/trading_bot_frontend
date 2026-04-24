@@ -436,52 +436,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         ))}
       </div>
 
-      {/* Context bar — shown only for Grid and DCA tabs */}
-      {(tab === "grid" || tab === "dca") && (
-        <div
-          className="flex-shrink-0 flex items-stretch"
-          style={{
-            borderBottom: "1px solid rgba(255,255,255,0.05)",
-            background: "rgba(255,255,255,0.018)",
-          }}
-          onMouseDown={stopProp}
-        >
-          {/* Account */}
-          <div className="flex flex-col justify-center" style={{ padding: "3px 10px", flex: 1 }}>
-            <span style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.3, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1 }}>Account</span>
-            <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.8)", fontWeight: 600, lineHeight: 1.5, whiteSpace: "nowrap" }}>
-              {accountId === "main" ? "Main Acct" : accountId}
-            </span>
-          </div>
-          <div style={{ width: 1, background: "rgba(255,255,255,0.05)", alignSelf: "stretch" }} />
-          {/* Exchange */}
-          <div className="flex flex-col justify-center" style={{ padding: "3px 10px", flex: 1 }}>
-            <span style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.3, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1 }}>Exchange</span>
-            <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.8)", fontWeight: 600, lineHeight: 1.5, whiteSpace: "nowrap" }}>
-              {exchangeId.charAt(0).toUpperCase() + exchangeId.slice(1)}
-            </span>
-          </div>
-          <div style={{ width: 1, background: "rgba(255,255,255,0.05)", alignSelf: "stretch" }} />
-          {/* Market type */}
-          <div className="flex flex-col justify-center" style={{ padding: "3px 10px", flex: 1 }}>
-            <span style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.3, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1 }}>Market</span>
-            <span style={{
-              fontSize: 10, fontFamily: "monospace", fontWeight: 700, lineHeight: 1.5, whiteSpace: "nowrap",
-              color: marketType === "futures" ? "#ffaa00" : "#60a5fa",
-            }}>
-              {marketType === "futures" ? "FUTURES" : "SPOT"}
-            </span>
-          </div>
-          <div style={{ width: 1, background: "rgba(255,255,255,0.05)", alignSelf: "stretch" }} />
-          {/* Symbol */}
-          <div className="flex flex-col justify-center" style={{ padding: "3px 10px", flex: 1 }}>
-            <span style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.3, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1 }}>Symbol</span>
-            <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.95)", fontWeight: 700, lineHeight: 1.5, whiteSpace: "nowrap" }}>
-              {symbol}
-            </span>
-          </div>
-        </div>
-      )}
 
       {tab === "new" ? (
         <div className="flex-1 overflow-auto min-h-0 px-3 py-2 flex flex-col gap-2">
