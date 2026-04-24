@@ -301,6 +301,8 @@ export interface GridConfig {
   qtyMode: QtyMode
   multiplier: number
   multiplierEnabled: boolean
+
+  // Density
   density: number
 
   // Level logic (for level table)
