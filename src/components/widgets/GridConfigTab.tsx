@@ -29,10 +29,10 @@ const readonlyBase: React.CSSProperties = {
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
 
 function NI({
-  value, onChange, placeholder, title, min, suffix,
+  value, onChange, placeholder, title, min, suffix, label,
 }: {
   value: number | string; onChange: (v: number) => void
-  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string
+  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const valueRef = useRef(value)
@@ -60,20 +60,21 @@ function NI({
     else if (raw === "" || raw === ".") onChange(0)
   }
 
-  if (suffix) {
+  const labelStyle: React.CSSProperties = { position: "absolute", left: 7, top: 3, fontSize: 8, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em", pointerEvents: "none", lineHeight: 1 }
+
+  if (suffix || label) {
     return (
       <div style={{ position: "relative" }}>
+        {label && <span style={labelStyle}>{label}</span>}
         <input
           ref={ref}
           type="text" inputMode="decimal" value={value}
           onChange={handleChange}
           placeholder={placeholder ?? "0"} title={title ?? placeholder}
-          style={{ ...inputBase, paddingRight: 22 }}
+          style={{ ...inputBase, paddingRight: suffix ? 22 : undefined, paddingTop: label ? 13 : undefined, paddingBottom: label ? 3 : undefined, height: label ? 30 : undefined }}
           onMouseDown={(e) => e.stopPropagation()}
         />
-        <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 10, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none" }}>
-          {suffix}
-        </span>
+        {suffix && <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 10, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none" }}>{suffix}</span>}
       </div>
     )
   }
@@ -379,8 +380,8 @@ export function GridConfigTab({
       {/* ── GRID SETUP ───────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-          <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} placeholder="Orders" title="Number of grid levels (3–100)" min={3} />
-          <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} placeholder="Budget (USDT)" title="Total capital for this grid" min={0} />
+          <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} label="Orders" placeholder="8" title="Number of grid levels (3–100)" min={3} />
+          <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} label="Budget (USDT)" placeholder="1000" title="Total capital for this grid" min={0} />
         </div>
         <PctBtns onPct={handlePct} />
       </div>
