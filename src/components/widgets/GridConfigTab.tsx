@@ -276,7 +276,21 @@ export function GridConfigTab({
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ padding: "8px 10px" }} onMouseDown={stopProp}>
 
-      {/* ── Side toggle — matches New Order style exactly ── */}
+      {/* ── LEV + PRO row ─────────────────────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>LEV</span>
+          <div style={{ width: 52 }}>
+            <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} min={1} suffix="×" title="Leverage multiplier" />
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
+          <MiniToggle checked={proMode} onChange={setProMode} />
+        </div>
+      </div>
+
+      {/* ── Side toggle ───────────────────────────────── */}
       <div style={{ display: "flex", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, marginBottom: 6 }}>
         {(["long", "short"] as const).map((s, i) => (
           <button
@@ -308,20 +322,6 @@ export function GridConfigTab({
             {marketType === "spot" ? (s === "long" ? "BUY" : "SELL") : (s === "long" ? "LONG" : "SHORT")}
           </button>
         ))}
-      </div>
-
-      {/* ── LEV + PRO row ─────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>LEV</span>
-          <div style={{ width: 44 }}>
-            <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} min={1} suffix="×" title="Leverage multiplier" />
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
-          <MiniToggle checked={proMode} onChange={setProMode} />
-        </div>
       </div>
       <Divider />
 
