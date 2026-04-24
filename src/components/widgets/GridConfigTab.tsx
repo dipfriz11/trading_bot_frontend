@@ -82,6 +82,73 @@ function NI({
   )
 }
 
+function NITooltip({
+  value, onChange, label, min, title, tooltip,
+}: {
+  value: number; onChange: (v: number) => void
+  label?: string; min?: number; step?: number; title?: string; tooltip: string
+}) {
+  const [show, setShow] = useState(false)
+  const labelText = label ?? ""
+  const labelW = labelText.length * 6 + 10
+  const iconW = 14
+  const totalPad = labelW + iconW + 4
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9.]/g, "")
+    const parsed = parseFloat(raw)
+    if (!isNaN(parsed)) onChange(min !== undefined ? Math.max(min, parsed) : parsed)
+    else if (raw === "" || raw === ".") onChange(0)
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type="text" inputMode="decimal" value={value}
+        onChange={handleChange}
+        placeholder="0" title={title ?? label}
+        style={{ ...inputBase, paddingRight: totalPad }}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+      {/* ? icon — sits right before the label text */}
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow((s) => !s)}
+        style={{
+          position: "absolute",
+          right: labelW + 3,
+          top: "50%", transform: "translateY(-50%)",
+          background: "none", border: "none", cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center",
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45 }}>
+          <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
+          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.75)" fontFamily="monospace">?</text>
+        </svg>
+      </button>
+      {/* Label text */}
+      <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em" }}>
+        {labelText}
+      </span>
+      {show && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 6px)", right: 0, zIndex: 999,
+          background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
+          borderRadius: 5, padding: "7px 9px", width: 210,
+          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+          pointerEvents: "none",
+        }}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BudgetInput({
   value, onChange, mode, onModeChange, baseSymbol,
 }: {
@@ -477,30 +544,28 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 4. MULTIPLIER ────────────────────────────── */}
+      {/* ── MULTIPLIER + DENSITY ─────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead
-          title="4. MULTIPLIER"
-          expanded={open.multiplier}
-          onToggle={() => tog("multiplier")}
-          rightSlot={<MiniToggle checked={cfg.multiplierEnabled} onChange={(v) => upd("multiplierEnabled", v)} />}
-        />
-        {open.multiplier && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            {cfg.multiplierEnabled ? (
-              <>
-                <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} label="Multiplier" min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
-                <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.4)", lineHeight: 1.5 }}>
-                  each next order = prev × {cfg.multiplier}
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.35)", lineHeight: 1.5 }}>
-                Equal distribution — all orders same size
-              </div>
-            )}
-          </div>
-        )}
+        <div className="grid grid-cols-2" style={{ gap: 4 }}>
+          <NITooltip
+            value={cfg.multiplier}
+            onChange={(v) => upd("multiplier", Math.max(1.01, v))}
+            label="Multiplier"
+            min={1.01}
+            step={0.05}
+            title="Multiplier"
+            tooltip="Каждый следующий ордер = предыдущий × Multiplier. Например, 1.25 — каждый ордер на 25% больше предыдущего."
+          />
+          <NITooltip
+            value={cfg.density ?? 1}
+            onChange={(v) => upd("density", Math.max(0.01, v))}
+            label="Density"
+            min={0.01}
+            step={0.05}
+            title="Density"
+            tooltip="Плотность = 1: ордера распределены равномерно. Больше 1 — сконцентрированы ближе к концу сетки. Меньше 1 — ближе к началу."
+          />
+        </div>
       </div>
       <Divider />
 
