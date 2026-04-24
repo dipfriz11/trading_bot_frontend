@@ -283,6 +283,7 @@ export interface GridConfig {
   topPrice: number
   bottomPrice: number
   totalQuote: number
+  budgetMode: "quote" | "base"
   leverage: number
   gridType: GridType
 
@@ -345,6 +346,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   topPrice: 70000,
   bottomPrice: 65000,
   totalQuote: 1000,
+  budgetMode: "quote",
   leverage: 5,
   gridType: "simple",
 

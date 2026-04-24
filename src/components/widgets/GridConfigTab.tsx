@@ -60,21 +60,29 @@ function NI({
     else if (raw === "" || raw === ".") onChange(0)
   }
 
-  const labelStyle: React.CSSProperties = { position: "absolute", left: 7, top: 3, fontSize: 8, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em", pointerEvents: "none", lineHeight: 1 }
+  const rightPad = suffix ? (suffix.length > 4 ? suffix.length * 7 + 8 : 28) : undefined
 
   if (suffix || label) {
     return (
       <div style={{ position: "relative" }}>
-        {label && <span style={labelStyle}>{label}</span>}
         <input
           ref={ref}
           type="text" inputMode="decimal" value={value}
           onChange={handleChange}
           placeholder={placeholder ?? "0"} title={title ?? placeholder}
-          style={{ ...inputBase, paddingRight: suffix ? 22 : undefined, paddingTop: label ? 13 : undefined, paddingBottom: label ? 3 : undefined, height: label ? 30 : undefined }}
+          style={{ ...inputBase, paddingRight: rightPad }}
           onMouseDown={(e) => e.stopPropagation()}
         />
-        {suffix && <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 10, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none" }}>{suffix}</span>}
+        {suffix && (
+          <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 9, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap" }}>
+            {suffix}
+          </span>
+        )}
+        {label && (
+          <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 9, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap" }}>
+            {label}
+          </span>
+        )}
       </div>
     )
   }
@@ -87,6 +95,77 @@ function NI({
       style={inputBase}
       onMouseDown={(e) => e.stopPropagation()}
     />
+  )
+}
+
+function BudgetInput({
+  value, onChange, mode, onModeChange, baseSymbol,
+}: {
+  value: number; onChange: (v: number) => void
+  mode: "quote" | "base"; onModeChange: (m: "quote" | "base") => void
+  baseSymbol: string
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const valueRef = useRef(value)
+  valueRef.current = value
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const delta = e.deltaY < 0 ? 1 : -1
+      const next = Math.max(0, (typeof valueRef.current === "number" ? valueRef.current : 0) + delta)
+      onChange(next)
+    }
+    el.addEventListener("wheel", handler, { passive: false })
+    return () => el.removeEventListener("wheel", handler)
+  }, [onChange])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9.]/g, "")
+    const parsed = parseFloat(raw)
+    if (!isNaN(parsed)) onChange(Math.max(0, parsed))
+    else if (raw === "" || raw === ".") onChange(0)
+  }
+
+  const label = mode === "quote" ? "USDT" : baseSymbol
+  const labelW = label.length * 7 + 8
+
+  return (
+    <div style={{ position: "relative", flex: 1 }}>
+      <input
+        ref={ref}
+        type="text" inputMode="decimal" value={value}
+        onChange={handleChange}
+        placeholder="1000" title={`Total budget in ${label}`}
+        style={{ ...inputBase, paddingRight: labelW + 34 }}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+      <div style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 2 }} onMouseDown={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => onModeChange("quote")}
+          title="Budget in USDT"
+          style={{
+            fontSize: 8, fontFamily: "monospace", padding: "1px 4px", borderRadius: 2, cursor: "pointer", border: "none",
+            background: mode === "quote" ? "rgba(30,111,239,0.35)" : "rgba(255,255,255,0.06)",
+            color: mode === "quote" ? "rgba(120,170,255,0.9)" : "rgba(200,214,229,0.4)",
+            transition: "all 0.15s",
+          }}
+        >USDT</button>
+        <button
+          onClick={() => onModeChange("base")}
+          title={`Budget in ${baseSymbol}`}
+          style={{
+            fontSize: 8, fontFamily: "monospace", padding: "1px 4px", borderRadius: 2, cursor: "pointer", border: "none",
+            background: mode === "base" ? "rgba(30,111,239,0.35)" : "rgba(255,255,255,0.06)",
+            color: mode === "base" ? "rgba(120,170,255,0.9)" : "rgba(200,214,229,0.4)",
+            transition: "all 0.15s",
+          }}
+        >{baseSymbol}</button>
+      </div>
+    </div>
   )
 }
 
@@ -298,6 +377,7 @@ export function GridConfigTab({
   }
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
+  const baseSymbol = cfg.symbol.split("/")[0] ?? "BTC"
 
   // Side button
   const gap4: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4 }
@@ -379,9 +459,17 @@ export function GridConfigTab({
 
       {/* ── GRID SETUP ───────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-          <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} label="Orders" placeholder="8" title="Number of grid levels (3–100)" min={3} />
-          <NI value={cfg.totalQuote} onChange={(v) => upd("totalQuote", v)} label="Budget (USDT)" placeholder="1000" title="Total capital for this grid" min={0} />
+        <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+          <div style={{ width: 80, flexShrink: 0 }}>
+            <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} label="Orders" placeholder="8" title="Number of grid levels (3–100)" min={3} />
+          </div>
+          <BudgetInput
+            value={cfg.totalQuote}
+            onChange={(v) => upd("totalQuote", v)}
+            mode={cfg.budgetMode ?? "quote"}
+            onModeChange={(m) => upd("budgetMode", m)}
+            baseSymbol={baseSymbol}
+          />
         </div>
         <PctBtns onPct={handlePct} />
       </div>
