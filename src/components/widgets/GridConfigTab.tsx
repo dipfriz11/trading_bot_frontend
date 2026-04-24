@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check, Plus, Trash2, Info } from "lucide-react"
+import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check, Plus, Trash2 } from "lucide-react"
 import type { GridConfig } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
 import { generateLevels, calcDerivedStats, exportGridConfig } from "@/lib/grid-helpers"
@@ -60,41 +60,25 @@ function NI({
     else if (raw === "" || raw === ".") onChange(0)
   }
 
-  const rightPad = suffix ? (suffix.length > 4 ? suffix.length * 7 + 8 : 28) : undefined
+  const tag = suffix ?? label
+  const tagW = tag ? tag.length * 6 + 10 : 0
 
-  if (suffix || label) {
-    return (
-      <div style={{ position: "relative" }}>
-        <input
-          ref={ref}
-          type="text" inputMode="decimal" value={value}
-          onChange={handleChange}
-          placeholder={placeholder ?? "0"} title={title ?? placeholder}
-          style={{ ...inputBase, paddingRight: rightPad }}
-          onMouseDown={(e) => e.stopPropagation()}
-        />
-        {suffix && (
-          <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 9, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap" }}>
-            {suffix}
-          </span>
-        )}
-        {label && (
-          <span style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", fontSize: 9, opacity: 0.4, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap" }}>
-            {label}
-          </span>
-        )}
-      </div>
-    )
-  }
   return (
-    <input
-      ref={ref}
-      type="text" inputMode="decimal" value={value}
-      onChange={handleChange}
-      placeholder={placeholder ?? "0"} title={title ?? placeholder}
-      style={inputBase}
-      onMouseDown={(e) => e.stopPropagation()}
-    />
+    <div style={{ position: "relative" }}>
+      <input
+        ref={ref}
+        type="text" inputMode="decimal" value={value}
+        onChange={handleChange}
+        placeholder={placeholder ?? "0"} title={title ?? placeholder}
+        style={{ ...inputBase, paddingRight: tag ? tagW + 2 : undefined }}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+      {tag && (
+        <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em" }}>
+          {tag}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -231,17 +215,6 @@ function MiniToggle({ checked, onChange }: { checked: boolean; onChange: (v: boo
   )
 }
 
-function LabelRow({ label, children, tooltip }: { label: string; children?: React.ReactNode; tooltip?: string }) {
-  return (
-    <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
-      <span className="flex items-center gap-1" style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.4, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        {label}
-        {tooltip && <span title={tooltip} style={{ cursor: "help", display: "inline-flex" }}><Info size={8} style={{ opacity: 0.6 }} /></span>}
-      </span>
-      {children}
-    </div>
-  )
-}
 
 function SectionHead({
   title, expanded, onToggle, badge, pro, rightSlot,
@@ -475,9 +448,9 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 3. GRID PLACEMENT ────────────────────────── */}
+      {/* ── GRID PLACEMENT ───────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="3. GRID PLACEMENT" expanded={open.placement} onToggle={() => tog("placement")} />
+        <SectionHead title="GRID PLACEMENT" expanded={open.placement} onToggle={() => tog("placement")} />
         {open.placement && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <Seg
@@ -492,48 +465,28 @@ export function GridConfigTab({
 
             {cfg.placementMode === "step_percent" && (
               <div className="grid grid-cols-3" style={{ gap: 4 }}>
-                <div>
-                  <LabelRow label="First Offset" tooltip="Distance from entry to first order" />
-                  <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} suffix="%" min={0} step={0.1} title="Distance from entry price to 1st order" />
-                </div>
-                <div>
-                  <LabelRow label="Step %" tooltip="Distance between consecutive orders" />
-                  <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} suffix="%" min={0.01} step={0.1} title="Price step between each grid level" />
-                </div>
-                <div>
-                  <LabelRow label="Last Offset" tooltip="Distance from entry to last order" />
-                  <NI value={cfg.lastOffsetPercent} onChange={(v) => upd("lastOffsetPercent", v)} suffix="%" min={0} step={0.1} title="Distance from entry to last order" />
-                </div>
+                <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} label="1st order %" min={0} step={0.1} title="Distance from entry price to 1st order" />
+                <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} label="Step %" min={0.01} step={0.1} title="Price step between each grid level" />
+                <NI value={cfg.lastOffsetPercent} onChange={(v) => upd("lastOffsetPercent", v)} label="Last order %" min={0} step={0.1} title="Distance from entry to last order" />
               </div>
             )}
 
             {cfg.placementMode === "price_range" && (
               <div className="grid grid-cols-2" style={{ gap: 4 }}>
-                <div>
-                  <LabelRow label="Top Price" />
-                  <NI value={cfg.topPrice} onChange={(v) => upd("topPrice", v)} title="Upper boundary of the grid" />
-                </div>
-                <div>
-                  <LabelRow label="Bottom Price" />
-                  <NI value={cfg.bottomPrice} onChange={(v) => upd("bottomPrice", v)} title="Lower boundary of the grid" />
-                </div>
+                <NI value={cfg.topPrice} onChange={(v) => upd("topPrice", v)} label="Top Price" title="Upper boundary of the grid" />
+                <NI value={cfg.bottomPrice} onChange={(v) => upd("bottomPrice", v)} label="Bottom Price" title="Lower boundary of the grid" />
               </div>
             )}
 
-            {/* Direction */}
-            <div>
-              <LabelRow label="Direction" tooltip="Below Price = buy the dip (LONG). Above Price = short squeeze (SHORT)." />
-              <Seg
-                options={[
-                  { v: "below_price", label: "Below Price", title: "Orders placed below current price (LONG strategy)" },
-                  { v: "above_price", label: "Above Price", title: "Orders placed above current price (SHORT strategy)" },
-                ]}
-                value={cfg.direction}
-                onChange={(v) => upd("direction", v)}
-              />
-            </div>
+            <Seg
+              options={[
+                { v: "below_price", label: "Below Price", title: "Orders placed below current price (LONG strategy)" },
+                { v: "above_price", label: "Above Price", title: "Orders placed above current price (SHORT strategy)" },
+              ]}
+              value={cfg.direction}
+              onChange={(v) => upd("direction", v)}
+            />
 
-            {/* Info hint */}
             <div style={{
               fontSize: 9, fontFamily: "monospace", color: "#60a5fa", opacity: 0.7,
               background: "rgba(30,111,239,0.06)", border: "1px solid rgba(30,111,239,0.15)",
@@ -558,10 +511,7 @@ export function GridConfigTab({
           <div style={{ ...gap4, marginTop: 4 }}>
             {cfg.multiplierEnabled ? (
               <>
-                <div>
-                  <LabelRow label="Multiplier Value" tooltip="Each next order = previous × multiplier" />
-                  <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
-                </div>
+                <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} label="Multiplier" min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
                 <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.4)", lineHeight: 1.5 }}>
                   each next order = prev × {cfg.multiplier}
                 </div>
@@ -611,14 +561,8 @@ export function GridConfigTab({
               onChange={(v) => upd("tpMode", v)}
             />
             <div className="grid grid-cols-2" style={{ gap: 4 }}>
-              <div>
-                <LabelRow label="TP %" tooltip="% profit target above avg entry" />
-                <NI value={cfg.tpPercent} onChange={(v) => upd("tpPercent", v)} suffix="%" min={0} step={0.1} title="Take profit percentage from average entry" />
-              </div>
-              <div>
-                <LabelRow label="Close on TP %" tooltip="% of position to close at TP" />
-                <NI value={cfg.tpClosePercent} onChange={(v) => upd("tpClosePercent", Math.min(100, Math.max(1, v)))} suffix="%" min={1} title="Percentage of position to close when TP triggers" />
-              </div>
+              <NI value={cfg.tpPercent} onChange={(v) => upd("tpPercent", v)} label="TP %" min={0} step={0.1} title="Take profit percentage from average entry" />
+              <NI value={cfg.tpClosePercent} onChange={(v) => upd("tpClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close when TP triggers" />
             </div>
 
             {/* Multi TP */}
@@ -699,14 +643,8 @@ export function GridConfigTab({
               onChange={(v) => upd("slMode", v)}
             />
             <div className="grid grid-cols-2" style={{ gap: 4 }}>
-              <div>
-                <LabelRow label="SL %" tooltip="% loss trigger from reference price" />
-                <NI value={cfg.slPercent} onChange={(v) => upd("slPercent", v)} suffix="%" min={0} step={0.1} title="Stop loss percentage" />
-              </div>
-              <div>
-                <LabelRow label="Close on SL %" tooltip="% of position to close at SL" />
-                <NI value={cfg.slClosePercent} onChange={(v) => upd("slClosePercent", Math.min(100, Math.max(1, v)))} suffix="%" min={1} title="Percentage of position to close at stop loss" />
-              </div>
+              <NI value={cfg.slPercent} onChange={(v) => upd("slPercent", v)} label="SL %" min={0} step={0.1} title="Stop loss percentage" />
+              <NI value={cfg.slClosePercent} onChange={(v) => upd("slClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close at stop loss" />
             </div>
             <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", lineHeight: 1.5 }}>
               {cfg.slMode === "extreme_order"
@@ -738,24 +676,15 @@ export function GridConfigTab({
               <div style={{ ...gap4, marginTop: 4 }}>
                 {cfg.resetTpEnabled ? (
                   <>
-                    <div>
-                      <LabelRow label="Trigger Levels" tooltip="Comma-separated order levels that trigger reset (e.g. 3,4,5)" />
-                      <TI
-                        value={cfg.resetTpTriggerLevels.join(",")}
-                        onChange={(v) => upd("resetTpTriggerLevels", v.split(",").map((x) => parseInt(x.trim())).filter((x) => !isNaN(x)))}
-                        placeholder="e.g. 3,5,7"
-                        title="Comma-separated order levels that trigger a TP reset"
-                      />
-                    </div>
+                    <TI
+                      value={cfg.resetTpTriggerLevels.join(",")}
+                      onChange={(v) => upd("resetTpTriggerLevels", v.split(",").map((x) => parseInt(x.trim())).filter((x) => !isNaN(x)))}
+                      placeholder="Trigger levels (e.g. 3,5,7)"
+                      title="Comma-separated order levels that trigger a TP reset"
+                    />
                     <div className="grid grid-cols-2" style={{ gap: 4 }}>
-                      <div>
-                        <LabelRow label="Reset TP %" />
-                        <NI value={cfg.defaultResetTpPercent} onChange={(v) => upd("defaultResetTpPercent", v)} suffix="%" step={0.1} title="TP percentage after reset" />
-                      </div>
-                      <div>
-                        <LabelRow label="Reset Close %" />
-                        <NI value={cfg.defaultResetTpClosePercent} onChange={(v) => upd("defaultResetTpClosePercent", v)} suffix="%" step={1} title="Position % to close during reset" />
-                      </div>
+                      <NI value={cfg.defaultResetTpPercent} onChange={(v) => upd("defaultResetTpPercent", v)} label="Reset TP %" step={0.1} title="TP percentage after reset" />
+                      <NI value={cfg.defaultResetTpClosePercent} onChange={(v) => upd("defaultResetTpClosePercent", v)} label="Close %" step={1} title="Position % to close during reset" />
                     </div>
                     <div className="flex items-center justify-between">
                       <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.45, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rebuild Tail</span>
