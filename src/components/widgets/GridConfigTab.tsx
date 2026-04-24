@@ -357,7 +357,6 @@ export function GridConfigTab({
   const [open, setOpen] = useState({
     entry: true,
     gridSetup: true,
-    multiplier: true,
     sizePreview: false,
     summary: false,
     tp: true,
@@ -519,34 +518,22 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 4. MULTIPLIER ────────────────────────────── */}
+      {/* ── MULTIPLIER + DENSITY ─────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead
-          title="4. MULTIPLIER"
-          expanded={open.multiplier}
-          onToggle={() => tog("multiplier")}
-          rightSlot={<MiniToggle checked={cfg.multiplierEnabled} onChange={(v) => upd("multiplierEnabled", v)} />}
-        />
-        {open.multiplier && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            <div className="grid grid-cols-2" style={{ gap: 4 }}>
-              {cfg.multiplierEnabled ? (
-                <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} label="Multiplier" min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
-              ) : (
-                <NI value={1} onChange={() => {}} label="Multiplier" title="Enable multiplier to set a value" />
-              )}
-              <NITooltip
-                value={cfg.density ?? 1}
-                onChange={(v) => upd("density", Math.max(0.01, v))}
-                label="Density"
-                min={0.01}
-                step={0.05}
-                title="Density"
-                tooltip={`Если выбрана "Плотность" равная 1, то ордера будут распределены в сетке равномерно, если больше 1, то ордера будут сконцентрированы ближе к концу сетки, если меньше 1, то ближе к началу.`}
-              />
-            </div>
+        <div style={{ ...gap4 }}>
+          <div className="grid grid-cols-2" style={{ gap: 4 }}>
+            <NI value={cfg.multiplier} onChange={(v) => upd("multiplier", Math.max(1.01, v))} label="Multiplier" min={1.01} step={0.05} title="Size multiplier per level (e.g. 1.25 = each order 25% larger)" />
+            <NITooltip
+              value={cfg.density ?? 1}
+              onChange={(v) => upd("density", Math.max(0.01, v))}
+              label="Density"
+              min={0.01}
+              step={0.05}
+              title="Density"
+              tooltip={`Если выбрана "Плотность" равная 1, то ордера будут распределены в сетке равномерно, если больше 1, то ордера будут сконцентрированы ближе к концу сетки, если меньше 1, то ближе к началу.`}
+            />
           </div>
-        )}
+        </div>
       </div>
       <Divider />
 
