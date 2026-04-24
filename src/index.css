@@ -859,8 +859,8 @@
   background: #080a10;
 }
 
-.glass-graphite-theme[data-bg="graphite-flat"] {
-  background: #101823;
+.glass-graphite-theme[data-bg="dark-grey"] {
+  background: #111111;
 }
 
 
