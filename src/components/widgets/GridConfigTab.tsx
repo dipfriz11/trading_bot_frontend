@@ -238,8 +238,8 @@ export function GridConfigTab({
     multiplier: true,
     sizePreview: false,
     summary: false,
-    tp: false,
-    sl: false,
+    tp: true,
+    sl: true,
     resetTp: false,
     gridTable: false,
     configJson: false,
@@ -288,11 +288,12 @@ export function GridConfigTab({
   return (
     <div className="flex flex-col h-full overflow-auto" style={{ padding: "8px 10px" }} onMouseDown={stopProp}>
 
-      {/* ── Side + Leverage ──────────────────────────── */}
-      <div style={{ ...gap4, marginBottom: 6 }}>
+      {/* ── Pro mode toggle + side strip ─────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        {/* Side pill */}
         <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
           {(["long", "short"] as const).map((s) => (
-            <button key={s} style={sideBtn(s)}
+            <button key={s} style={{ ...sideBtn(s), padding: "2px 10px", fontSize: 9 }}
               onClick={() => { upd("side", s); onSideChange?.(s) }}
               title={s === "long" ? "Long: profit when price goes up" : "Short: profit when price goes down"}
               onMouseDown={stopProp}
@@ -301,20 +302,18 @@ export function GridConfigTab({
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-2" style={{ gap: 4 }}>
-          <div>
-            <LabelRow label="Leverage" />
-            <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} placeholder="×" min={1} suffix="×" title="Leverage multiplier" />
-          </div>
-          <div>
-            <LabelRow label="Symbol" />
-            <TI value={cfg.symbol} onChange={(v) => upd("symbol", v)} placeholder="BTC/USDT" title="Trading pair" />
+
+        {/* Leverage compact */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>LEV</span>
+          <div style={{ width: 44 }}>
+            <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} min={1} suffix="×" title="Leverage multiplier" />
           </div>
         </div>
 
         {/* Pro mode toggle */}
-        <div className="flex items-center justify-between" style={{ padding: "3px 0" }}>
-          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro Settings</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
           <MiniToggle checked={proMode} onChange={setProMode} />
         </div>
       </div>
@@ -322,7 +321,7 @@ export function GridConfigTab({
 
       {/* ── 1. ENTRY ─────────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="1. Entry" expanded={open.entry} onToggle={() => tog("entry")} />
+        <SectionHead title="1. ENTRY" expanded={open.entry} onToggle={() => tog("entry")} />
         {open.entry && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <Seg
@@ -351,7 +350,7 @@ export function GridConfigTab({
 
       {/* ── 2. GRID SETUP ────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="2. Grid Setup" expanded={open.gridSetup} onToggle={() => tog("gridSetup")} />
+        <SectionHead title="2. GRID SETUP" expanded={open.gridSetup} onToggle={() => tog("gridSetup")} />
         {open.gridSetup && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <Seg
@@ -378,7 +377,7 @@ export function GridConfigTab({
 
       {/* ── 3. GRID PLACEMENT ────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="3. Grid Placement" expanded={open.placement} onToggle={() => tog("placement")} />
+        <SectionHead title="3. GRID PLACEMENT" expanded={open.placement} onToggle={() => tog("placement")} />
         {open.placement && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <Seg
@@ -450,7 +449,7 @@ export function GridConfigTab({
       {/* ── 4. MULTIPLIER ────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="4. Multiplier"
+          title="4. MULTIPLIER"
           expanded={open.multiplier}
           onToggle={() => tog("multiplier")}
           rightSlot={<MiniToggle checked={cfg.multiplierEnabled} onChange={(v) => upd("multiplierEnabled", v)} />}
@@ -479,7 +478,7 @@ export function GridConfigTab({
 
       {/* ── 5. SIZE PREVIEW ──────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="5. Size Preview" expanded={open.sizePreview} onToggle={() => tog("sizePreview")} />
+        <SectionHead title="5. SIZE PREVIEW" expanded={open.sizePreview} onToggle={() => tog("sizePreview")} />
         {open.sizePreview && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <div className="grid grid-cols-2" style={{ gap: 4 }}>
@@ -496,7 +495,7 @@ export function GridConfigTab({
       {/* ── 6. TAKE PROFIT ───────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="6. Take Profit"
+          title="6. TAKE PROFIT"
           expanded={open.tp}
           onToggle={() => tog("tp")}
           rightSlot={<MiniToggle checked={cfg.tpEnabled} onChange={(v) => upd("tpEnabled", v)} />}
@@ -584,7 +583,7 @@ export function GridConfigTab({
       {/* ── 7. STOP LOSS ─────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="7. Stop Loss"
+          title="7. STOP LOSS"
           expanded={open.sl}
           onToggle={() => tog("sl")}
           rightSlot={<MiniToggle checked={cfg.slEnabled} onChange={(v) => upd("slEnabled", v)} />}
@@ -629,7 +628,7 @@ export function GridConfigTab({
           <Divider />
           <div style={{ marginBottom: 6 }}>
             <SectionHead
-              title="8. Reset TP"
+              title="8. RESET TP"
               expanded={open.resetTp}
               onToggle={() => tog("resetTp")}
               pro
@@ -726,7 +725,7 @@ export function GridConfigTab({
       {/* ── SUMMARY PANEL ────────────────────────────── */}
       <Divider />
       <div style={{ marginBottom: 6 }}>
-        <SectionHead title="Summary" expanded={open.summary} onToggle={() => tog("summary")} />
+        <SectionHead title="SUMMARY" expanded={open.summary} onToggle={() => tog("summary")} />
         {open.summary && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <div className="grid grid-cols-2" style={{ gap: 3 }}>
@@ -769,7 +768,7 @@ export function GridConfigTab({
       <Divider />
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title={`Grid Preview (${derived.totalLevels} levels)`}
+          title={`GRID PREVIEW (${derived.totalLevels} LEVELS)`}
           expanded={open.gridTable}
           onToggle={() => tog("gridTable")}
         />
@@ -825,7 +824,7 @@ export function GridConfigTab({
           <Divider />
           <div style={{ marginBottom: 6 }}>
             <SectionHead
-              title="Config Preview (JSON)"
+              title="CONFIG JSON"
               expanded={open.configJson}
               onToggle={() => tog("configJson")}
               pro
