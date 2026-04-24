@@ -277,20 +277,28 @@ export function GridConfigTab({
     <div className="flex flex-col h-full overflow-auto" style={{ padding: "8px 10px" }} onMouseDown={stopProp}>
 
       {/* ── Side toggle — matches New Order style exactly ── */}
-      <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)", marginBottom: 6 }}>
+      <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", marginBottom: 6 }}>
         {(["long", "short"] as const).map((s) => (
           <button
             key={s}
             onClick={() => { upd("side", s); onSideChange?.(s) }}
-            className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
             style={{
+              flex: 1,
+              padding: "6px 0",
+              fontFamily: "monospace",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              border: "none",
+              transition: "background 0.15s, color 0.15s",
               background: cfg.side === s
                 ? (s === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
                 : "transparent",
               color: cfg.side === s
                 ? (s === "long" ? "#00e5a0" : "#ff4757")
                 : "rgba(255,255,255,0.3)",
-              fontSize: 10,
             }}
             title={s === "long" ? "Long: profit when price goes up" : "Short: profit when price goes down"}
             onMouseDown={stopProp}
