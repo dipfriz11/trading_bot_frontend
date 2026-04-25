@@ -463,7 +463,7 @@ export function GridConfigTab({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
-          <MiniToggle checked={proMode} onChange={setProMode} />
+          <MiniToggle checked={proMode} onChange={(v) => { setProMode(v); if (!v) upd("perLevelTpEnabled", false) }} />
         </div>
       </div>
 
@@ -699,26 +699,16 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 6. TAKE PROFIT ───────────────────────────── */}
+      {/* ── TAKE PROFIT ───────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="6. TAKE PROFIT"
+          title="TAKE PROFIT"
           expanded={open.tp}
           onToggle={() => tog("tp")}
           rightSlot={<MiniToggle checked={cfg.tpEnabled} onChange={(v) => upd("tpEnabled", v)} />}
         />
         {open.tp && cfg.tpEnabled && (
           <div style={{ ...gap4, marginTop: 4 }}>
-            {/* Mode: Avg Entry / Breakeven+Offset */}
-            <Seg
-              options={[
-                { v: "avg_entry", label: "Avg Entry", title: "TP based on average entry price" },
-                { v: "breakeven_offset", label: "Breakeven + Offset", title: "TP above breakeven point" },
-              ]}
-              value={cfg.tpMode}
-              onChange={(v) => upd("tpMode", v)}
-            />
-
             {/* TP count row + Per-level toggle */}
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {/* TP count stepper */}
@@ -756,15 +746,17 @@ export function GridConfigTab({
 
               <div style={{ flex: 1 }} />
 
-              {/* Per-level TP toggle */}
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <LabelTooltip
-                  label="Per Level"
-                  tooltip="Разные настройки TP для каждой группы уровней сетки. Например: после заполнения 1-го ордера — одни TP, после 2-го — другие."
-                  color="rgba(200,214,229,0.4)"
-                />
-                <MiniToggle checked={cfg.perLevelTpEnabled} onChange={(v) => upd("perLevelTpEnabled", v)} />
-              </div>
+              {/* Per-level TP toggle — pro only */}
+              {proMode && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <LabelTooltip
+                    label="Per Level"
+                    tooltip="Разные настройки TP для каждой группы уровней сетки. Например: после заполнения 1-го ордера — одни TP, после 2-го — другие."
+                    color="rgba(200,214,229,0.4)"
+                  />
+                  <MiniToggle checked={cfg.perLevelTpEnabled} onChange={(v) => upd("perLevelTpEnabled", v)} />
+                </div>
+              )}
             </div>
 
             {/* Standard TP table — shown when Per Level is OFF */}
