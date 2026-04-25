@@ -526,13 +526,20 @@ export function GridConfigTab({
     }, 0)
   }
 
+  // Keep always-fresh refs so effects reading them never have stale closures
+  const externalSymbolRef = useRef(externalSymbol)
+  externalSymbolRef.current = externalSymbol
+  const externalEntryPriceRef = useRef(externalEntryPrice)
+  externalEntryPriceRef.current = externalEntryPrice
+
   // Per-chart price range storage: save topPrice/bottomPrice per chartId so switching
   // between charts restores each chart's own price range instead of bleeding across.
   const priceRangeByChartRef = useRef<Record<string, { topPrice: number; bottomPrice: number }>>({})
   const prevChartIdRef = useRef<string | null>(activeChartId ?? null)
 
   useEffect(() => {
-    if (!externalSymbol) return
+    const sym = externalSymbolRef.current
+    if (!sym) return
     const prevId = prevChartIdRef.current
     const nextId = activeChartId ?? null
 
@@ -545,14 +552,15 @@ export function GridConfigTab({
     }
     prevChartIdRef.current = nextId
 
-    const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
+    const price = externalEntryPriceRef.current
+    const ref = price && price > 0 ? price : 0
     const saved = nextId ? priceRangeByChartRef.current[nextId] : undefined
     const top = saved ? saved.topPrice : (ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0)
     const bottom = saved ? saved.bottomPrice : (ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0)
 
     setCfg((p) => ({
       ...p,
-      symbol: externalSymbol,
+      symbol: sym,
       entryPrice: ref > 0 ? ref : p.entryPrice,
       topPrice: top > 0 ? top : p.topPrice,
       bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
