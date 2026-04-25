@@ -734,40 +734,42 @@ export function GridConfigTab({
               />
               <MiniToggle checked={cfg.tpRepositionEnabled} onChange={(v) => upd("tpRepositionEnabled", v)} />
 
-              {/* Divider */}
-              <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
-
-              {/* TP count stepper */}
-              <div className="flex items-center" style={{ gap: 3 }}>
-                <span style={{ fontSize: 8.5, fontFamily: "monospace", opacity: 0.4, letterSpacing: "0.04em" }}>TP</span>
-                <div className="flex items-center" style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden" }}>
-                  <button
-                    onMouseDown={stopProp}
-                    onClick={() => {
-                      const n = Math.max(1, cfg.multiTpCount - 1)
-                      upd("multiTpCount", n)
-                      upd("multiTpLevels", cfg.multiTpLevels.slice(0, n))
-                      if (n === 1) upd("multiTpEnabled", false)
-                    }}
-                    style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
-                  >−</button>
-                  <span style={{ padding: "0 5px", fontSize: 9.5, fontFamily: "monospace", color: "rgba(200,214,229,0.85)", background: "rgba(255,255,255,0.02)", minWidth: 16, textAlign: "center", lineHeight: "16px" }}>
-                    {cfg.multiTpCount}
-                  </span>
-                  <button
-                    onMouseDown={stopProp}
-                    onClick={() => {
-                      const n = Math.min(10, cfg.multiTpCount + 1)
-                      const lvls = [...cfg.multiTpLevels]
-                      while (lvls.length < n) lvls.push({ tpPercent: parseFloat((lvls[lvls.length - 1].tpPercent + 0.5).toFixed(2)), closePercent: Math.round(100 / n) })
-                      upd("multiTpCount", n)
-                      upd("multiTpLevels", lvls.slice(0, n))
-                      if (n > 1) upd("multiTpEnabled", true)
-                    }}
-                    style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
-                  >+</button>
-                </div>
-              </div>
+              {/* TP count stepper — hidden when per-level groups are active */}
+              {!(proMode && cfg.perLevelTpEnabled) && (
+                <>
+                  <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
+                  <div className="flex items-center" style={{ gap: 3 }}>
+                    <span style={{ fontSize: 8.5, fontFamily: "monospace", opacity: 0.4, letterSpacing: "0.04em" }}>TP</span>
+                    <div className="flex items-center" style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden" }}>
+                      <button
+                        onMouseDown={stopProp}
+                        onClick={() => {
+                          const n = Math.max(1, cfg.multiTpCount - 1)
+                          upd("multiTpCount", n)
+                          upd("multiTpLevels", cfg.multiTpLevels.slice(0, n))
+                          if (n === 1) upd("multiTpEnabled", false)
+                        }}
+                        style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
+                      >−</button>
+                      <span style={{ padding: "0 5px", fontSize: 9.5, fontFamily: "monospace", color: "rgba(200,214,229,0.85)", background: "rgba(255,255,255,0.02)", minWidth: 16, textAlign: "center", lineHeight: "16px" }}>
+                        {cfg.multiTpCount}
+                      </span>
+                      <button
+                        onMouseDown={stopProp}
+                        onClick={() => {
+                          const n = Math.min(10, cfg.multiTpCount + 1)
+                          const lvls = [...cfg.multiTpLevels]
+                          while (lvls.length < n) lvls.push({ tpPercent: parseFloat((lvls[lvls.length - 1].tpPercent + 0.5).toFixed(2)), closePercent: Math.round(100 / n) })
+                          upd("multiTpCount", n)
+                          upd("multiTpLevels", lvls.slice(0, n))
+                          if (n > 1) upd("multiTpEnabled", true)
+                        }}
+                        style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
+                      >+</button>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Divider */}
               <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
