@@ -946,8 +946,12 @@ export function GridConfigTab({
                                 upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
                               }} suffix="%" step={0.1} min={0} />
                               <NI value={lvl.closePercent} onChange={(v) => {
-                                const rebalanced = rebalanceClose(grp.levels.slice(0, grpTpCount), li, v)
-                                upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: rebalanced }))
+                                upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
+                                  if (idx !== gi) return g
+                                  const tpCnt = g.tpCount ?? 1
+                                  const rebalanced = rebalanceClose(g.levels.slice(0, tpCnt), li, v)
+                                  return { ...g, levels: g.levels.map((l, lx) => lx < tpCnt ? rebalanced[lx] : l) }
+                                }))
                               }} suffix="%" step={1} min={1} />
                             </div>
                           ))}
