@@ -39,7 +39,7 @@ const handleStyle = (handle: ResizeHandle): React.CSSProperties => {
 }
 
 export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: WidgetWrapperProps) {
-  const { removeWidget, bringToFront, updateWidgetRect, updateWidget, activeTab, state } = useTerminal()
+  const { removeWidget, bringToFront, updateWidgetRect, updateWidget, activeTab, state, activeChartId } = useTerminal()
   const prevRectRef = useRef<WidgetRect | null>(null)
 
   const allWidgets = activeTab?.widgets ?? []
@@ -159,9 +159,17 @@ export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: Widg
           style={{ color: "inherit", opacity: 0.9, letterSpacing: "0.03em" }}
         >
           {widget.title}
-          {widget.symbol && widget.type !== "chart" && (
-            <span style={{ opacity: 0.6, marginLeft: 6 }}>{widget.symbol}</span>
-          )}
+          {widget.type === "order-console"
+            ? (() => {
+                const chartWidgets = activeTab?.widgets.filter((w) => w.type === "chart") ?? []
+                const activeChart = chartWidgets.find((w) => w.id === activeChartId) ?? chartWidgets[0]
+                const sym = activeChart?.symbol
+                return sym ? <span style={{ opacity: 0.6, marginLeft: 6 }}>{sym}</span> : null
+              })()
+            : widget.symbol && widget.type !== "chart"
+              ? <span style={{ opacity: 0.6, marginLeft: 6 }}>{widget.symbol}</span>
+              : null
+          }
         </span>
 
         {headerExtra && (
