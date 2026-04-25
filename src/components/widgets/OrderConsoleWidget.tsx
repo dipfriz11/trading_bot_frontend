@@ -777,7 +777,27 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         </div>
       ) : tab === "grid" ? (
         /* Grid Config */
-        <div className="flex-1 overflow-auto min-h-0">
+        <div className="flex-1 overflow-auto min-h-0 flex flex-col">
+          {chartWidgets.length > 1 && (
+            <div className="flex gap-1 flex-wrap px-3 pt-2">
+              {chartWidgets.map((cw) => (
+                <button
+                  key={cw.id}
+                  onClick={() => setActiveChartId(cw.id)}
+                  className="text-xs font-mono px-2 py-0.5 rounded transition-all"
+                  style={{
+                    background: activeChartId === cw.id ? "rgba(30,111,239,0.15)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${activeChartId === cw.id ? "rgba(30,111,239,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    color: activeChartId === cw.id ? "#1e6fef" : "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                  }}
+                  onMouseDown={stopProp}
+                >
+                  {activeChartId === cw.id ? "● " : "○ "}{cw.symbol ?? "—"}
+                </button>
+              ))}
+            </div>
+          )}
           <GridConfigTab
             symbol={symbol}
             marketType={marketType}
@@ -790,7 +810,27 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         </div>
       ) : (
         /* DCA */
-        <div className="flex-1 overflow-auto min-h-0">
+        <div className="flex-1 overflow-auto min-h-0 flex flex-col">
+          {chartWidgets.length > 1 && (
+            <div className="flex gap-1 flex-wrap px-3 pt-2">
+              {chartWidgets.map((cw) => (
+                <button
+                  key={cw.id}
+                  onClick={() => setActiveChartId(cw.id)}
+                  className="text-xs font-mono px-2 py-0.5 rounded transition-all"
+                  style={{
+                    background: activeChartId === cw.id ? "rgba(30,111,239,0.15)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${activeChartId === cw.id ? "rgba(30,111,239,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    color: activeChartId === cw.id ? "#1e6fef" : "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                  }}
+                  onMouseDown={stopProp}
+                >
+                  {activeChartId === cw.id ? "● " : "○ "}{cw.symbol ?? "—"}
+                </button>
+              ))}
+            </div>
+          )}
           <DcaTab
             symbol={symbol}
             futuresSide={futuresSide}
