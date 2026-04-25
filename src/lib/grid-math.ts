@@ -42,11 +42,13 @@ export function calcGridVisualization(cfg: GridConfig): GridVisualization {
     }
   } else {
     // top/bottom range mode
+    // Long:  #1 = top price (closest to market), #N = bottom price (farthest)
+    // Short: #1 = bottom price (closest to market), #N = top price (farthest)
     const top = cfg.topPrice > 0 ? cfg.topPrice : entryPrice * 1.05
     const bottom = cfg.bottomPrice > 0 ? cfg.bottomPrice : entryPrice * 0.95
     const rangeStep = (top - bottom) / Math.max(1, n - 1)
     for (let i = 0; i < n; i++) {
-      prices.push(isLong ? bottom + rangeStep * i : top - rangeStep * i)
+      prices.push(isLong ? top - rangeStep * i : bottom + rangeStep * i)
     }
   }
 
