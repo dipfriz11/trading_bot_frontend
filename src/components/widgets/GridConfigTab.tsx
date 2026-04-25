@@ -569,57 +569,44 @@ export function GridConfigTab({
 
       {/* ── 5. TRAIL + AUTO RESTART ───────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        {/* Trail row */}
-        <SectionHead
-          title="5. TRAIL"
-          expanded={open.trail}
-          onToggle={() => tog("trail")}
-          rightSlot={<MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />}
-        />
-        {open.trail && cfg.trailEnabled && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            <div className="grid grid-cols-1" style={{ gap: 4 }}>
+        {/* Single row: Trail toggle | Trigger % (when open) | Auto Restart label | После TP toggle | После SL toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {/* Trail label + toggle */}
+          <div
+            style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}
+            onClick={() => tog("trail")}
+          >
+            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.55)", fontWeight: 600 }}>
+              Trail
+            </span>
+          </div>
+          <MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />
+          {cfg.trailEnabled && (
+            <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
               <NITooltip
                 value={cfg.trailTriggerPercent}
                 onChange={(v) => upd("trailTriggerPercent", v)}
                 label="Trigger %"
                 title="Trail trigger %"
-                tooltip="Процент движения цены от края сетки, при котором сетка начинает перемещаться за ценой, сохраняя настроенное расстояние от тренда."
+                tooltip="Процент движения цены от края сетки, при котором сетка начинает перемещаться за ценой."
               />
             </div>
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(154,164,174,0.55)", lineHeight: 1.45, padding: "4px 6px", background: "rgba(30,111,239,0.05)", border: "1px solid rgba(30,111,239,0.1)", borderRadius: 3 }}>
-              Сетка перемещается за ценой сохраняя расстояние до тренда согласно конфига
-            </div>
-          </div>
-        )}
-
-        {/* Divider between Trail and Auto Restart */}
-        <div style={{ height: 1, background: "rgba(30,111,239,0.08)", margin: "6px 0" }} />
-
-        {/* Auto Restart row */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.6)", fontWeight: 600, lineHeight: 1 }}>
-              Auto Restart
+          )}
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+          {/* Auto Restart label + sub-toggles */}
+          <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.55)", fontWeight: 600 }}>
+              Auto
             </span>
-            <span style={{ fontSize: 8, fontFamily: "monospace", color: "rgba(154,164,174,0.38)", lineHeight: 1.4 }}>
-              Новая сетка по текущей цене
+            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.75)" : "rgba(154,164,174,0.4)", letterSpacing: "0.04em" }}>
+              TP
             </span>
-            {/* Sub-toggles */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 5 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.85)" : "rgba(154,164,174,0.45)", letterSpacing: "0.04em" }}>
-                  После TP
-                </span>
-                <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.85)" : "rgba(154,164,174,0.45)", letterSpacing: "0.04em" }}>
-                  После SL
-                </span>
-                <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
-              </div>
-            </div>
+            <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
+            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.4)", letterSpacing: "0.04em" }}>
+              SL
+            </span>
+            <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
           </div>
         </div>
       </div>
