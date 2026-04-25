@@ -618,16 +618,23 @@ export function GridConfigTab({
     prevSideRef.current = cfg.side
     // Reset order ID refs since new side has its own set of order slots
     orderIdRefs.current = []
-    // Restore saved cfg for the new side (keep symbol/entryPrice/leverage from current context)
+    // Restore saved cfg for the new side (keep symbol/entryPrice/leverage/priceRange from current context)
     const saved = cfgBySideRef.current[cfg.side]
     if (saved) {
-      setCfg((p) => ({
-        ...saved,
-        symbol: p.symbol,
-        entryPrice: p.entryPrice,
-        leverage: p.leverage,
-        side: cfg.side,
-      }))
+      setCfg((p) => {
+        const ref = p.entryPrice > 0 ? p.entryPrice : 0
+        const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : saved.topPrice
+        const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : saved.bottomPrice
+        return {
+          ...saved,
+          symbol: p.symbol,
+          entryPrice: p.entryPrice,
+          leverage: p.leverage,
+          topPrice: top,
+          bottomPrice: bottom,
+          side: cfg.side,
+        }
+      })
     }
   }, [cfg.side])
 
