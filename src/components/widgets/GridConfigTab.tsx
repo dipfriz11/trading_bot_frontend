@@ -29,10 +29,10 @@ const readonlyBase: React.CSSProperties = {
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
 
 function NI({
-  value, onChange, placeholder, title, min, suffix, label,
+  value, onChange, placeholder, title, min, suffix, label, labelColor,
 }: {
   value: number | string; onChange: (v: number) => void
-  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string
+  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string; labelColor?: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const [localVal, setLocalVal] = useState(String(value))
@@ -77,7 +77,7 @@ function NI({
   }
 
   const tag = suffix ?? label
-  const tagW = tag ? tag.length * 6 + 10 : 0
+  const tagW = tag ? tag.length * 5.5 + 8 : 0
 
   return (
     <div style={{ position: "relative" }}>
@@ -92,7 +92,7 @@ function NI({
         onMouseDown={(e) => e.stopPropagation()}
       />
       {tag && (
-        <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em" }}>
+        <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: labelColor ? 1 : 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em", color: labelColor }}>
           {tag}
         </span>
       )}
@@ -968,50 +968,44 @@ export function GridConfigTab({
                             </div>
                           </div>
 
-                          {/* TP rows column headers */}
-                          <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.3, paddingLeft: 2 }}>
-                            <span>#</span><span>TP %</span><span>Close %</span>
-                          </div>
-
-                          {/* TP rows */}
+                          {/* TP rows — labels are inline inside each field */}
                           {grp.levels.slice(0, grpTpCount).map((lvl, li) => {
                             const isResetRow = hasReset && li === 0
-                            const rowLabel = hasReset ? (li === 0 ? "Reset TP" : "Main TP") : undefined
+                            const tpLabel = hasReset
+                              ? (li === 0 ? "Reset TP %" : "Main TP %")
+                              : "TP %"
+                            const tpColor = isResetRow ? "rgba(255,171,0,0.55)" : undefined
                             return (
-                              <div key={li} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
-                                <span style={{
-                                  fontSize: 7.5,
-                                  fontFamily: "monospace",
-                                  color: isResetRow ? "rgba(255,171,0,0.6)" : "rgba(200,214,229,0.3)",
-                                  lineHeight: 1,
-                                  whiteSpace: "nowrap",
-                                }}>{li + 1}</span>
-                                <div style={{ position: "relative" }}>
-                                  <NI value={lvl.tpPercent} onChange={(v) => {
+                              <div key={li} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, alignItems: "center" }}>
+                                <NI
+                                  value={lvl.tpPercent}
+                                  onChange={(v) => {
                                     upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
-                                  }} suffix="%" step={0.1} min={0} />
-                                  {rowLabel && (
-                                    <span style={{
-                                      position: "absolute", bottom: -8, left: 2,
-                                      fontSize: 7, fontFamily: "monospace",
-                                      color: isResetRow ? "rgba(255,171,0,0.5)" : "rgba(30,111,239,0.5)",
-                                      letterSpacing: "0.02em", pointerEvents: "none",
-                                    }}>{rowLabel}</span>
-                                  )}
-                                </div>
-                                <NI value={lvl.closePercent} onChange={(v) => {
-                                  upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
-                                    if (idx !== gi) return g
-                                    const tpCnt = g.tpCount ?? 1
-                                    const rebalanced = rebalanceClose(g.levels.slice(0, tpCnt), li, v)
-                                    return { ...g, levels: g.levels.map((l, lx) => lx < tpCnt ? rebalanced[lx] : l) }
-                                  }))
-                                }} suffix="%" step={1} min={1} />
+                                  }}
+                                  label={tpLabel}
+                                  labelColor={tpColor}
+                                  step={0.1}
+                                  min={0}
+                                  title={isResetRow ? "Reset TP — placed after this grid level fills; replaces current TP" : "Main TP percentage"}
+                                />
+                                <NI
+                                  value={lvl.closePercent}
+                                  onChange={(v) => {
+                                    upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
+                                      if (idx !== gi) return g
+                                      const tpCnt = g.tpCount ?? 1
+                                      const rebalanced = rebalanceClose(g.levels.slice(0, tpCnt), li, v)
+                                      return { ...g, levels: g.levels.map((l, lx) => lx < tpCnt ? rebalanced[lx] : l) }
+                                    }))
+                                  }}
+                                  label="Close %"
+                                  step={1}
+                                  min={1}
+                                  title="Percentage of position to close at this TP level"
+                                />
                               </div>
                             )
                           })}
-                          {/* Extra spacing when labels are shown */}
-                          {hasReset && grpTpCount > 0 && <div style={{ height: 4 }} />}
                         </div>
                       )
                     })}
