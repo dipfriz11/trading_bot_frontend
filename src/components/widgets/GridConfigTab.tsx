@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check, Plus, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
 import { generateLevels, calcDerivedStats, exportGridConfig } from "@/lib/grid-helpers"
@@ -485,6 +485,25 @@ export function GridConfigTab({
   })
   const tog = (k: keyof typeof open) => setOpen((p) => ({ ...p, [k]: !p[k] }))
 
+  // Auto-sync perLevelTpGroups count with ordersCount when perLevelTpEnabled
+  useEffect(() => {
+    if (!cfg.perLevelTpEnabled) return
+    const n = cfg.ordersCount
+    const cur = cfg.perLevelTpGroups
+    if (cur.length === n) return
+    if (cur.length < n) {
+      const extra = Array.from({ length: n - cur.length }, (_, i) => ({
+        afterLevel: cur.length + i + 1,
+        tpCount: 1,
+        levels: [{ tpPercent: 1.0, closePercent: 100 }],
+        resetTpEnabled: false,
+      }))
+      setCfg((p) => ({ ...p, perLevelTpGroups: [...p.perLevelTpGroups, ...extra] }))
+    } else {
+      setCfg((p) => ({ ...p, perLevelTpGroups: p.perLevelTpGroups.slice(0, n) }))
+    }
+  }, [cfg.ordersCount, cfg.perLevelTpEnabled])
+
   // Auto-regenerate levels on key config change
   const levels = useMemo(() => generateLevels(cfg), [
     cfg.ordersCount, cfg.entryPrice, cfg.placementMode, cfg.firstOffsetPercent,
@@ -878,28 +897,49 @@ export function GridConfigTab({
                   <div style={{ ...gap4 }}>
                     {cfg.perLevelTpGroups.map((grp, gi) => {
                       const grpTpCount = grp.tpCount ?? 1
+                      const hasReset = grp.resetTpEnabled ?? false
+                      // When reset enabled, first row = Reset TP, rest = Main TP
+                      // Minimum TP count is 2 when reset is enabled (1 reset + 1 main)
                       return (
-                        <div key={gi} style={{ borderLeft: "2px solid rgba(30,111,239,0.2)", paddingLeft: 6, ...gap4 }}>
-                          {/* Group header: After level + TP stepper + delete */}
+                        <div key={gi} style={{ borderLeft: `2px solid ${hasReset ? "rgba(255,171,0,0.35)" : "rgba(30,111,239,0.2)"}`, paddingLeft: 6, ...gap4 }}>
+                          {/* Group header */}
                           <div className="flex items-center" style={{ gap: 4 }}>
-                            <span style={{ fontSize: 8.5, fontFamily: "monospace", opacity: 0.4, whiteSpace: "nowrap" }}>After level</span>
-                            <div style={{ width: 36 }}>
-                              <NI value={grp.afterLevel} onChange={(v) => {
-                                const next = [...cfg.perLevelTpGroups]
-                                next[gi] = { ...next[gi], afterLevel: Math.max(1, Math.round(v)) }
-                                upd("perLevelTpGroups", next)
-                              }} min={1} step={1} />
+                            {/* Level badge */}
+                            <span style={{ fontSize: 8, fontFamily: "monospace", color: "rgba(200,214,229,0.35)", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>
+                              LVL {gi + 1}
+                            </span>
+
+                            {/* Reset TP toggle */}
+                            <div className="flex items-center" style={{ gap: 3, marginLeft: 2 }}>
+                              <span style={{ fontSize: 8, fontFamily: "monospace", color: hasReset ? "rgba(255,171,0,0.8)" : "rgba(200,214,229,0.3)", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>
+                                Reset TP
+                              </span>
+                              <MiniToggle
+                                checked={hasReset}
+                                onChange={(v) => {
+                                  upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
+                                    if (idx !== gi) return g
+                                    const minCount = v ? Math.max(2, g.tpCount ?? 1) : g.tpCount ?? 1
+                                    const lvls = [...g.levels]
+                                    while (lvls.length < minCount) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: 0 })
+                                    const pcts = distributeClose(minCount)
+                                    return { ...g, resetTpEnabled: v, tpCount: minCount, levels: lvls.slice(0, minCount).map((l, i) => ({ ...l, closePercent: pcts[i] })) }
+                                  }))
+                                }}
+                              />
                             </div>
 
-                            {/* Per-group TP count stepper */}
                             <div style={{ flex: 1 }} />
+
+                            {/* TP count stepper */}
                             <div className="flex items-center" style={{ gap: 3 }}>
                               <span style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.35, letterSpacing: "0.04em" }}>TP</span>
                               <div className="flex items-center" style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden" }}>
                                 <button
                                   onMouseDown={stopProp}
                                   onClick={() => {
-                                    const n = Math.max(1, grpTpCount - 1)
+                                    const minAllowed = hasReset ? 2 : 1
+                                    const n = Math.max(minAllowed, grpTpCount - 1)
                                     const lvls = grp.levels.slice(0, n)
                                     const pcts = distributeClose(n)
                                     const next = [...cfg.perLevelTpGroups]
@@ -926,47 +966,55 @@ export function GridConfigTab({
                                 >+</button>
                               </div>
                             </div>
-
-                            {cfg.perLevelTpGroups.length > 1 && (
-                              <button onMouseDown={stopProp} onClick={() => upd("perLevelTpGroups", cfg.perLevelTpGroups.filter((_, idx) => idx !== gi))}
-                                style={{ background: "none", border: "none", cursor: "pointer", padding: "1px 3px", color: "rgba(255,71,87,0.5)", display: "flex", alignItems: "center" }}>
-                                <Trash2 size={8} />
-                              </button>
-                            )}
                           </div>
 
-                          {/* TP rows for this group */}
+                          {/* TP rows column headers */}
                           <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.3, paddingLeft: 2 }}>
                             <span>#</span><span>TP %</span><span>Close %</span>
                           </div>
-                          {grp.levels.slice(0, grpTpCount).map((lvl, li) => (
-                            <div key={li} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
-                              <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>{li + 1}</span>
-                              <NI value={lvl.tpPercent} onChange={(v) => {
-                                upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
-                              }} suffix="%" step={0.1} min={0} />
-                              <NI value={lvl.closePercent} onChange={(v) => {
-                                upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
-                                  if (idx !== gi) return g
-                                  const tpCnt = g.tpCount ?? 1
-                                  const rebalanced = rebalanceClose(g.levels.slice(0, tpCnt), li, v)
-                                  return { ...g, levels: g.levels.map((l, lx) => lx < tpCnt ? rebalanced[lx] : l) }
-                                }))
-                              }} suffix="%" step={1} min={1} />
-                            </div>
-                          ))}
+
+                          {/* TP rows */}
+                          {grp.levels.slice(0, grpTpCount).map((lvl, li) => {
+                            const isResetRow = hasReset && li === 0
+                            const rowLabel = hasReset ? (li === 0 ? "Reset TP" : "Main TP") : undefined
+                            return (
+                              <div key={li} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
+                                <span style={{
+                                  fontSize: 7.5,
+                                  fontFamily: "monospace",
+                                  color: isResetRow ? "rgba(255,171,0,0.6)" : "rgba(200,214,229,0.3)",
+                                  lineHeight: 1,
+                                  whiteSpace: "nowrap",
+                                }}>{li + 1}</span>
+                                <div style={{ position: "relative" }}>
+                                  <NI value={lvl.tpPercent} onChange={(v) => {
+                                    upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
+                                  }} suffix="%" step={0.1} min={0} />
+                                  {rowLabel && (
+                                    <span style={{
+                                      position: "absolute", bottom: -8, left: 2,
+                                      fontSize: 7, fontFamily: "monospace",
+                                      color: isResetRow ? "rgba(255,171,0,0.5)" : "rgba(30,111,239,0.5)",
+                                      letterSpacing: "0.02em", pointerEvents: "none",
+                                    }}>{rowLabel}</span>
+                                  )}
+                                </div>
+                                <NI value={lvl.closePercent} onChange={(v) => {
+                                  upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
+                                    if (idx !== gi) return g
+                                    const tpCnt = g.tpCount ?? 1
+                                    const rebalanced = rebalanceClose(g.levels.slice(0, tpCnt), li, v)
+                                    return { ...g, levels: g.levels.map((l, lx) => lx < tpCnt ? rebalanced[lx] : l) }
+                                  }))
+                                }} suffix="%" step={1} min={1} />
+                              </div>
+                            )
+                          })}
+                          {/* Extra spacing when labels are shown */}
+                          {hasReset && grpTpCount > 0 && <div style={{ height: 4 }} />}
                         </div>
                       )
                     })}
-                    <button onMouseDown={stopProp}
-                      onClick={() => {
-                        const defaultLvls: GridMultiTpLevel[] = [{ tpPercent: 1.0, closePercent: 100 }]
-                        upd("perLevelTpGroups", [...cfg.perLevelTpGroups, { afterLevel: cfg.perLevelTpGroups.length + 1, tpCount: 1, levels: defaultLvls }])
-                      }}
-                      className="flex items-center gap-1 w-full"
-                      style={{ fontSize: 9, fontFamily: "monospace", padding: "3px 6px", background: "rgba(30,111,239,0.08)", color: "rgba(30,111,239,0.8)", border: "1px solid rgba(30,111,239,0.2)", borderRadius: 3, cursor: "pointer" }}>
-                      <Plus size={8} /> Add Group
-                    </button>
                   </div>
                 )}
               </div>
