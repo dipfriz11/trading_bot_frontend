@@ -911,7 +911,9 @@ export function GridConfigTab({
 
                             {/* Reset TP toggle */}
                             <div className="flex items-center" style={{ gap: 3, marginLeft: 2 }}>
-                              <span style={{ fontSize: 8, fontFamily: "monospace", color: hasReset ? "rgba(255,171,0,0.8)" : "rgba(200,214,229,0.3)", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>
+                              <span
+                                title="Reset TP: при срабатывании этого TP запускается ребилд хвоста сетки — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера. Обычный TP закрывает позицию без ребилда."
+                                style={{ fontSize: 8, fontFamily: "monospace", color: hasReset ? "rgba(255,171,0,0.8)" : "rgba(200,214,229,0.3)", whiteSpace: "nowrap", letterSpacing: "0.04em", cursor: "help" }}>
                                 Reset TP
                               </span>
                               <MiniToggle
@@ -986,7 +988,9 @@ export function GridConfigTab({
                                   labelColor={tpColor}
                                   step={0.1}
                                   min={0}
-                                  title={isResetRow ? "Reset TP — placed after this grid level fills; replaces current TP" : "Main TP percentage"}
+                                  title={isResetRow
+                                    ? "Reset TP %: при срабатывании запускает ребилд хвоста — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера сетки"
+                                    : "Main TP %: обычный тейк профит, закрывает позицию без ребилда сетки"}
                                 />
                                 <NI
                                   value={lvl.closePercent}
@@ -1001,7 +1005,9 @@ export function GridConfigTab({
                                   label="Close %"
                                   step={1}
                                   min={1}
-                                  title="Percentage of position to close at this TP level"
+                                  title={isResetRow
+                                    ? "Close %: какую часть позиции закрыть при Reset TP. Освободившаяся маржа идёт на ребилд хвоста сетки"
+                                    : "Close %: какую часть позиции закрыть на этом уровне Main TP"}
                                 />
                               </div>
                             )
