@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
@@ -49,7 +50,7 @@ function TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
         <circle cx="5" cy="5" r="4.5" stroke={color ?? "rgba(200,214,229,0.6)"} />
         <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill={color ?? "rgba(200,214,229,0.8)"} fontFamily="monospace">?</text>
       </svg>
-      {pos && (
+      {pos && createPortal(
         <div style={{
           position: "fixed",
           left: Math.max(8, Math.min(pos.x - 110, window.innerWidth - 248)),
@@ -62,7 +63,8 @@ function TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
           boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none", whiteSpace: "normal",
         }}>
           {text}
-        </div>
+        </div>,
+        document.body
       )}
     </span>
   )
