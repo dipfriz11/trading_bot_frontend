@@ -35,8 +35,12 @@ function NI({
   placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
-  const valueRef = useRef(value)
-  valueRef.current = value
+  const [localVal, setLocalVal] = useState(String(value))
+  const isFocused = useRef(false)
+
+  useEffect(() => {
+    if (!isFocused.current) setLocalVal(String(value))
+  }, [value])
 
   useEffect(() => {
     const el = ref.current
@@ -45,19 +49,33 @@ function NI({
       e.preventDefault()
       e.stopPropagation()
       const delta = e.deltaY < 0 ? 1 : -1
-      const current = typeof valueRef.current === "number" ? valueRef.current : parseFloat(String(valueRef.current)) || 0
+      const current = parseFloat(String(value)) || 0
       const next = current + delta
-      onChange(min !== undefined ? Math.max(min, next) : next)
+      const result = min !== undefined ? Math.max(min, next) : next
+      onChange(result)
+      setLocalVal(String(result))
     }
     el.addEventListener("wheel", handler, { passive: false })
     return () => el.removeEventListener("wheel", handler)
-  }, [onChange, min])
+  }, [onChange, min, value])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/[^0-9.]/g, "")
+    const raw = e.target.value.replace(/[^0-9.-]/g, "")
+    setLocalVal(raw)
     const parsed = parseFloat(raw)
     if (!isNaN(parsed)) onChange(min !== undefined ? Math.max(min, parsed) : parsed)
-    else if (raw === "" || raw === ".") onChange(0)
+  }
+
+  const handleBlur = () => {
+    isFocused.current = false
+    const parsed = parseFloat(localVal)
+    if (!isNaN(parsed)) {
+      const result = min !== undefined ? Math.max(min, parsed) : parsed
+      onChange(result)
+      setLocalVal(String(result))
+    } else {
+      setLocalVal(String(value))
+    }
   }
 
   const tag = suffix ?? label
@@ -67,8 +85,10 @@ function NI({
     <div style={{ position: "relative" }}>
       <input
         ref={ref}
-        type="text" inputMode="decimal" value={value}
+        type="text" inputMode="decimal" value={localVal}
         onChange={handleChange}
+        onFocus={() => { isFocused.current = true }}
+        onBlur={handleBlur}
         placeholder={placeholder ?? "0"} title={title ?? placeholder}
         style={{ ...inputBase, paddingRight: tag ? tagW + 2 : undefined }}
         onMouseDown={(e) => e.stopPropagation()}
@@ -463,6 +483,7 @@ export function GridConfigTab({
     resetTp: false,
     gridTable: false,
     configJson: false,
+    perLevelGroups: true,
   })
   const tog = (k: keyof typeof open) => setOpen((p) => ({ ...p, [k]: !p[k] }))
 
@@ -837,14 +858,25 @@ export function GridConfigTab({
             {proMode && (
               <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 4, ...gap4 }}>
                 <div className="flex items-center justify-between">
-                  <LabelTooltip
-                    label="Per-level groups"
-                    tooltip="Разные настройки TP для каждой группы уровней сетки. После заполнения N-го ордера применяются свои TP-уровни."
-                    color="rgba(200,214,229,0.4)"
-                  />
+                  <div className="flex items-center" style={{ gap: 4 }}>
+                    <LabelTooltip
+                      label="Per-level groups"
+                      tooltip="Разные настройки TP для каждой группы уровней сетки. После заполнения N-го ордера применяются свои TP-уровни."
+                      color="rgba(200,214,229,0.4)"
+                    />
+                    {cfg.perLevelTpEnabled && (
+                      <button
+                        onMouseDown={stopProp}
+                        onClick={() => tog("perLevelGroups")}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "rgba(200,214,229,0.35)", display: "flex", alignItems: "center" }}
+                      >
+                        <ChevronDown size={10} style={{ transform: open.perLevelGroups ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s" }} />
+                      </button>
+                    )}
+                  </div>
                   <MiniToggle checked={cfg.perLevelTpEnabled} onChange={(v) => upd("perLevelTpEnabled", v)} />
                 </div>
-                {cfg.perLevelTpEnabled && (
+                {cfg.perLevelTpEnabled && open.perLevelGroups && (
                   <div style={{ ...gap4 }}>
                     {cfg.perLevelTpGroups.map((grp, gi) => {
                       const grpTpCount = grp.tpCount ?? 1
