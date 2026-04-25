@@ -166,7 +166,7 @@ export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: Widg
                 const sym = activeChart?.symbol
                 return sym ? <span style={{ opacity: 0.6, marginLeft: 6 }}>{sym}</span> : null
               })()
-            : widget.symbol && widget.type !== "chart"
+            : widget.symbol && widget.type !== "chart" && widget.type !== "portfolio"
               ? <span style={{ opacity: 0.6, marginLeft: 6 }}>{widget.symbol}</span>
               : null
           }
