@@ -602,21 +602,49 @@ export function GridConfigTab({
 
       {/* ── 5. TRAIL + AUTO RESTART ───────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        {/* Always-visible row: Trail label+toggle | Auto label+TP toggle+SL toggle */}
+        {/* Always-visible row: Trail [?] [toggle] [chevron if active] — — — Auto [?] TP [toggle] SL [toggle] */}
         <div style={{ display: "flex", alignItems: "center" }}>
-          {/* Trail label + toggle */}
           <LabelTooltip
             label="Trail"
             tooltip="Трейлинг сетки — сетка автоматически перемещается за ценой, когда цена уходит за край сетки на заданный процент."
           />
           <div style={{ marginLeft: 5 }}>
-            <MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />
+            <MiniToggle
+              checked={cfg.trailEnabled}
+              onChange={(v) => {
+                upd("trailEnabled", v)
+                if (v) setOpen((p) => ({ ...p, trail: true }))
+              }}
+            />
           </div>
+
+          {/* Chevron to collapse/expand Trail settings row */}
+          {cfg.trailEnabled && (
+            <button
+              onClick={() => tog("trail")}
+              title={open.trail ? "Свернуть настройки трейлинга" : "Развернуть настройки трейлинга"}
+              style={{
+                marginLeft: 4, background: "none", border: "none", cursor: "pointer",
+                padding: 0, display: "flex", alignItems: "center", opacity: 0.45,
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path
+                  d={open.trail ? "M2 3.5 L5 6.5 L8 3.5" : "M2 6.5 L5 3.5 L8 6.5"}
+                  stroke="rgba(200,214,229,0.8)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
 
           {/* Spacer always pushes Auto to the right */}
           <div style={{ flex: 1 }} />
 
-          {/* Auto Restart label + TP/SL toggles — always visible */}
+          {/* Auto Restart — always visible */}
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <LabelTooltip
               label="Auto"
@@ -633,10 +661,9 @@ export function GridConfigTab({
           </div>
         </div>
 
-        {/* Row 2 (Trail settings) — only when Trail is enabled */}
-        {cfg.trailEnabled && (
+        {/* Row 2 — Trail settings, collapsible */}
+        {cfg.trailEnabled && open.trail && (
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5 }}>
-            {/* Trigger % */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <NITooltip
                 value={cfg.trailTriggerPercent}
@@ -647,7 +674,6 @@ export function GridConfigTab({
               />
             </div>
 
-            {/* Limit price: toggle + field */}
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
               <LabelTooltip
                 label="Lim"
@@ -656,6 +682,7 @@ export function GridConfigTab({
               />
               <MiniToggle checked={cfg.trailLimitPriceEnabled} onChange={(v) => upd("trailLimitPriceEnabled", v)} />
             </div>
+
             {cfg.trailLimitPriceEnabled && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 <NITooltip
