@@ -102,7 +102,7 @@ export function calcGridVisualization(cfg: GridConfig): GridVisualization {
     tpPrice = isLong ? base * (1 + tpPct) : base * (1 - tpPct)
 
     if (cfg.multiTpEnabled && cfg.multiTpLevels.length > 0) {
-      tpLevels = cfg.multiTpLevels.map((lvl) => {
+      tpLevels = cfg.multiTpLevels.slice(0, cfg.multiTpCount).map((lvl) => {
         const pct = Math.max(0.01, lvl.tpPercent) / 100
         return isLong ? base * (1 + pct) : base * (1 - pct)
       })
