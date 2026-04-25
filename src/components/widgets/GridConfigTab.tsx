@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check, Plus, Trash2 } from "lucide-react"
-import type { GridConfig } from "@/types/terminal"
+import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
 import { generateLevels, calcDerivedStats, exportGridConfig } from "@/lib/grid-helpers"
 
@@ -709,6 +709,7 @@ export function GridConfigTab({
         />
         {open.tp && cfg.tpEnabled && (
           <div style={{ ...gap4, marginTop: 4 }}>
+            {/* Mode: Avg Entry / Breakeven+Offset */}
             <Seg
               options={[
                 { v: "avg_entry", label: "Avg Entry", title: "TP based on average entry price" },
@@ -717,58 +718,167 @@ export function GridConfigTab({
               value={cfg.tpMode}
               onChange={(v) => upd("tpMode", v)}
             />
-            <div className="grid grid-cols-2" style={{ gap: 4 }}>
-              <NI value={cfg.tpPercent} onChange={(v) => upd("tpPercent", v)} label="TP %" min={0} step={0.1} title="Take profit percentage from average entry" />
-              <NI value={cfg.tpClosePercent} onChange={(v) => upd("tpClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close when TP triggers" />
+
+            {/* TP count row + Per-level toggle */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {/* TP count stepper */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.45, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>TP COUNT</span>
+                <div style={{ display: "flex", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
+                  <button
+                    onMouseDown={stopProp}
+                    onClick={() => {
+                      const n = Math.max(1, cfg.multiTpCount - 1)
+                      const lvls = cfg.multiTpLevels.slice(0, n)
+                      upd("multiTpCount", n)
+                      upd("multiTpLevels", lvls)
+                      if (n === 1) upd("multiTpEnabled", false)
+                    }}
+                    style={{ padding: "1px 5px", background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.6)", cursor: "pointer", fontSize: 11, lineHeight: 1 }}
+                  >−</button>
+                  <span style={{ padding: "1px 7px", fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.9)", background: "rgba(255,255,255,0.02)", minWidth: 20, textAlign: "center" }}>
+                    {cfg.multiTpCount}
+                  </span>
+                  <button
+                    onMouseDown={stopProp}
+                    onClick={() => {
+                      const n = Math.min(10, cfg.multiTpCount + 1)
+                      const lvls = [...cfg.multiTpLevels]
+                      while (lvls.length < n) lvls.push({ tpPercent: parseFloat((lvls[lvls.length - 1].tpPercent + 0.5).toFixed(2)), closePercent: Math.round(100 / n) })
+                      upd("multiTpCount", n)
+                      upd("multiTpLevels", lvls.slice(0, n))
+                      if (n > 1) upd("multiTpEnabled", true)
+                    }}
+                    style={{ padding: "1px 5px", background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.6)", cursor: "pointer", fontSize: 11, lineHeight: 1 }}
+                  >+</button>
+                </div>
+              </div>
+
+              <div style={{ flex: 1 }} />
+
+              {/* Per-level TP toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <LabelTooltip
+                  label="Per Level"
+                  tooltip="Разные настройки TP для каждой группы уровней сетки. Например: после заполнения 1-го ордера — одни TP, после 2-го — другие."
+                  color="rgba(200,214,229,0.4)"
+                />
+                <MiniToggle checked={cfg.perLevelTpEnabled} onChange={(v) => upd("perLevelTpEnabled", v)} />
+              </div>
             </div>
 
-            {/* Multi TP */}
-            <div className="flex items-center justify-between">
-              <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.45, textTransform: "uppercase", letterSpacing: "0.06em" }}>Multi TP</span>
-              <MiniToggle checked={cfg.multiTpEnabled} onChange={(v) => upd("multiTpEnabled", v)} />
-            </div>
-            {cfg.multiTpEnabled && (
+            {/* Standard TP table — shown when Per Level is OFF */}
+            {!cfg.perLevelTpEnabled && (
               <div style={{ ...gap4 }}>
-                {/* Header */}
-                <div className="grid grid-cols-3" style={{ gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>
-                  <span style={{ paddingLeft: 4 }}>#</span>
+                {/* Column headers */}
+                <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.35, paddingLeft: 2 }}>
+                  <span>#</span>
                   <span>TP %</span>
                   <span>Close %</span>
                 </div>
-                {cfg.multiTpLevels.map((lvl, i) => (
-                  <div key={i} className="grid grid-cols-3 items-center" style={{ gap: 2 }}>
-                    <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.4, paddingLeft: 4 }}>{i + 1}</span>
+                {cfg.multiTpLevels.slice(0, cfg.multiTpCount).map((lvl, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.38 }}>{i + 1}</span>
                     <NI value={lvl.tpPercent} onChange={(v) => {
                       const next = [...cfg.multiTpLevels]
                       next[i] = { ...next[i], tpPercent: v }
                       upd("multiTpLevels", next)
-                    }} suffix="%" step={0.1} />
+                    }} suffix="%" step={0.1} min={0} />
                     <NI value={lvl.closePercent} onChange={(v) => {
                       const next = [...cfg.multiTpLevels]
-                      next[i] = { ...next[i], closePercent: v }
+                      next[i] = { ...next[i], closePercent: Math.min(100, Math.max(1, v)) }
                       upd("multiTpLevels", next)
-                    }} suffix="%" step={1} />
+                    }} suffix="%" step={1} min={1} />
                   </div>
                 ))}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => upd("multiTpLevels", [...cfg.multiTpLevels, { tpPercent: 2, closePercent: 50 }])}
-                    className="flex items-center gap-1 flex-1"
-                    style={{ fontSize: 9, fontFamily: "monospace", padding: "2px 6px", background: "rgba(30,111,239,0.1)", color: "#1e6fef", border: "1px solid rgba(30,111,239,0.25)", borderRadius: 3, cursor: "pointer" }}
-                    onMouseDown={stopProp}
-                  >
-                    <Plus size={8} /> Add Level
-                  </button>
-                  {cfg.multiTpLevels.length > 1 && (
-                    <button
-                      onClick={() => upd("multiTpLevels", cfg.multiTpLevels.slice(0, -1))}
-                      style={{ fontSize: 9, fontFamily: "monospace", padding: "2px 6px", background: "rgba(255,71,87,0.08)", color: "#ff4757", border: "1px solid rgba(255,71,87,0.2)", borderRadius: 3, cursor: "pointer" }}
-                      onMouseDown={stopProp}
-                    >
-                      <Trash2 size={8} />
-                    </button>
-                  )}
-                </div>
+              </div>
+            )}
+
+            {/* Per-level TP groups — shown when Per Level is ON */}
+            {cfg.perLevelTpEnabled && (
+              <div style={{ ...gap4 }}>
+                {cfg.perLevelTpGroups.map((grp, gi) => (
+                  <div key={gi} style={{ borderLeft: "2px solid rgba(30,111,239,0.25)", paddingLeft: 6, ...gap4 }}>
+                    {/* Group header: after level N */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ fontSize: 8.5, fontFamily: "monospace", opacity: 0.4, whiteSpace: "nowrap" }}>After level</span>
+                      <div style={{ width: 38 }}>
+                        <NI
+                          value={grp.afterLevel}
+                          onChange={(v) => {
+                            const next = [...cfg.perLevelTpGroups]
+                            next[gi] = { ...next[gi], afterLevel: Math.max(1, Math.round(v)) }
+                            upd("perLevelTpGroups", next)
+                          }}
+                          min={1} step={1}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }} />
+                      {/* Remove group button */}
+                      {cfg.perLevelTpGroups.length > 1 && (
+                        <button
+                          onMouseDown={stopProp}
+                          onClick={() => upd("perLevelTpGroups", cfg.perLevelTpGroups.filter((_, idx) => idx !== gi))}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "1px 3px", color: "rgba(255,71,87,0.5)", display: "flex", alignItems: "center" }}
+                        >
+                          <Trash2 size={8} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* TP levels in this group */}
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.35, paddingLeft: 2 }}>
+                      <span>#</span><span>TP %</span><span>Close %</span>
+                    </div>
+                    {grp.levels.slice(0, cfg.multiTpCount).map((lvl, li) => (
+                      <div key={li} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
+                        <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.38 }}>{li + 1}</span>
+                        <NI value={lvl.tpPercent} onChange={(v) => {
+                          const next = cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : {
+                            ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v })
+                          })
+                          upd("perLevelTpGroups", next)
+                        }} suffix="%" step={0.1} min={0} />
+                        <NI value={lvl.closePercent} onChange={(v) => {
+                          const next = cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : {
+                            ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, closePercent: Math.min(100, Math.max(1, v)) })
+                          })
+                          upd("perLevelTpGroups", next)
+                        }} suffix="%" step={1} min={1} />
+                      </div>
+                    ))}
+                    {/* Sync count if needed */}
+                    {grp.levels.length < cfg.multiTpCount && (() => {
+                      const needed = cfg.multiTpCount - grp.levels.length
+                      setTimeout(() => {
+                        const next = cfg.perLevelTpGroups.map((g, idx) => {
+                          if (idx !== gi) return g
+                          const lvls = [...g.levels]
+                          for (let k = 0; k < needed; k++) lvls.push({ tpPercent: 1.5, closePercent: Math.round(100 / cfg.multiTpCount) })
+                          return { ...g, levels: lvls }
+                        })
+                        upd("perLevelTpGroups", next)
+                      }, 0)
+                      return null
+                    })()}
+                  </div>
+                ))}
+
+                {/* Add group button */}
+                <button
+                  onMouseDown={stopProp}
+                  onClick={() => {
+                    const defaultLvls: GridMultiTpLevel[] = Array.from({ length: cfg.multiTpCount }, (_, i) => ({
+                      tpPercent: parseFloat(((i + 1) * 0.5).toFixed(1)),
+                      closePercent: Math.round(100 / cfg.multiTpCount),
+                    }))
+                    upd("perLevelTpGroups", [...cfg.perLevelTpGroups, { afterLevel: cfg.perLevelTpGroups.length + 1, levels: defaultLvls }])
+                  }}
+                  className="flex items-center gap-1 w-full"
+                  style={{ fontSize: 9, fontFamily: "monospace", padding: "3px 6px", background: "rgba(30,111,239,0.08)", color: "rgba(30,111,239,0.8)", border: "1px solid rgba(30,111,239,0.2)", borderRadius: 3, cursor: "pointer" }}
+                >
+                  <Plus size={8} /> Add Group
+                </button>
               </div>
             )}
           </div>

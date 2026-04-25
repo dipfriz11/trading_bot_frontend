@@ -260,6 +260,11 @@ export interface GridMultiTpLevel {
   closePercent: number
 }
 
+export interface GridPerLevelTp {
+  afterLevel: number   // after how many grid orders filled
+  levels: GridMultiTpLevel[]
+}
+
 export interface GridResetTpLevel {
   level: number
   resetTpPercent: number
@@ -318,7 +323,10 @@ export interface GridConfig {
   tpPercent: number
   tpClosePercent: number
   multiTpEnabled: boolean
+  multiTpCount: number
   multiTpLevels: GridMultiTpLevel[]
+  perLevelTpEnabled: boolean
+  perLevelTpGroups: GridPerLevelTp[]
 
   // SL
   slEnabled: boolean
@@ -387,9 +395,14 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   tpPercent: 1.2,
   tpClosePercent: 100,
   multiTpEnabled: false,
+  multiTpCount: 2,
   multiTpLevels: [
     { tpPercent: 0.8, closePercent: 50 },
     { tpPercent: 1.5, closePercent: 50 },
+  ],
+  perLevelTpEnabled: false,
+  perLevelTpGroups: [
+    { afterLevel: 1, levels: [{ tpPercent: 1.2, closePercent: 100 }] },
   ],
 
   slEnabled: true,
