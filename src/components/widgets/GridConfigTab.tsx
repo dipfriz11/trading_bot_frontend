@@ -763,6 +763,12 @@ export function GridConfigTab({
               SL
             </span>
             <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
+            <LabelTooltip
+              label="Stop New"
+              color={cfg.stopNew ? "rgba(251,191,36,0.8)" : undefined}
+              tooltip="Прекратить создавать новые ордера сетки при авто-рестарте (только пересоздаёт TP/SL). Полезно когда рынок вышел за допустимый диапазон."
+            />
+            <MiniToggle checked={cfg.stopNew} onChange={(v) => upd("stopNew", v)} />
           </div>
         </div>
 
