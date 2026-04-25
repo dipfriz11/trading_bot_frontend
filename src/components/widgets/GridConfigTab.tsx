@@ -218,15 +218,6 @@ function TI({ value, onChange, placeholder, title }: { value: string; onChange: 
   )
 }
 
-function RO({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
-  return (
-    <div style={{ ...readonlyBase, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <span style={{ fontSize: 10, opacity: 0.45 }}>{label}</span>
-      <span style={{ fontWeight: 600, color: accent ? "#00e5a0" : "rgba(120,170,255,0.9)" }}>{value}</span>
-    </div>
-  )
-}
-
 function Seg<T extends string>({
   options, value, onChange, style,
 }: { options: { v: T; label: string; title?: string; pro?: boolean }[]; value: T; onChange: (v: T) => void; style?: React.CSSProperties }) {
@@ -372,7 +363,6 @@ export function GridConfigTab({
   const [open, setOpen] = useState({
     entry: true,
     gridSetup: true,
-    sizePreview: false,
     summary: false,
     tp: true,
     sl: true,
@@ -560,26 +550,10 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 5. SIZE PREVIEW ──────────────────────────── */}
-      <div style={{ marginBottom: 6 }}>
-        <SectionHead title="5. SIZE PREVIEW" expanded={open.sizePreview} onToggle={() => tog("sizePreview")} />
-        {open.sizePreview && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            <div className="grid grid-cols-2" style={{ gap: 4 }}>
-              <RO label="First Order" value={`${derived.firstOrderSize.toFixed(2)} USDT`} />
-              <RO label="Last Order" value={`${derived.lastOrderSize.toFixed(2)} USDT`} />
-              <RO label="Max Position" value={`${derived.maxPositionSize.toFixed(2)} USDT`} accent />
-              <RO label="Total Orders" value={derived.totalLevels} />
-            </div>
-          </div>
-        )}
-      </div>
-      <Divider />
-
-      {/* ── 6. TAKE PROFIT ───────────────────────────── */}
+      {/* ── 5. TAKE PROFIT ───────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="6. TAKE PROFIT"
+          title="5. TAKE PROFIT"
           expanded={open.tp}
           onToggle={() => tog("tp")}
           rightSlot={<MiniToggle checked={cfg.tpEnabled} onChange={(v) => upd("tpEnabled", v)} />}
@@ -658,10 +632,10 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 7. STOP LOSS ─────────────────────────────── */}
+      {/* ── 6. STOP LOSS ─────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="7. STOP LOSS"
+          title="6. STOP LOSS"
           expanded={open.sl}
           onToggle={() => tog("sl")}
           rightSlot={<MiniToggle checked={cfg.slEnabled} onChange={(v) => upd("slEnabled", v)} />}
