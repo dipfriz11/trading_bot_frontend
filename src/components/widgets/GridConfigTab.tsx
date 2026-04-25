@@ -602,55 +602,21 @@ export function GridConfigTab({
 
       {/* ── 5. TRAIL + AUTO RESTART ───────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        {/* Row 1: Trail [toggle] [Trigger% field] [Limit price toggle+field] · · Auto [?] TP [toggle] SL [toggle] */}
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        {/* Always-visible row: Trail label+toggle | Auto label+TP toggle+SL toggle */}
+        <div style={{ display: "flex", alignItems: "center" }}>
           {/* Trail label + toggle */}
           <LabelTooltip
             label="Trail"
             tooltip="Трейлинг сетки — сетка автоматически перемещается за ценой, когда цена уходит за край сетки на заданный процент."
           />
-          <MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />
+          <div style={{ marginLeft: 5 }}>
+            <MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />
+          </div>
 
-          {cfg.trailEnabled && (
-            <>
-              {/* Trigger % field */}
-              <div style={{ width: 80, flexShrink: 0 }}>
-                <NITooltip
-                  value={cfg.trailTriggerPercent}
-                  onChange={(v) => upd("trailTriggerPercent", v)}
-                  label="Trigger %"
-                  title="Trail trigger %"
-                  tooltip="Процент выхода цены за край сетки, при котором запускается перемещение сетки. Например, 1% — сетка сдвигается когда цена ушла на 1% за крайний ордер."
-                />
-              </div>
-
-              {/* Limit price sub-row: enable toggle + price field */}
-              <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                <LabelTooltip
-                  label="Lim"
-                  tooltip="Предельная цена трейлинга. Если цена достигает этого уровня — трейлинг останавливается. Возобновляется автоматически, когда цена снова выполняет условие триггера."
-                  color="rgba(200,214,229,0.4)"
-                />
-                <MiniToggle checked={cfg.trailLimitPriceEnabled} onChange={(v) => upd("trailLimitPriceEnabled", v)} />
-                {cfg.trailLimitPriceEnabled && (
-                  <div style={{ width: 72, flexShrink: 0 }}>
-                    <NI
-                      value={cfg.trailLimitPrice}
-                      onChange={(v) => upd("trailLimitPrice", v)}
-                      label="price"
-                      min={0}
-                      title="Trail limit price"
-                    />
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Spacer */}
+          {/* Spacer always pushes Auto to the right */}
           <div style={{ flex: 1 }} />
 
-          {/* Auto Restart label + TP/SL toggles */}
+          {/* Auto Restart label + TP/SL toggles — always visible */}
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <LabelTooltip
               label="Auto"
@@ -666,6 +632,43 @@ export function GridConfigTab({
             <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
           </div>
         </div>
+
+        {/* Row 2 (Trail settings) — only when Trail is enabled */}
+        {cfg.trailEnabled && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5 }}>
+            {/* Trigger % */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <NITooltip
+                value={cfg.trailTriggerPercent}
+                onChange={(v) => upd("trailTriggerPercent", v)}
+                label="Trigger %"
+                title="Trail trigger %"
+                tooltip="Процент выхода цены за край сетки, при котором запускается перемещение сетки. Например, 1% — сетка сдвигается когда цена ушла на 1% за крайний ордер."
+              />
+            </div>
+
+            {/* Limit price: toggle + field */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              <LabelTooltip
+                label="Lim"
+                tooltip="Предельная цена трейлинга. Если цена достигает этого уровня — трейлинг останавливается. Возобновляется автоматически, когда цена снова выполняет условие триггера."
+                color="rgba(200,214,229,0.4)"
+              />
+              <MiniToggle checked={cfg.trailLimitPriceEnabled} onChange={(v) => upd("trailLimitPriceEnabled", v)} />
+            </div>
+            {cfg.trailLimitPriceEnabled && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <NITooltip
+                  value={cfg.trailLimitPrice}
+                  onChange={(v) => upd("trailLimitPrice", v)}
+                  label="Lim price"
+                  title="Trail limit price"
+                  tooltip="Предельная цена трейлинга. Если цена достигает этого уровня — трейлинг останавливается. Возобновляется автоматически, когда цена снова выполняет условие триггера."
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <Divider />
 
