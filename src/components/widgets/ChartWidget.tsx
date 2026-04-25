@@ -414,15 +414,19 @@ interface GridOrdersOverlayProps {
   onGridOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
 }
 
+// Grid order line — same visual style as single order lines (BuyOrderBadge pattern)
 function GridOrderLine({
   price, toY, minPrice, maxPrice, width, padding,
-  color, opacity, label, priceTag, isDraggable,
+  lineColor, badgeBg, badgeFg, priceTagBg, priceTagFg,
+  label, priceTag, isDraggable, isPreview,
   id, onDragStart, registerMove,
 }: {
   price: number; toY: (p: number) => number; minPrice: number; maxPrice: number
   width: number; padding: { left: number; right: number; top: number; bottom: number }
-  color: string; opacity: number; label: string; priceTag: string
-  isDraggable?: boolean; id: string
+  lineColor: string; badgeBg: string; badgeFg: string
+  priceTagBg: string; priceTagFg: string
+  label: string; priceTag: string
+  isDraggable?: boolean; isPreview?: boolean; id: string
   onDragStart?: (e: React.MouseEvent) => void
   registerMove?: (id: string, fn: (p: number) => void) => void
 }) {
@@ -451,38 +455,110 @@ function GridOrderLine({
 
   const y = toY(price)
   renderedYRef.current = y
-  const axisX = width - padding.right
-  const charW = 5.5
-  const PAD = 6
+  const PAD = 8
+  const charW = 5.8
+  const badgeH = 20
+  const by = y - badgeH / 2
+  const badgeX = padding.left + 4
   const labelW = PAD + label.length * charW + PAD
-  const tagW = 52
+  const axisX = width - padding.right
+  const axisPriceW = 56
+  const lineOpacity = isPreview ? 0.5 : 0.85
 
   return (
     <g ref={groupRef}>
-      {/* Full-width dashed line */}
-      <line x1={padding.left} y1={y} x2={axisX} y2={y}
-        stroke={color} strokeWidth={1} strokeDasharray="3,3" opacity={opacity} />
-      {/* Left label badge */}
+      {/* Dashed horizontal line spanning full chart area */}
+      <line x1={padding.left} y1={y} x2={badgeX - 1} y2={y}
+        stroke={lineColor} strokeWidth={1} strokeDasharray="4,3" opacity={lineOpacity} />
+      <line x1={badgeX + labelW + 2} y1={y} x2={axisX - 1} y2={y}
+        stroke={lineColor} strokeWidth={1} strokeDasharray="4,3" opacity={lineOpacity} />
+      {/* Left badge — same pattern as BuyOrderBadge/draft */}
       <g style={{ cursor: isDraggable ? "ns-resize" : "default" }}
         onMouseDown={isDraggable ? onDragStart : undefined}>
-        <rect x={padding.left + 3} y={y - 9} width={labelW} height={18}
-          fill={`${color}18`} stroke={color} strokeWidth={0.8} rx={2} opacity={opacity} />
-        <text x={padding.left + 3 + PAD} y={y + 4} fontSize={9} fill={color}
-          fontFamily="Geist Variable, monospace" fontWeight="600" opacity={opacity}
+        <rect x={badgeX} y={by} width={labelW} height={badgeH}
+          fill={isPreview ? `${badgeBg}18` : badgeBg}
+          stroke={isPreview ? lineColor : "none"}
+          strokeWidth={isPreview ? 1 : 0} rx={3}
+          opacity={isPreview ? 0.85 : 1} />
+        <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={badgeFg}
+          fontFamily="Geist Variable, monospace" fontWeight="600"
+          opacity={isPreview ? 0.8 : 1}
           style={{ pointerEvents: "none" }}>
           {label}
         </text>
       </g>
-      {/* Right price tag */}
-      <rect x={axisX} y={y - 9} width={tagW} height={18}
-        fill={`${color}bb`} rx={2} opacity={opacity} />
-      <text x={axisX + tagW / 2} y={y + 4} textAnchor="middle" fontSize={9}
-        fill="rgba(0,0,0,0.85)" fontFamily="Geist Variable, monospace" fontWeight="700"
-        opacity={opacity} style={{ pointerEvents: "none" }}>
+      {/* Right price tag on axis — identical to BuyOrderBadge price tag */}
+      <rect x={axisX} y={y - 9} width={axisPriceW} height={18}
+        fill={priceTagBg} rx={2}
+        opacity={isPreview ? 0.7 : 1}
+        style={{ pointerEvents: "none" }} />
+      <text x={axisX + axisPriceW / 2} y={y + 4} textAnchor="middle" fontSize={9}
+        fill={priceTagFg}
+        fontFamily="Geist Variable, monospace" fontWeight="bold"
+        opacity={isPreview ? 0.85 : 1}
+        style={{ pointerEvents: "none" }}>
         {priceTag}
       </text>
     </g>
   )
+}
+
+// Color palettes matching single-order style
+function getGridColors(side: "long" | "short", isPreview: boolean) {
+  // Preview: same grey as single-order draft
+  if (isPreview) {
+    return {
+      entry: {
+        lineColor: CHART_COLORS.draft,
+        badgeBg: CHART_COLORS.draft,
+        badgeFg: "rgba(200,214,229,0.9)",
+        priceTagBg: "rgba(80,95,115,0.9)",
+        priceTagFg: "rgba(200,214,229,0.9)",
+      },
+      // TP/SL also grey in preview
+      tp: {
+        lineColor: "rgba(140,155,175,0.7)",
+        badgeBg: "rgba(140,155,175,0.7)",
+        badgeFg: "rgba(200,214,229,0.85)",
+        priceTagBg: "rgba(70,85,105,0.85)",
+        priceTagFg: "rgba(200,214,229,0.85)",
+      },
+      sl: {
+        lineColor: "rgba(140,155,175,0.6)",
+        badgeBg: "rgba(140,155,175,0.6)",
+        badgeFg: "rgba(200,214,229,0.8)",
+        priceTagBg: "rgba(70,85,105,0.8)",
+        priceTagFg: "rgba(200,214,229,0.8)",
+      },
+    }
+  }
+  const isLong = side === "long"
+  return {
+    // Entry: green for long, red for short — same as single BUY/SELL placed orders
+    entry: {
+      lineColor: isLong ? "#1a7a5a" : "#7a1a1a",
+      badgeBg: isLong ? "#1a7a5a" : "#7a1a1a",
+      badgeFg: isLong ? "#00e5a0" : "#e06070",
+      priceTagBg: isLong ? "#1a7a5a" : "#7a1a1a",
+      priceTagFg: isLong ? "#00e5a0" : "#e06070",
+    },
+    // TP: red for long (profit target above), green for short
+    tp: {
+      lineColor: isLong ? "#7a1a1a" : "#1a7a5a",
+      badgeBg: isLong ? "#7a1a1a" : "#1a7a5a",
+      badgeFg: isLong ? "#e06070" : "#00e5a0",
+      priceTagBg: isLong ? "#7a1a1a" : "#1a7a5a",
+      priceTagFg: isLong ? "#e06070" : "#00e5a0",
+    },
+    // SL always orange
+    sl: {
+      lineColor: "#8a4800",
+      badgeBg: "#8a4800",
+      badgeFg: "#ffaa44",
+      priceTagBg: "#8a4800",
+      priceTagFg: "#ffaa44",
+    },
+  }
 }
 
 function GridOrdersOverlay({
@@ -495,17 +571,8 @@ function GridOrdersOverlay({
       {gridOrdersList.map((grid) => {
         const isPreview = grid.state === "preview"
         const isLong = grid.side === "long"
-        const entryTextColor = isPreview
-          ? "rgba(160,175,200,0.9)"
-          : isLong ? "#00e5a0" : "#ff4757"
-        const tpColor = isPreview
-          ? "rgba(160,175,200,0.5)"
-          : isLong ? "#7a1a1a" : "#1a7a5a"  // TP: long=red, short=green
-        const slColor = isPreview
-          ? "rgba(160,175,200,0.4)"
-          : "rgba(255,140,0,0.85)"            // SL always orange
-
-        const entryOpacity = isPreview ? 0.55 : 0.85
+        const colors = getGridColors(grid.side, isPreview)
+        const chartH = height - padding.top - padding.bottom
 
         return (
           <g key={grid.consoleId}>
@@ -517,31 +584,30 @@ function GridOrdersOverlay({
                 price={o.price}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                color={isPreview ? "rgba(160,175,200,0.6)" : entryTextColor}
-                opacity={entryOpacity}
+                {...colors.entry}
                 label={`${isLong ? "BUY" : "SELL"} #${idx + 1}`}
                 priceTag={formatPrice(o.price)}
                 isDraggable={isPreview}
-                onDragStart={(e) => onGridOrderDragStart?.(grid.consoleId, o.id, e, toPrice, minPrice, maxPrice, height - padding.top - padding.bottom, padding.top)}
+                isPreview={isPreview}
+                onDragStart={(e) => onGridOrderDragStart?.(grid.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             ))}
-            {/* TP line */}
+            {/* TP lines */}
             {grid.tpPrice !== null && (
               <GridOrderLine
                 id={`grid:${grid.consoleId}:tp`}
                 price={grid.tpPrice}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                color={tpColor}
-                opacity={isPreview ? 0.5 : 0.85}
+                {...colors.tp}
                 label="TP"
                 priceTag={formatPrice(grid.tpPrice)}
                 isDraggable={false}
+                isPreview={isPreview}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             )}
-            {/* Multi TP lines */}
             {grid.tpLevels.slice(1).map((tp, idx) => (
               <GridOrderLine
                 key={`tp${idx + 2}`}
@@ -549,11 +615,11 @@ function GridOrdersOverlay({
                 price={tp}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                color={tpColor}
-                opacity={isPreview ? 0.4 : 0.7}
+                {...colors.tp}
                 label={`TP ${idx + 2}`}
                 priceTag={formatPrice(tp)}
                 isDraggable={false}
+                isPreview={isPreview}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             ))}
@@ -564,11 +630,11 @@ function GridOrdersOverlay({
                 price={grid.slPrice}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                color={slColor}
-                opacity={isPreview ? 0.5 : 0.85}
+                {...colors.sl}
                 label="SL"
                 priceTag={formatPrice(grid.slPrice)}
                 isDraggable={false}
+                isPreview={isPreview}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             )}
