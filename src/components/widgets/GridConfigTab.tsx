@@ -749,26 +749,41 @@ export function GridConfigTab({
           {/* Spacer always pushes Auto to the right */}
           <div style={{ flex: 1 }} />
 
-          {/* Auto Restart — always visible */}
+          {/* Auto — master toggle + conditional sub-toggles */}
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <LabelTooltip
               label="Auto"
-              tooltip="Авто-рестарт сетки: после срабатывания TP или SL новая сетка автоматически размещается по текущей рыночной цене согласно текущему конфигу."
+              color={cfg.autoEnabled ? "rgba(52,211,153,0.8)" : undefined}
+              tooltip="Авто-цикл сетки: после срабатывания TP новая сетка автоматически размещается по текущей рыночной цене. По умолчанию то же происходит после SL — отключите тумблер SL чтобы остановить цикл после стопа."
             />
-            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.75)" : "rgba(154,164,174,0.38)", letterSpacing: "0.04em" }}>
-              TP
-            </span>
-            <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
-            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)", letterSpacing: "0.04em" }}>
-              SL
-            </span>
-            <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
-            <LabelTooltip
-              label="Stop New"
-              color={cfg.stopNew ? "rgba(251,191,36,0.8)" : undefined}
-              tooltip="Прекратить создавать новые ордера сетки при авто-рестарте (только пересоздаёт TP/SL). Полезно когда рынок вышел за допустимый диапазон."
+            <MiniToggle
+              checked={cfg.autoEnabled}
+              onChange={(v) => {
+                upd("autoEnabled", v)
+                if (!v) {
+                  upd("stopOnSl", false)
+                  upd("stopNew", false)
+                }
+              }}
             />
-            <MiniToggle checked={cfg.stopNew} onChange={(v) => upd("stopNew", v)} />
+            {cfg.autoEnabled && (
+              <>
+                <LabelTooltip
+                  label="SL"
+                  color={cfg.stopOnSl ? "rgba(248,113,113,0.45)" : "rgba(248,113,113,0.75)"}
+                  tooltip={cfg.stopOnSl
+                    ? "После срабатывания SL новый цикл сетки НЕ запускается — цикл останавливается."
+                    : "После срабатывания SL новая сетка создаётся автоматически (по умолчанию). Включите тумблер чтобы остановить цикл после SL."}
+                />
+                <MiniToggle checked={cfg.stopOnSl} onChange={(v) => upd("stopOnSl", v)} />
+                <LabelTooltip
+                  label="Stop New"
+                  color={cfg.stopNew ? "rgba(251,191,36,0.8)" : undefined}
+                  tooltip="Остановить цикл после следующего срабатывания TP/SL. При этом TP пересчитывается на уровень безубытка. Удобно для мягкого выхода из авто-цикла."
+                />
+                <MiniToggle checked={cfg.stopNew} onChange={(v) => upd("stopNew", v)} />
+              </>
+            )}
           </div>
         </div>
 
