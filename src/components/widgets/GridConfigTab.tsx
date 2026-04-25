@@ -583,7 +583,7 @@ export function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, gridOrders } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, gridOrders } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each side gets its own independent slot so Long and Short are separate legs
   const consoleId = `${baseConsoleId}:${cfg.side}`
@@ -730,12 +730,12 @@ export function GridConfigTab({
     })
   }, [cfg, activeChartId, isPlaced])
 
-  // Clear preview for current side when consoleId changes (side switch)
+  // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
   useEffect(() => {
-    return () => { cancelGridOrders(consoleId) }
+    return () => { cancelGridPreview(consoleId) }
   }, [consoleId])
 
-  // Clear both sides on unmount
+  // On full unmount, cancel both sides completely (including placed)
   useEffect(() => {
     return () => {
       cancelGridOrders(`${baseConsoleId}:long`)

@@ -160,6 +160,7 @@ interface TerminalContextValue {
   setGridPreview: (consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => void
   placeGridOrders: (consoleId: string) => void
   cancelGridOrders: (consoleId: string) => void
+  cancelGridPreview: (consoleId: string) => void
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
   markGridPendingUpdate: (consoleId: string) => void
   removeGridTpSl: (consoleId: string, target: "tp" | "sl") => void
@@ -450,6 +451,17 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  // Cancel only if still in preview state — placed grids survive side switching
+  const cancelGridPreview = useCallback((consoleId: string) => {
+    setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry || entry.state === "placed") return prev
+      const n = { ...prev }
+      delete n[consoleId]
+      return n
+    })
+  }, [])
+
   const updateGridPreviewPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -524,6 +536,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         setGridPreview,
         placeGridOrders,
         cancelGridOrders,
+        cancelGridPreview,
         updateGridPreviewPrice,
         markGridPendingUpdate,
         removeGridTpSl,
