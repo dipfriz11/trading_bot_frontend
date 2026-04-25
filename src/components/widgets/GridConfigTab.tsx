@@ -221,7 +221,7 @@ function NITooltip({
   )
 }
 
-function LabelTooltip({ label, tooltip, color }: { label: string; tooltip: string; color?: string }) {
+function LabelTooltip({ label, tooltip, color, align = "left" }: { label: string; tooltip: string; color?: string; align?: "left" | "right" }) {
   const [show, setShow] = useState(false)
   return (
     <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 3 }}>
@@ -241,7 +241,9 @@ function LabelTooltip({ label, tooltip, color }: { label: string; tooltip: strin
       </button>
       {show && (
         <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 999, minWidth: 160, maxWidth: 220,
+          position: "absolute", top: "calc(100% + 4px)",
+          ...(align === "right" ? { right: 0 } : { left: 0 }),
+          zIndex: 999, minWidth: 160, maxWidth: 220,
           background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
           borderRadius: 5, padding: "7px 9px",
           fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
@@ -780,6 +782,7 @@ export function GridConfigTab({
                   label="Stop New"
                   color={cfg.stopNew ? "rgba(251,191,36,0.8)" : undefined}
                   tooltip="Остановить цикл после следующего срабатывания TP/SL. При этом TP пересчитывается на уровень безубытка. Удобно для мягкого выхода из авто-цикла."
+                  align="right"
                 />
                 <MiniToggle checked={cfg.stopNew} onChange={(v) => upd("stopNew", v)} />
               </>
