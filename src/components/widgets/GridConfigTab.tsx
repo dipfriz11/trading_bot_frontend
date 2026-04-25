@@ -614,7 +614,7 @@ export function GridConfigTab({
         <div style={{ ...gap4, marginTop: 0 }}>
           {/* Current Price row with order type switcher */}
           <div style={{ ...readonlyBase, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "3px 6px" }}>
-            <span style={{ fontSize: 9, opacity: 0.4, whiteSpace: "nowrap", fontFamily: "monospace" }}>Current Price</span>
+            <span style={{ fontSize: 9, opacity: 0.4, whiteSpace: "nowrap", fontFamily: "monospace" }}>{cfg.symbol ?? "Current Price"}</span>
             <span style={{ fontWeight: 700, color: "#00e5a0", fontSize: 11, flex: 1, textAlign: "right", marginRight: 6 }}>
               {cfg.entryPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
