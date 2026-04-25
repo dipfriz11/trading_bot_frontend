@@ -468,6 +468,9 @@ function GridOrderLine({
   const chartBottom = toY(minPrice)
   const rawY = toY(price)
   const stackOffset = (edgeOffset ?? 0) * 22
+  // Above chart (price > maxPrice): TP with higher price (larger edgeOffset) is closer
+  // to the top edge. So offset pushes downward from the edge (positive y delta).
+  // Below chart: offset pushes upward from the bottom edge.
   const y = outOfRange
     ? (price > maxPrice ? chartTop + 2 + stackOffset : chartBottom - 2 - stackOffset)
     : rawY
@@ -630,37 +633,29 @@ function GridOrdersOverlay({
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             ))}
-            {grid.tpPrice !== null && (
-              <GridOrderLine
-                id={`grid:${grid.consoleId}:tp`}
-                price={grid.tpPrice}
-                label={isPreview ? "TP 1 — draft" : "TP 1"}
-                side={grid.side}
-                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-                width={width} padding={padding}
-                isDraft={isPreview} isDraggable={false}
-                clampToEdge edgeOffset={0}
-                {...tpColors}
-                onClose={() => onGridClose?.(grid.consoleId, "tp", 0)}
-                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
-              />
-            )}
-            {grid.tpLevels.slice(1).map((tp, idx) => (
-              <GridOrderLine
-                key={`tp${idx + 2}`}
-                id={`grid:${grid.consoleId}:tp${idx + 2}`}
-                price={tp}
-                label={isPreview ? `TP ${idx + 2} — draft` : `TP ${idx + 2}`}
-                side={grid.side}
-                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-                width={width} padding={padding}
-                isDraft={isPreview} isDraggable={false}
-                clampToEdge edgeOffset={idx + 1}
-                {...tpColors}
-                onClose={() => onGridClose?.(grid.consoleId, "tp", idx + 1)}
-                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
-              />
-            ))}
+            {grid.tpLevels.map((tp, idx) => {
+              const totalTp = grid.tpLevels.length
+              // For LONG: higher price = closer to top edge = smaller edgeOffset
+              // tpLevels are sorted ascending for long, so last element is highest price
+              // edgeOffset: highest-price TP gets 0, lowest-price TP gets totalTp-1
+              const edgeOffset = isLong ? totalTp - 1 - idx : idx
+              return (
+                <GridOrderLine
+                  key={`tp${idx + 1}`}
+                  id={`grid:${grid.consoleId}:tp${idx === 0 ? "" : idx + 1}`}
+                  price={tp}
+                  label={isPreview ? `TP ${idx + 1} — draft` : `TP ${idx + 1}`}
+                  side={grid.side}
+                  toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+                  width={width} padding={padding}
+                  isDraft={isPreview} isDraggable={false}
+                  clampToEdge edgeOffset={edgeOffset}
+                  {...tpColors}
+                  onClose={() => onGridClose?.(grid.consoleId, "tp", idx)}
+                  registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+                />
+              )
+            })}
             {grid.slPrice !== null && (
               <GridOrderLine
                 id={`grid:${grid.consoleId}:sl`}
