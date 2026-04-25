@@ -30,29 +30,25 @@ const readonlyBase: React.CSSProperties = {
 
 function TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
+  const anchorRef = useRef<HTMLSpanElement>(null)
 
-  const show = (visible: boolean) => {
-    if (!visible) { setPos(null); return }
-    const r = btnRef.current?.getBoundingClientRect()
+  const openTooltip = () => {
+    const r = anchorRef.current?.getBoundingClientRect()
     if (r) setPos({ x: r.left + r.width / 2, y: r.top })
   }
 
   return (
-    <span style={{ display: "inline-flex", alignItems: "center" }}>
-      <button
-        ref={btnRef}
-        onMouseEnter={() => show(true)}
-        onMouseLeave={() => show(false)}
-        onClick={(e) => { e.stopPropagation(); pos ? setPos(null) : show(true) }}
-        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", pointerEvents: "auto" }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: color ? 0.7 : 0.45 }}>
-          <circle cx="5" cy="5" r="4.5" stroke={color ?? "rgba(200,214,229,0.6)"} />
-          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill={color ?? "rgba(200,214,229,0.8)"} fontFamily="monospace">?</text>
-        </svg>
-      </button>
+    <span
+      ref={anchorRef}
+      onMouseEnter={openTooltip}
+      onMouseLeave={() => setPos(null)}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{ display: "inline-flex", alignItems: "center", cursor: "help", padding: "2px", pointerEvents: "auto" }}
+    >
+      <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: color ? 0.7 : 0.45, display: "block" }}>
+        <circle cx="5" cy="5" r="4.5" stroke={color ?? "rgba(200,214,229,0.6)"} />
+        <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill={color ?? "rgba(200,214,229,0.8)"} fontFamily="monospace">?</text>
+      </svg>
       {pos && (
         <div style={{
           position: "fixed",
