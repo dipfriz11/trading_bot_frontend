@@ -357,6 +357,7 @@ interface ChartProps {
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   gridOrdersList?: ChartGridOrders[]
   onGridOrderDragStart?: GridOrdersOverlayProps["onGridOrderDragStart"]
+  onGridClose?: GridOrdersOverlayProps["onGridClose"]
 }
 
 interface OrdersOverlayProps {
@@ -413,22 +414,26 @@ interface GridOrdersOverlayProps {
   padding: { left: number; right: number; top: number; bottom: number }
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   onGridOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+  onGridClose?: (consoleId: string, target: "tp" | "sl") => void
 }
 
-// Single grid line rendered through BuyOrderBadge (all grid entry orders are on the left/buy side)
+// Single grid line rendered through BuyOrderBadge — identical style to single orders.
+// When clampToEdge=true the line is always shown even if price is outside visible range
+// (needed for TP above maxPrice / SL below minPrice).
 function GridOrderLine({
   id, price, label, toY, minPrice, maxPrice, width, padding,
-  isDraft, isDraggable,
+  isDraft, isDraggable, clampToEdge,
   color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
-  onDragStart, registerMove,
+  onClose, onDragStart, registerMove,
 }: {
   id: string; price: number; label: string
   toY: (p: number) => number; minPrice: number; maxPrice: number
   width: number; padding: { left: number; right: number; top: number; bottom: number }
-  isDraft: boolean; isDraggable: boolean
+  isDraft: boolean; isDraggable: boolean; clampToEdge?: boolean
   color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
+  onClose?: () => void
   onDragStart?: (e: React.MouseEvent) => void
   registerMove?: (id: string, fn: (p: number) => void) => void
 }) {
@@ -453,10 +458,18 @@ function GridOrderLine({
     renderedYRef.current = toY(price)
   })
 
-  if (price < minPrice || price > maxPrice) return null
+  const outOfRange = price < minPrice || price > maxPrice
+  if (outOfRange && !clampToEdge) return null
 
-  const y = toY(price)
-  renderedYRef.current = y
+  // When out of range and clampToEdge, snap badge to top/bottom edge of chart area
+  const chartTop = padding.top
+  const chartBottom = padding.top + (toY(minPrice) - toY(maxPrice))
+  const rawY = toY(price)
+  const y = outOfRange
+    ? (price > maxPrice ? chartTop + 2 : chartBottom - 2)
+    : rawY
+  renderedYRef.current = rawY
+
   const axisX = width - padding.right
   const PAD = 8
   const CLOSE_W = 20
@@ -468,10 +481,8 @@ function GridOrderLine({
 
   return (
     <g ref={groupRef} opacity={opacity}>
-      {/* Dashed line left of badge */}
       <line x1={padding.left} y1={y} x2={badgeX - 1} y2={y}
         stroke={color} strokeWidth={1} strokeDasharray="4,3" />
-      {/* Dashed line right of badge */}
       <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
         stroke={color} strokeWidth={1} strokeDasharray="4,3" />
       <BuyOrderBadge
@@ -480,7 +491,7 @@ function GridOrderLine({
         closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
         priceTagColor={priceTagColor} priceTagFg={priceTagFg}
         priceTag={formatPrice(price)}
-        onClose={() => {}}
+        onClose={onClose ?? (() => {})}
         onDragStart={onDragStart ?? (() => {})}
         axisX={axisX} padLeft={padding.left}
         isEditing={false}
@@ -551,7 +562,7 @@ const SL_COLORS = {
 }
 
 function GridOrdersOverlay({
-  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart,
+  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart, onGridClose,
 }: GridOrdersOverlayProps) {
   if (!gridOrdersList.length) return null
 
@@ -589,7 +600,9 @@ function GridOrdersOverlay({
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
+                clampToEdge
                 {...tpColors}
+                onClose={() => onGridClose?.(grid.consoleId, "tp")}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             )}
@@ -602,7 +615,9 @@ function GridOrdersOverlay({
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
+                clampToEdge
                 {...tpColors}
+                onClose={() => onGridClose?.(grid.consoleId, "tp")}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             ))}
@@ -614,7 +629,9 @@ function GridOrdersOverlay({
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
+                clampToEdge
                 {...slColors}
+                onClose={() => onGridClose?.(grid.consoleId, "sl")}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             )}
@@ -710,7 +727,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -734,6 +751,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           padding={padding}
           dragHandlers={dragHandlers}
           onGridOrderDragStart={onGridOrderDragStart}
+          onGridClose={onGridClose}
         />
       )}
       <OrdersOverlay
@@ -819,7 +837,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -841,6 +859,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           padding={padding}
           dragHandlers={dragHandlers}
           onGridOrderDragStart={onGridOrderDragStart}
+          onGridClose={onGridClose}
         />
       )}
       <OrdersOverlay
@@ -870,7 +889,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    gridOrders, updateGridPreviewPrice,
+    gridOrders, updateGridPreviewPrice, removeGridTpSl,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1183,6 +1202,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     dragHandlers={localDragHandlers}
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
+                    onGridClose={(consoleId, target) => removeGridTpSl(consoleId, target)}
                   />
                 : <LineChart
                     candles={candles} width={size.width} height={Math.max(chartAreaHeight, 80)}
@@ -1194,6 +1214,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     dragHandlers={localDragHandlers}
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
+                    onGridClose={(consoleId, target) => removeGridTpSl(consoleId, target)}
                   />
             )}
           </div>
