@@ -1091,11 +1091,6 @@ export function GridConfigTab({
             <div style={{ display: "flex", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
               {([
                 {
-                  v: "first_order" as const,
-                  label: "First Order",
-                  tooltip: "SL размещается на заданном расстоянии (%) от первого ордера сетки.\n\nРежим по умолчанию — подходит для большинства случаев. Стоп фиксирован и не перемещается после усреднений.\n\nСтоп отображается как превью сразу при настройке сетки. Реальный ордер размещается после входа в позицию.",
-                },
-                {
                   v: "extreme_order" as const,
                   label: "Extreme Order",
                   tooltip: "SL размещается на заданном расстоянии (%) от крайнего (последнего) ордера сетки.\n\nПример: сетка из 8 ордеров, нижний ордер на 65 000 USDT, SL 2.5% → стоп на 63 375 USDT.\n\nСтоп отображается как превью сразу при настройке сетки. После входа в позицию становится реальным ордером.",
@@ -1111,7 +1106,7 @@ export function GridConfigTab({
                   borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.1)" : undefined,
                 }}>
                   <button
-                    onClick={() => upd("slMode", o.v)}
+                    onClick={() => upd("slMode", cfg.slMode === o.v ? null : o.v)}
                     onMouseDown={(e) => e.stopPropagation()}
                     style={{
                       flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px",
@@ -1136,6 +1131,7 @@ export function GridConfigTab({
                 ? "SL размещается на заданном % от средней цены входа — перемещается автоматически после каждого усреднения"
                 : "SL размещается на заданном % от первого ордера сетки — превью сразу, реальный ордер после входа в позицию"}
             </div>
+
           </div>
         )}
         {open.sl && !cfg.slEnabled && (
