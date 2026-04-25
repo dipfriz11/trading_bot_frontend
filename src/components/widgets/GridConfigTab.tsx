@@ -526,20 +526,21 @@ export function GridConfigTab({
     }, 0)
   }
 
-  // Sync from active chart
+  // Sync from active chart — when the chart changes, reset symbol + prices together
   useEffect(() => {
     if (!externalSymbol) return
-    setCfg((p) => {
-      if (p.symbol === externalSymbol) return p
-      // Symbol changed — reset price range so old coin's prices don't carry over.
-      // Use externalEntryPrice if available, else keep topPrice/bottomPrice as 0
-      // so the preview falls back to the chart's live price.
-      const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
-      const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
-      const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
-      return { ...p, symbol: externalSymbol, entryPrice: ref, topPrice: top, bottomPrice: bottom }
-    })
-  }, [externalSymbol])
+    const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
+    const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
+    const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
+    setCfg((p) => ({
+      ...p,
+      symbol: externalSymbol,
+      entryPrice: ref > 0 ? ref : p.entryPrice,
+      topPrice: top > 0 ? top : p.topPrice,
+      bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChartId])
   useEffect(() => { if (externalEntryPrice && externalEntryPrice > 0) setCfg((p) => ({ ...p, entryPrice: externalEntryPrice })) }, [externalEntryPrice])
   useEffect(() => { if (externalLeverage && externalLeverage > 0) setCfg((p) => ({ ...p, leverage: externalLeverage })) }, [externalLeverage])
   useEffect(() => { if (externalFuturesSide) setCfg((p) => ({ ...p, side: externalFuturesSide })) }, [externalFuturesSide])
