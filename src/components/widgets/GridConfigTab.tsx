@@ -526,25 +526,26 @@ export function GridConfigTab({
     }, 0)
   }
 
-  // When the active chart's symbol changes, reset price range to ±3% of the new symbol's price.
-  // Both externalSymbol and externalEntryPrice change together in the same render when
-  // switching charts, so this effect always sees the correct price for the new symbol.
+  // Init price range on chart/symbol change — mirrors the same pattern as the single-order
+  // form in OrderConsoleWidget (initialisedKeyRef keyed on chartId:symbol).
+  // Runs exactly once per unique chart+symbol combination; skip if key unchanged.
+  const initialisedKeyRef = useRef<string>("")
   useEffect(() => {
     if (!externalSymbol) return
+    const key = `${activeChartId ?? ""}:${externalSymbol}`
+    if (initialisedKeyRef.current === key) return
+    initialisedKeyRef.current = key
     const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
     const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
     const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
-    setCfg((p) => {
-      if (p.symbol === externalSymbol) return p
-      return {
-        ...p,
-        symbol: externalSymbol,
-        entryPrice: ref > 0 ? ref : p.entryPrice,
-        topPrice: top > 0 ? top : p.topPrice,
-        bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
-      }
-    })
-  }, [externalSymbol, externalEntryPrice])
+    setCfg((p) => ({
+      ...p,
+      symbol: externalSymbol,
+      entryPrice: ref > 0 ? ref : p.entryPrice,
+      topPrice: top > 0 ? top : p.topPrice,
+      bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
+    }))
+  }, [activeChartId, externalSymbol, externalEntryPrice])
   useEffect(() => { if (externalLeverage && externalLeverage > 0) setCfg((p) => ({ ...p, leverage: externalLeverage })) }, [externalLeverage])
   useEffect(() => { if (externalFuturesSide) setCfg((p) => ({ ...p, side: externalFuturesSide })) }, [externalFuturesSide])
 
