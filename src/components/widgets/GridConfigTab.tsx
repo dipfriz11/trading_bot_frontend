@@ -565,9 +565,8 @@ export function GridConfigTab({
             <div className="grid grid-cols-1" style={{ gap: 4 }}>
               <NITooltip
                 value={cfg.trailTriggerPercent}
-                onChange={(v) => upd("trailTriggerPercent", Math.max(0.01, v))}
+                onChange={(v) => upd("trailTriggerPercent", v)}
                 label="Trigger %"
-                min={0.01}
                 title="Trail trigger %"
                 tooltip="Процент движения цены от края сетки, при котором сетка начинает перемещаться за ценой, сохраняя настроенное расстояние от тренда."
               />
