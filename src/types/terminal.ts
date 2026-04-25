@@ -262,6 +262,7 @@ export interface GridMultiTpLevel {
 
 export interface GridPerLevelTp {
   afterLevel: number   // after how many grid orders filled
+  tpCount: number
   levels: GridMultiTpLevel[]
 }
 
@@ -404,7 +405,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   tpRepositionEnabled: false,
   perLevelTpEnabled: false,
   perLevelTpGroups: [
-    { afterLevel: 1, levels: [{ tpPercent: 1.2, closePercent: 100 }] },
+    { afterLevel: 1, tpCount: 1, levels: [{ tpPercent: 1.2, closePercent: 100 }] },
   ],
 
   slEnabled: true,
