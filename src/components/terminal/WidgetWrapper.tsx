@@ -159,7 +159,7 @@ export function WidgetWrapper({ widget, canvasRef, children, headerExtra }: Widg
           style={{ color: "inherit", opacity: 0.9, letterSpacing: "0.03em" }}
         >
           {widget.title}
-          {widget.type === "order-console"
+          {(widget.type === "order-console" || widget.type === "orderbook" || widget.type === "portfolio")
             ? (() => {
                 const chartWidgets = activeTab?.widgets.filter((w) => w.type === "chart") ?? []
                 const activeChart = chartWidgets.find((w) => w.id === activeChartId) ?? chartWidgets[0]

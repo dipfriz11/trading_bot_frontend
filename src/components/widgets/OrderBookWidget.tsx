@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react"
 import { generateOrderBook, formatPrice } from "@/lib/mock-data"
-import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget } from "@/types/terminal"
 import { useTerminal } from "@/contexts/TerminalContext"
 
@@ -9,8 +8,13 @@ interface OrderBookWidgetProps {
 }
 
 export function OrderBookWidget({ widget }: OrderBookWidgetProps) {
-  const { updateWidget } = useTerminal()
-  const symbol = widget.symbol ?? "BTC/USDT"
+  const { activeChartId, activeTab } = useTerminal()
+
+  // Follow the active chart's symbol automatically
+  const chartWidgets = activeTab?.widgets.filter((w) => w.type === "chart") ?? []
+  const activeChart = chartWidgets.find((w) => w.id === activeChartId) ?? chartWidgets[0]
+  const symbol = activeChart?.symbol ?? widget.symbol ?? "BTC/USDT"
+
   const [data, setData] = useState({ asks: [] as any[], bids: [] as any[] })
 
   useEffect(() => {
@@ -36,19 +40,9 @@ export function OrderBookWidget({ widget }: OrderBookWidgetProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Symbol selector */}
+      {/* Symbol + mid price row */}
       <div className="flex items-center gap-2 px-2 py-1 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <select
-          value={symbol}
-          onChange={(e) => updateWidget(widget.id, { symbol: e.target.value })}
-          className="font-mono text-xs bg-transparent border-0 outline-none cursor-pointer"
-          style={{ color: "inherit", opacity: 0.8 }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {SYMBOLS.map((s) => (
-            <option key={s} value={s} style={{ background: "#0d1526" }}>{s}</option>
-          ))}
-        </select>
+        <span className="font-mono text-xs" style={{ opacity: 0.8 }}>{symbol}</span>
         {mid && (
           <span className="text-xs font-mono ml-auto" style={{ opacity: 0.6 }}>
             Mid: {formatPrice(mid)}
