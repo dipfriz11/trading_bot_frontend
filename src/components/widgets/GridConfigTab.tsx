@@ -785,21 +785,36 @@ export function GridConfigTab({
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <LabelTooltip
               label="Auto"
-              tooltip="Авто-рестарт сетки: после срабатывания TP или SL новая сетка автоматически размещается по текущей рыночной цене согласно текущему конфигу. Используйте TP и SL тумблеры ниже чтобы задать условия перезапуска."
+              tooltip="Авто-рестарт сетки: после срабатывания TP новая сетка автоматически размещается по текущей рыночной цене согласно текущему конфигу."
             />
-            <span style={{ fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.75)" : "rgba(154,164,174,0.38)" }}>TP</span>
-            <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
-            <span style={{ fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)" }}>SL</span>
-            <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
+            {/* Master toggle */}
+            <MiniToggle
+              checked={cfg.autoEnabled}
+              onChange={(v) => {
+                upd("autoEnabled", v)
+                if (!v) {
+                  upd("autoRestartOnSl", false)
+                  upd("autoStopNew", false)
+                }
+              }}
+            />
 
-            {/* Separator */}
-            {(cfg.autoRestartOnTp || cfg.autoRestartOnSl) && (
-              <div style={{ width: 1, height: 10, background: "rgba(154,164,174,0.15)", marginLeft: 2 }} />
-            )}
-
-            {/* STOP NEW — only visible when auto restart is active */}
-            {(cfg.autoRestartOnTp || cfg.autoRestartOnSl) && (
+            {/* Extra options — shown only when auto is on */}
+            {cfg.autoEnabled && (
               <>
+                <div style={{ width: 1, height: 10, background: "rgba(154,164,174,0.15)", marginLeft: 2 }} />
+
+                {/* SL toggle — when ON, restart also after SL */}
+                <span style={{ fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)" }}>SL</span>
+                <TinyTooltipIcon
+                  text="SL — если активирован, авто-цикл продолжается и после срабатывания Stop Loss. По умолчанию выключен: после SL цикл останавливается."
+                  color="rgba(248,113,113,0.55)"
+                />
+                <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
+
+                <div style={{ width: 1, height: 10, background: "rgba(154,164,174,0.15)" }} />
+
+                {/* STOP NEW */}
                 <span style={{
                   fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em",
                   color: cfg.autoStopNew ? "rgba(251,191,36,0.85)" : "rgba(154,164,174,0.38)",
@@ -811,11 +826,7 @@ export function GridConfigTab({
                   text={`STOP NEW — остановить авто-цикл после следующего срабатывания TP/SL.\n\nПри активации: TP перестраивается в один ордер на уровень безубытка на весь объём позиции (независимо от настроек Reset TP).\n\nМожно активировать вручную или через хук TradingView.`}
                   color="rgba(251,191,36,0.7)"
                 />
-                <MiniToggle
-                  checked={cfg.autoStopNew}
-                  onChange={(v) => upd("autoStopNew", v)}
-                  variant="yellow"
-                />
+                <MiniToggle checked={cfg.autoStopNew} onChange={(v) => upd("autoStopNew", v)} variant="yellow" />
               </>
             )}
           </div>
