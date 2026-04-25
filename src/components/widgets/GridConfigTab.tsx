@@ -379,6 +379,31 @@ function PctBtns({ onPct }: { onPct: (p: number) => void }) {
   )
 }
 
+// ─── Close % helpers ─────────────────────────────────────────────────────────
+
+function distributeClose(count: number): number[] {
+  const base = Math.floor(100 / count)
+  const remainder = 100 - base * count
+  return Array.from({ length: count }, (_, i) =>
+    i === count - 1 ? base + remainder : base
+  )
+}
+
+function rebalanceClose(levels: GridMultiTpLevel[], changedIndex: number, newValue: number): GridMultiTpLevel[] {
+  if (levels.length <= 1) return [{ ...levels[0], closePercent: 100 }]
+  const clamped = Math.min(100, Math.max(1, newValue))
+  const lastIdx = levels.length - 1
+  const updated = levels.map((l, i) =>
+    i === changedIndex ? { ...l, closePercent: clamped } : l
+  )
+  if (changedIndex !== lastIdx) {
+    const sumOthers = updated.slice(0, lastIdx).reduce((s, l) => s + l.closePercent, 0)
+    const lastVal = Math.max(1, 100 - sumOthers)
+    updated[lastIdx] = { ...updated[lastIdx], closePercent: lastVal }
+  }
+  return updated
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface GridConfigTabProps {
@@ -745,8 +770,10 @@ export function GridConfigTab({
                         onMouseDown={stopProp}
                         onClick={() => {
                           const n = Math.max(1, cfg.multiTpCount - 1)
+                          const lvls = cfg.multiTpLevels.slice(0, n)
+                          const pcts = distributeClose(n)
                           upd("multiTpCount", n)
-                          upd("multiTpLevels", cfg.multiTpLevels.slice(0, n))
+                          upd("multiTpLevels", lvls.map((l, i) => ({ ...l, closePercent: pcts[i] })))
                           if (n === 1) upd("multiTpEnabled", false)
                         }}
                         style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
@@ -759,9 +786,10 @@ export function GridConfigTab({
                         onClick={() => {
                           const n = Math.min(10, cfg.multiTpCount + 1)
                           const lvls = [...cfg.multiTpLevels]
-                          while (lvls.length < n) lvls.push({ tpPercent: parseFloat((lvls[lvls.length - 1].tpPercent + 0.5).toFixed(2)), closePercent: Math.round(100 / n) })
+                          while (lvls.length < n) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: 0 })
+                          const pcts = distributeClose(n)
                           upd("multiTpCount", n)
-                          upd("multiTpLevels", lvls.slice(0, n))
+                          upd("multiTpLevels", lvls.slice(0, n).map((l, i) => ({ ...l, closePercent: pcts[i] })))
                           if (n > 1) upd("multiTpEnabled", true)
                         }}
                         style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
@@ -798,9 +826,7 @@ export function GridConfigTab({
                       upd("multiTpLevels", next)
                     }} suffix="%" step={0.1} min={0} />
                     <NI value={lvl.closePercent} onChange={(v) => {
-                      const next = [...cfg.multiTpLevels]
-                      next[i] = { ...next[i], closePercent: Math.min(100, Math.max(1, v)) }
-                      upd("multiTpLevels", next)
+                      upd("multiTpLevels", rebalanceClose(cfg.multiTpLevels.slice(0, cfg.multiTpCount), i, v))
                     }} suffix="%" step={1} min={1} />
                   </div>
                 ))}
@@ -844,8 +870,10 @@ export function GridConfigTab({
                                   onMouseDown={stopProp}
                                   onClick={() => {
                                     const n = Math.max(1, grpTpCount - 1)
+                                    const lvls = grp.levels.slice(0, n)
+                                    const pcts = distributeClose(n)
                                     const next = [...cfg.perLevelTpGroups]
-                                    next[gi] = { ...next[gi], tpCount: n, levels: next[gi].levels.slice(0, n) }
+                                    next[gi] = { ...next[gi], tpCount: n, levels: lvls.map((l, i) => ({ ...l, closePercent: pcts[i] })) }
                                     upd("perLevelTpGroups", next)
                                   }}
                                   style={{ padding: "0 4px", height: 15, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
@@ -858,9 +886,10 @@ export function GridConfigTab({
                                   onClick={() => {
                                     const n = Math.min(10, grpTpCount + 1)
                                     const lvls = [...grp.levels]
-                                    while (lvls.length < n) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: Math.round(100 / n) })
+                                    while (lvls.length < n) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: 0 })
+                                    const pcts = distributeClose(n)
                                     const next = [...cfg.perLevelTpGroups]
-                                    next[gi] = { ...next[gi], tpCount: n, levels: lvls.slice(0, n) }
+                                    next[gi] = { ...next[gi], tpCount: n, levels: lvls.slice(0, n).map((l, i) => ({ ...l, closePercent: pcts[i] })) }
                                     upd("perLevelTpGroups", next)
                                   }}
                                   style={{ padding: "0 4px", height: 15, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
@@ -887,7 +916,8 @@ export function GridConfigTab({
                                 upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
                               }} suffix="%" step={0.1} min={0} />
                               <NI value={lvl.closePercent} onChange={(v) => {
-                                upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, closePercent: Math.min(100, Math.max(1, v)) }) }))
+                                const rebalanced = rebalanceClose(grp.levels.slice(0, grpTpCount), li, v)
+                                upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: rebalanced }))
                               }} suffix="%" step={1} min={1} />
                             </div>
                           ))}
