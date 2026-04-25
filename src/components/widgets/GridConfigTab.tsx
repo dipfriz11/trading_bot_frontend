@@ -605,6 +605,65 @@ export function GridConfigTab({
     prevChartOrdersLenRef.current = chartOrdersLen
   }, [chartOrdersLen])
 
+  // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
+  const expectedFirstPriceRef = useRef<number | undefined>(undefined)
+  const expectedLastPriceRef = useRef<number | undefined>(undefined)
+
+  // Sync form fields when first or last grid order is dragged on the chart
+  const chartFirstPrice = currentGridState?.orders[0]?.price
+  const chartLastPrice = currentGridState?.orders.length
+    ? currentGridState.orders[currentGridState.orders.length - 1]?.price
+    : undefined
+  useEffect(() => {
+    if (chartFirstPrice === undefined || chartLastPrice === undefined) return
+
+    // Skip if this matches what the form itself pushed (form-driven update, not a drag)
+    const expFirst = expectedFirstPriceRef.current
+    const expLast = expectedLastPriceRef.current
+    const firstChanged = expFirst === undefined || Math.abs(chartFirstPrice - expFirst) > 0.001
+    const lastChanged = expLast === undefined || Math.abs(chartLastPrice - expLast) > 0.001
+    if (!firstChanged && !lastChanged) return
+
+    setCfg((p) => {
+      const entryPrice = p.entryPrice > 0 ? p.entryPrice : 67000
+      const isLong = p.side === "long"
+
+      if (p.placementMode === "price_range") {
+        // Long:  orders[0]=topPrice, orders[N-1]=bottomPrice
+        // Short: orders[0]=bottomPrice, orders[N-1]=topPrice
+        const newTop = isLong ? chartFirstPrice : chartLastPrice
+        const newBottom = isLong ? chartLastPrice : chartFirstPrice
+        if (Math.abs(newTop - p.topPrice) < 0.001 && Math.abs(newBottom - p.bottomPrice) < 0.001) return p
+        return { ...p, topPrice: Math.round(newTop * 100) / 100, bottomPrice: Math.round(newBottom * 100) / 100 }
+      } else {
+        // step_percent mode
+        const rawFirstOffset = isLong
+          ? (entryPrice - chartFirstPrice) / entryPrice * 100
+          : (chartFirstPrice - entryPrice) / entryPrice * 100
+        const newFirstOffset = Math.max(0, Math.round(rawFirstOffset * 100) / 100)
+
+        const n = p.ordersCount
+        let newStep = p.stepPercent
+        if (n > 1) {
+          const firstP = isLong
+            ? entryPrice * (1 - newFirstOffset / 100)
+            : entryPrice * (1 + newFirstOffset / 100)
+          if (firstP > 0 && chartLastPrice > 0) {
+            const ratio = chartLastPrice / firstP
+            const exponent = 1 / (n - 1)
+            const rawStep = isLong
+              ? (1 - Math.pow(ratio, exponent)) * 100
+              : (Math.pow(ratio, exponent) - 1) * 100
+            newStep = Math.max(0.01, Math.round(rawStep * 100) / 100)
+          }
+        }
+
+        if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005) return p
+        return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep }
+      }
+    })
+  }, [chartFirstPrice, chartLastPrice])
+
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
     if (!activeChartId) {
@@ -627,15 +686,16 @@ export function GridConfigTab({
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
 
+    // Record expected first/last prices so drag-sync effect can ignore form-driven updates
+    const ordersForPreview = viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty }))
+    expectedFirstPriceRef.current = ordersForPreview[0]?.price
+    expectedLastPriceRef.current = ordersForPreview[ordersForPreview.length - 1]?.price
+
     setGridPreview(consoleId, {
       chartId: activeChartId,
       consoleId,
       side: cfg.side,
-      orders: viz.orders.map((o, i) => ({
-        id: orderIdRefs.current[i],
-        price: o.price,
-        qty: o.qty,
-      })),
+      orders: ordersForPreview,
       tpPrice: viz.tpPrice,
       slPrice: viz.slPrice,
       tpLevels: viz.tpLevels,
