@@ -398,7 +398,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   tpMode: "avg_entry",
   tpPercent: 1.2,
   tpClosePercent: 100,
-  multiTpEnabled: false,
+  multiTpEnabled: true,
   multiTpCount: 2,
   multiTpLevels: [
     { tpPercent: 0.8, closePercent: 50 },
