@@ -526,48 +526,25 @@ export function GridConfigTab({
     }, 0)
   }
 
-  // Keep always-fresh refs so effects reading them never have stale closures
-  const externalSymbolRef = useRef(externalSymbol)
-  externalSymbolRef.current = externalSymbol
-  const externalEntryPriceRef = useRef(externalEntryPrice)
-  externalEntryPriceRef.current = externalEntryPrice
-
-  // Per-chart price range storage: save topPrice/bottomPrice per chartId so switching
-  // between charts restores each chart's own price range instead of bleeding across.
-  const priceRangeByChartRef = useRef<Record<string, { topPrice: number; bottomPrice: number }>>({})
-  const prevChartIdRef = useRef<string | null>(activeChartId ?? null)
-
+  // When the active chart's symbol changes, reset price range to ±3% of the new symbol's price.
+  // Both externalSymbol and externalEntryPrice change together in the same render when
+  // switching charts, so this effect always sees the correct price for the new symbol.
   useEffect(() => {
-    const sym = externalSymbolRef.current
-    if (!sym) return
-    const prevId = prevChartIdRef.current
-    const nextId = activeChartId ?? null
-
-    // Save current price range for the chart we're leaving
-    if (prevId) {
-      setCfg((p) => {
-        priceRangeByChartRef.current[prevId] = { topPrice: p.topPrice, bottomPrice: p.bottomPrice }
-        return p
-      })
-    }
-    prevChartIdRef.current = nextId
-
-    const price = externalEntryPriceRef.current
-    const ref = price && price > 0 ? price : 0
-    const saved = nextId ? priceRangeByChartRef.current[nextId] : undefined
-    const top = saved ? saved.topPrice : (ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0)
-    const bottom = saved ? saved.bottomPrice : (ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0)
-
-    setCfg((p) => ({
-      ...p,
-      symbol: sym,
-      entryPrice: ref > 0 ? ref : p.entryPrice,
-      topPrice: top > 0 ? top : p.topPrice,
-      bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
-    }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChartId])
-  useEffect(() => { if (externalEntryPrice && externalEntryPrice > 0) setCfg((p) => ({ ...p, entryPrice: externalEntryPrice })) }, [externalEntryPrice])
+    if (!externalSymbol) return
+    const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
+    const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
+    const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
+    setCfg((p) => {
+      if (p.symbol === externalSymbol) return p
+      return {
+        ...p,
+        symbol: externalSymbol,
+        entryPrice: ref > 0 ? ref : p.entryPrice,
+        topPrice: top > 0 ? top : p.topPrice,
+        bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
+      }
+    })
+  }, [externalSymbol, externalEntryPrice])
   useEffect(() => { if (externalLeverage && externalLeverage > 0) setCfg((p) => ({ ...p, leverage: externalLeverage })) }, [externalLeverage])
   useEffect(() => { if (externalFuturesSide) setCfg((p) => ({ ...p, side: externalFuturesSide })) }, [externalFuturesSide])
 
