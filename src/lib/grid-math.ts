@@ -88,11 +88,15 @@ export function calcGridVisualization(cfg: GridConfig): GridVisualization {
   const avgEntryEstimate = totalQty > 0 ? totalCost / totalQty : entryPrice
 
   // TP price
+  // For avg_entry mode: use the first order price as base for visualization purposes.
+  // In reality avg entry grows as more orders fill, but at preview time only the first
+  // order has filled, so prices[0] is the most meaningful base to show.
   let tpPrice: number | null = null
   let tpLevels: number[] = []
   if (cfg.tpEnabled) {
+    const firstOrderPrice = prices[0] ?? entryPrice
+    const base = cfg.tpMode === "avg_entry" ? firstOrderPrice : entryPrice
     const tpPct = Math.max(0.01, cfg.tpPercent) / 100
-    const base = cfg.tpMode === "avg_entry" ? avgEntryEstimate : entryPrice
     tpPrice = isLong ? base * (1 + tpPct) : base * (1 - tpPct)
 
     if (cfg.multiTpEnabled && cfg.multiTpLevels.length > 0) {

@@ -422,14 +422,14 @@ interface GridOrdersOverlayProps {
 // (needed for TP above maxPrice / SL below minPrice).
 function GridOrderLine({
   id, price, label, toY, minPrice, maxPrice, width, padding,
-  isDraft, isDraggable, clampToEdge,
+  isDraft, isDraggable, clampToEdge, edgeOffset,
   color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
   onClose, onDragStart, registerMove,
 }: {
   id: string; price: number; label: string
   toY: (p: number) => number; minPrice: number; maxPrice: number
   width: number; padding: { left: number; right: number; top: number; bottom: number }
-  isDraft: boolean; isDraggable: boolean; clampToEdge?: boolean
+  isDraft: boolean; isDraggable: boolean; clampToEdge?: boolean; edgeOffset?: number
   color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
@@ -463,10 +463,11 @@ function GridOrderLine({
 
   // When out of range and clampToEdge, snap badge to top/bottom edge of chart area
   const chartTop = padding.top
-  const chartBottom = padding.top + (toY(minPrice) - toY(maxPrice))
+  const chartBottom = toY(minPrice)
   const rawY = toY(price)
+  const stackOffset = (edgeOffset ?? 0) * 22
   const y = outOfRange
-    ? (price > maxPrice ? chartTop + 2 : chartBottom - 2)
+    ? (price > maxPrice ? chartTop + 2 + stackOffset : chartBottom - 2 - stackOffset)
     : rawY
   renderedYRef.current = rawY
 
@@ -596,11 +597,11 @@ function GridOrdersOverlay({
               <GridOrderLine
                 id={`grid:${grid.consoleId}:tp`}
                 price={grid.tpPrice}
-                label={isPreview ? "TP — draft" : "TAKE PROFIT"}
+                label={isPreview ? "TP 1 — draft" : "TP 1"}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
-                clampToEdge
+                clampToEdge edgeOffset={0}
                 {...tpColors}
                 onClose={() => onGridClose?.(grid.consoleId, "tp")}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
@@ -615,7 +616,7 @@ function GridOrdersOverlay({
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
-                clampToEdge
+                clampToEdge edgeOffset={idx + 1}
                 {...tpColors}
                 onClose={() => onGridClose?.(grid.consoleId, "tp")}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
