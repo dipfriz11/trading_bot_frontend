@@ -592,6 +592,19 @@ export function GridConfigTab({
   // Stable ID refs for order levels
   const orderIdRefs = useRef<string[]>([])
 
+  // Sync ordersCount when an entry is removed from the chart (x button)
+  const chartOrdersLen = currentGridState?.orders.length
+  const prevChartOrdersLenRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (chartOrdersLen === undefined) { prevChartOrdersLenRef.current = undefined; return }
+    // Only react when the chart reduced the count below what we expected
+    if (prevChartOrdersLenRef.current !== undefined && chartOrdersLen < prevChartOrdersLenRef.current) {
+      setCfg((p) => ({ ...p, ordersCount: chartOrdersLen }))
+      orderIdRefs.current = currentGridState!.orders.map((o) => o.id)
+    }
+    prevChartOrdersLenRef.current = chartOrdersLen
+  }, [chartOrdersLen])
+
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
     if (!activeChartId) {

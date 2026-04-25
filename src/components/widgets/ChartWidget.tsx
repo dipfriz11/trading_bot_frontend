@@ -358,6 +358,7 @@ interface ChartProps {
   gridOrdersList?: ChartGridOrders[]
   onGridOrderDragStart?: GridOrdersOverlayProps["onGridOrderDragStart"]
   onGridClose?: GridOrdersOverlayProps["onGridClose"]
+  onGridEntryClose?: GridOrdersOverlayProps["onGridEntryClose"]
 }
 
 interface OrdersOverlayProps {
@@ -415,6 +416,7 @@ interface GridOrdersOverlayProps {
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   onGridOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
   onGridClose?: (consoleId: string, target: "tp" | "sl") => void
+  onGridEntryClose?: (consoleId: string, orderId: string) => void
 }
 
 // Single grid line rendered through BuyOrderBadge — identical style to single orders.
@@ -563,7 +565,7 @@ const SL_COLORS = {
 }
 
 function GridOrdersOverlay({
-  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart, onGridClose,
+  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart, onGridClose, onGridEntryClose,
 }: GridOrdersOverlayProps) {
   if (!gridOrdersList.length) return null
 
@@ -589,6 +591,7 @@ function GridOrdersOverlay({
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={isPreview}
                 {...entryColors}
+                onClose={() => onGridEntryClose?.(grid.consoleId, o.id)}
                 onDragStart={(e) => onGridOrderDragStart?.(grid.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
@@ -728,7 +731,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose, onGridEntryClose }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -753,6 +756,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           dragHandlers={dragHandlers}
           onGridOrderDragStart={onGridOrderDragStart}
           onGridClose={onGridClose}
+          onGridEntryClose={onGridEntryClose}
         />
       )}
       <OrdersOverlay
@@ -838,7 +842,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose, onGridEntryClose }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -861,6 +865,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           dragHandlers={dragHandlers}
           onGridOrderDragStart={onGridOrderDragStart}
           onGridClose={onGridClose}
+          onGridEntryClose={onGridEntryClose}
         />
       )}
       <OrdersOverlay
@@ -890,7 +895,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    gridOrders, updateGridPreviewPrice, removeGridTpSl,
+    gridOrders, updateGridPreviewPrice, removeGridTpSl, removeGridEntry,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1204,6 +1209,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
                     onGridClose={(consoleId, target) => removeGridTpSl(consoleId, target)}
+                    onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                   />
                 : <LineChart
                     candles={candles} width={size.width} height={Math.max(chartAreaHeight, 80)}
@@ -1216,6 +1222,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
                     onGridClose={(consoleId, target) => removeGridTpSl(consoleId, target)}
+                    onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                   />
             )}
           </div>
