@@ -325,6 +325,7 @@ export interface GridConfig {
   multiTpEnabled: boolean
   multiTpCount: number
   multiTpLevels: GridMultiTpLevel[]
+  tpRepositionEnabled: boolean
   perLevelTpEnabled: boolean
   perLevelTpGroups: GridPerLevelTp[]
 
@@ -400,6 +401,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
     { tpPercent: 0.8, closePercent: 50 },
     { tpPercent: 1.5, closePercent: 50 },
   ],
+  tpRepositionEnabled: false,
   perLevelTpEnabled: false,
   perLevelTpGroups: [
     { afterLevel: 1, levels: [{ tpPercent: 1.2, closePercent: 100 }] },
