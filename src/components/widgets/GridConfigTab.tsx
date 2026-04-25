@@ -583,7 +583,7 @@ export function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, gridOrders } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each side gets its own independent slot so Long and Short are separate legs
   const consoleId = `${baseConsoleId}:${cfg.side}`
@@ -630,6 +630,73 @@ export function GridConfigTab({
     }
     prevChartOrdersLenRef.current = chartOrdersLen
   }, [chartOrdersLen])
+
+  // ── SL sync: chart x → form deactivation ────────────────────────────────
+  // When slPrice is nulled out on the chart (user clicked x), deactivate slEnabled in form
+  const chartSlPrice = currentGridState?.slPrice
+  const prevChartSlPriceRef = useRef<number | null | undefined>(undefined)
+  useEffect(() => {
+    // Only react when placed and slPrice was non-null but became null (user removed SL on chart)
+    if (!isPlaced) { prevChartSlPriceRef.current = chartSlPrice; return }
+    if (prevChartSlPriceRef.current !== undefined && prevChartSlPriceRef.current !== null && chartSlPrice === null) {
+      setCfg((p) => ({ ...p, slEnabled: false }))
+    }
+    prevChartSlPriceRef.current = chartSlPrice
+  }, [chartSlPrice, isPlaced])
+
+  // When slEnabled is turned ON while placed → immediately apply SL to chart from config
+  const prevSlEnabledRef = useRef(cfg.slEnabled)
+  useEffect(() => {
+    const wasEnabled = prevSlEnabledRef.current
+    prevSlEnabledRef.current = cfg.slEnabled
+    if (!isPlaced || !activeChartId) return
+    if (!wasEnabled && cfg.slEnabled) {
+      const viz = calcGridVisualization(cfg)
+      applyGridTpSl(consoleId, { slPrice: viz.slPrice })
+    }
+  }, [cfg.slEnabled, isPlaced])
+
+  // ── TP sync: chart x (all removed) → form deactivation ─────────────────
+  // When ALL configured TPs are removed from chart, deactivate tpEnabled in form
+  const chartTpLevelsLen = currentGridState?.tpLevels.length
+  const prevChartTpLevelsLenRef = useRef<number | undefined>(undefined)
+  // Track how many TPs were active at placement so we know when "all" are removed
+  const placedTpCountRef = useRef<number>(0)
+  useEffect(() => {
+    if (isPlaced && currentGridState?.state === "placed") {
+      // Record expected TP count whenever we transition to placed or TP count increases (re-apply)
+      if (chartTpLevelsLen !== undefined && chartTpLevelsLen > 0) {
+        placedTpCountRef.current = chartTpLevelsLen
+      }
+    }
+  }, [isPlaced, chartTpLevelsLen])
+
+  useEffect(() => {
+    if (!isPlaced) { prevChartTpLevelsLenRef.current = chartTpLevelsLen; return }
+    if (
+      prevChartTpLevelsLenRef.current !== undefined &&
+      prevChartTpLevelsLenRef.current > 0 &&
+      chartTpLevelsLen === 0 &&
+      placedTpCountRef.current > 0
+    ) {
+      setCfg((p) => ({ ...p, tpEnabled: false }))
+    }
+    prevChartTpLevelsLenRef.current = chartTpLevelsLen
+  }, [chartTpLevelsLen, isPlaced])
+
+  // When tpEnabled is turned ON while placed → immediately apply TP to chart from config
+  const prevTpEnabledRef = useRef(cfg.tpEnabled)
+  useEffect(() => {
+    const wasEnabled = prevTpEnabledRef.current
+    prevTpEnabledRef.current = cfg.tpEnabled
+    if (!isPlaced || !activeChartId) return
+    if (!wasEnabled && cfg.tpEnabled) {
+      const viz = calcGridVisualization(cfg)
+      applyGridTpSl(consoleId, { tpPrice: viz.tpPrice, tpLevels: viz.tpLevels })
+      // Reset tracked count so next full-removal is detected correctly
+      placedTpCountRef.current = viz.tpLevels.length
+    }
+  }, [cfg.tpEnabled, isPlaced])
 
   // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
   const expectedFirstPriceRef = useRef<number | undefined>(undefined)
