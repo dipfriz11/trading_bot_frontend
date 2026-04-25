@@ -584,10 +584,36 @@ export function GridConfigTab({
 
   // ── Grid chart integration ────────────────────────────────────────────────
   const { setGridPreview, placeGridOrders, cancelGridOrders, gridOrders } = useTerminal()
-  const consoleId = consoleWidgetId ?? "__grid_console__"
+  const baseConsoleId = consoleWidgetId ?? "__grid_console__"
+  // Each side gets its own independent slot so Long and Short are separate legs
+  const consoleId = `${baseConsoleId}:${cfg.side}`
   const currentGridState = gridOrders[consoleId]
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
+
+  // Per-side cfg storage: when switching sides, save current cfg and restore saved cfg for new side
+  const cfgBySideRef = useRef<Partial<Record<"long" | "short", GridConfig>>>({})
+  const prevSideRef = useRef<"long" | "short">(cfg.side)
+  useEffect(() => {
+    const prevSide = prevSideRef.current
+    if (prevSide === cfg.side) return
+    // Save cfg for the side we're leaving (including its orderIdRefs)
+    cfgBySideRef.current[prevSide] = { ...cfg, side: prevSide }
+    prevSideRef.current = cfg.side
+    // Reset order ID refs since new side has its own set of order slots
+    orderIdRefs.current = []
+    // Restore saved cfg for the new side (keep symbol/entryPrice/leverage from current context)
+    const saved = cfgBySideRef.current[cfg.side]
+    if (saved) {
+      setCfg((p) => ({
+        ...saved,
+        symbol: p.symbol,
+        entryPrice: p.entryPrice,
+        leverage: p.leverage,
+        side: cfg.side,
+      }))
+    }
+  }, [cfg.side])
 
   // Stable ID refs for order levels
   const orderIdRefs = useRef<string[]>([])
@@ -704,10 +730,18 @@ export function GridConfigTab({
     })
   }, [cfg, activeChartId, isPlaced])
 
-  // Clear preview when component unmounts or no chart
+  // Clear preview for current side when consoleId changes (side switch)
   useEffect(() => {
     return () => { cancelGridOrders(consoleId) }
   }, [consoleId])
+
+  // Clear both sides on unmount
+  useEffect(() => {
+    return () => {
+      cancelGridOrders(`${baseConsoleId}:long`)
+      cancelGridOrders(`${baseConsoleId}:short`)
+    }
+  }, [baseConsoleId])
 
   const handlePlaceGrid = () => {
     if (!activeChartId) return
