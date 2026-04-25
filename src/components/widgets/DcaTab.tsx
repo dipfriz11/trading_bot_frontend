@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useMemo } from "react"
 import { ChevronDown, ChevronUp, TriangleAlert as AlertTriangle, Play, BookOpen, Save } from "lucide-react"
 import type { DcaConfig, DcaMultiTpLevel, DcaPerLevelResetSetting } from "@/types/terminal"
 import { DEFAULT_DCA_CONFIG } from "@/types/terminal"
+import { TemplateBar } from "@/components/terminal/TemplateBar"
+import { useTemplates } from "@/hooks/useTemplates"
 
 // ── Primitive UI helpers (terminal-native, no external component) ──────────
 
@@ -408,12 +410,43 @@ export function DcaTab({
 
   const ticker = cfg.symbol.split("/")[0] ?? cfg.symbol
 
+  const { templates: dcaTemplates, saveTemplate: saveDcaTemplate, deleteTemplate: deleteDcaTemplate } = useTemplates<DcaConfig>("dca")
+  const [activeDcaTemplateId, setActiveDcaTemplateId] = useState<string | null>(null)
+  const [savedDcaCfgJson, setSavedDcaCfgJson] = useState<string | null>(null)
+
+  const cfgForDcaTemplate = { ...cfg, symbol: "", entry: { ...cfg.entry, price: 0 } }
+  const isDcaDirty = activeDcaTemplateId !== null && savedDcaCfgJson !== JSON.stringify(cfgForDcaTemplate)
+
+  const handleSelectDcaTemplate = (t: { id: string; config: DcaConfig }) => {
+    setCfg((prev) => ({ ...t.config, symbol: prev.symbol, entry: { ...t.config.entry, price: prev.entry.price } }))
+    setActiveDcaTemplateId(t.id)
+    setSavedDcaCfgJson(JSON.stringify({ ...t.config, symbol: "", entry: { ...t.config.entry, price: 0 } }))
+  }
+
+  const handleSaveDcaTemplate = (name: string) => {
+    saveDcaTemplate(name, cfgForDcaTemplate)
+    setTimeout(() => {
+      const all = JSON.parse(localStorage.getItem("crypterm:templates:dca") ?? "[]") as Array<{ id: string; name: string }>
+      const found = all.find((t) => t.name === name)
+      if (found) { setActiveDcaTemplateId(found.id); setSavedDcaCfgJson(JSON.stringify(cfgForDcaTemplate)) }
+    }, 0)
+  }
+
   return (
     <div
       className="flex flex-col h-full overflow-auto"
-      style={{ padding: "8px 10px" }}
       onMouseDown={stopProp}
     >
+      {/* ── Templates ──────────────────────────────────── */}
+      <TemplateBar
+        templates={dcaTemplates}
+        activeId={activeDcaTemplateId}
+        onSelect={handleSelectDcaTemplate}
+        onSave={handleSaveDcaTemplate}
+        onDelete={(id) => { deleteDcaTemplate(id); if (id === activeDcaTemplateId) { setActiveDcaTemplateId(null); setSavedDcaCfgJson(null) } }}
+        isDirty={isDcaDirty}
+      />
+      <div style={{ padding: "8px 10px" }}>
       {/* ── 1. Header context ─────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         {/* Long / Short — first, user decides direction before anything else */}
@@ -1018,6 +1051,7 @@ export function DcaTab({
         >
           <Play size={11} /> Start DCA
         </button>
+      </div>
       </div>
     </div>
   )

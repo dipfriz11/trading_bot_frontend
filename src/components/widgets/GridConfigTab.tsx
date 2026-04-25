@@ -3,6 +3,8 @@ import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
+import { TemplateBar } from "@/components/terminal/TemplateBar"
+import { useTemplates } from "@/hooks/useTemplates"
 
 // ─── Shared style constants ───────────────────────────────────────────────────
 
@@ -495,6 +497,28 @@ export function GridConfigTab({
     leverage: externalLeverage ?? DEFAULT_GRID_CONFIG.leverage,
   })
 
+  const { templates, saveTemplate, deleteTemplate } = useTemplates<GridConfig>("grid")
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
+  const [savedCfgJson, setSavedCfgJson] = useState<string | null>(null)
+
+  const cfgForTemplate = { ...cfg, entryPrice: 0, symbol: "" }
+  const isDirty = activeTemplateId !== null && savedCfgJson !== JSON.stringify(cfgForTemplate)
+
+  const handleSelectTemplate = (t: { id: string; config: GridConfig }) => {
+    setCfg((prev) => ({ ...t.config, symbol: prev.symbol, entryPrice: prev.entryPrice, side: prev.side, leverage: prev.leverage }))
+    setActiveTemplateId(t.id)
+    setSavedCfgJson(JSON.stringify({ ...t.config, entryPrice: 0, symbol: "" }))
+  }
+
+  const handleSaveTemplate = (name: string) => {
+    saveTemplate(name, cfgForTemplate)
+    setTimeout(() => {
+      const all = JSON.parse(localStorage.getItem("crypterm:templates:grid") ?? "[]") as Array<{ id: string; name: string }>
+      const found = all.find((t) => t.name === name)
+      if (found) { setActiveTemplateId(found.id); setSavedCfgJson(JSON.stringify(cfgForTemplate)) }
+    }, 0)
+  }
+
   // Sync from active chart
   useEffect(() => { if (externalSymbol) setCfg((p) => ({ ...p, symbol: externalSymbol })) }, [externalSymbol])
   useEffect(() => { if (externalEntryPrice && externalEntryPrice > 0) setCfg((p) => ({ ...p, entryPrice: externalEntryPrice })) }, [externalEntryPrice])
@@ -558,8 +582,19 @@ export function GridConfigTab({
   const gap4: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4 }
 
   return (
-    <div className="flex flex-col h-full overflow-auto" style={{ padding: "8px 10px" }} onMouseDown={stopProp}>
+    <div className="flex flex-col h-full overflow-auto" onMouseDown={stopProp}>
 
+      {/* ── Templates ─────────────────────────────────── */}
+      <TemplateBar
+        templates={templates}
+        activeId={activeTemplateId}
+        onSelect={handleSelectTemplate}
+        onSave={handleSaveTemplate}
+        onDelete={(id) => { deleteTemplate(id); if (id === activeTemplateId) { setActiveTemplateId(null); setSavedCfgJson(null) } }}
+        isDirty={isDirty}
+      />
+
+      <div style={{ padding: "8px 10px" }}>
       {/* ── LEV + PRO row ─────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -1171,6 +1206,7 @@ export function GridConfigTab({
           {cfg.autoEnabled && <Play size={11} />}
           {cfg.side === "long" ? "Long / Grid" : "Short / Grid"}
         </button>
+      </div>
       </div>
     </div>
   )
