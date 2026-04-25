@@ -28,11 +28,43 @@ const readonlyBase: React.CSSProperties = {
 
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
 
+function TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={(e) => { e.stopPropagation(); setShow((s) => !s) }}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", pointerEvents: "auto" }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: color ? 0.7 : 0.45 }}>
+          <circle cx="5" cy="5" r="4.5" stroke={color ?? "rgba(200,214,229,0.6)"} />
+          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill={color ?? "rgba(200,214,229,0.8)"} fontFamily="monospace">?</text>
+        </svg>
+      </button>
+      {show && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 5px)", left: "50%", transform: "translateX(-50%)",
+          zIndex: 9999, minWidth: 170, maxWidth: 240,
+          background: "rgba(13,20,35,0.98)", border: `1px solid ${color ? "rgba(255,171,0,0.3)" : "rgba(30,111,239,0.25)"}`,
+          borderRadius: 5, padding: "7px 9px",
+          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none", whiteSpace: "normal",
+        }}>
+          {text}
+        </div>
+      )}
+    </span>
+  )
+}
+
 function NI({
-  value, onChange, placeholder, title, min, suffix, label, labelColor,
+  value, onChange, placeholder, title, min, suffix, label, labelColor, tooltip,
 }: {
   value: number | string; onChange: (v: number) => void
-  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string; labelColor?: string
+  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string; labelColor?: string; tooltip?: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const [localVal, setLocalVal] = useState(String(value))
@@ -79,6 +111,8 @@ function NI({
   const tag = suffix ?? label
   const tagW = tag ? tag.length * 5.5 + 8 : 0
 
+  const tooltipExtraW = tooltip ? 12 : 0
+
   return (
     <div style={{ position: "relative" }}>
       <input
@@ -87,13 +121,18 @@ function NI({
         onChange={handleChange}
         onFocus={() => { isFocused.current = true }}
         onBlur={handleBlur}
-        placeholder={placeholder ?? "0"} title={title ?? placeholder}
-        style={{ ...inputBase, paddingRight: tag ? tagW + 2 : undefined }}
+        placeholder={placeholder ?? "0"} title={tooltip ? undefined : (title ?? placeholder)}
+        style={{ ...inputBase, paddingRight: tag ? tagW + tooltipExtraW + 2 : undefined }}
         onMouseDown={(e) => e.stopPropagation()}
       />
       {tag && (
-        <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: labelColor ? 1 : 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em", color: labelColor }}>
+        <span style={{ position: "absolute", right: tooltip ? 16 : 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: labelColor ? 1 : 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em", color: labelColor }}>
           {tag}
+        </span>
+      )}
+      {tooltip && (
+        <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center" }}>
+          <TinyTooltipIcon text={tooltip} color={labelColor} />
         </span>
       )}
     </div>
@@ -911,11 +950,13 @@ export function GridConfigTab({
 
                             {/* Reset TP toggle */}
                             <div className="flex items-center" style={{ gap: 3, marginLeft: 2 }}>
-                              <span
-                                title="Reset TP: при срабатывании этого TP запускается ребилд хвоста сетки — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера. Обычный TP закрывает позицию без ребилда."
-                                style={{ fontSize: 8, fontFamily: "monospace", color: hasReset ? "rgba(255,171,0,0.8)" : "rgba(200,214,229,0.3)", whiteSpace: "nowrap", letterSpacing: "0.04em", cursor: "help" }}>
+                              <span style={{ fontSize: 8, fontFamily: "monospace", color: hasReset ? "rgba(255,171,0,0.8)" : "rgba(200,214,229,0.3)", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>
                                 Reset TP
                               </span>
+                              <TinyTooltipIcon
+                                text="При срабатывании Reset TP запускается ребилд хвоста сетки: освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера. Обычный TP закрывает без ребилда."
+                                color={hasReset ? "rgba(255,171,0,0.7)" : undefined}
+                              />
                               <MiniToggle
                                 checked={hasReset}
                                 onChange={(v) => {
@@ -988,9 +1029,9 @@ export function GridConfigTab({
                                   labelColor={tpColor}
                                   step={0.1}
                                   min={0}
-                                  title={isResetRow
-                                    ? "Reset TP %: при срабатывании запускает ребилд хвоста — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера сетки"
-                                    : "Main TP %: обычный тейк профит, закрывает позицию без ребилда сетки"}
+                                  tooltip={isResetRow
+                                    ? "Reset TP: при срабатывании запускается ребилд хвоста сетки — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера"
+                                    : undefined}
                                 />
                                 <NI
                                   value={lvl.closePercent}
@@ -1005,9 +1046,9 @@ export function GridConfigTab({
                                   label="Close %"
                                   step={1}
                                   min={1}
-                                  title={isResetRow
-                                    ? "Close %: какую часть позиции закрыть при Reset TP. Освободившаяся маржа идёт на ребилд хвоста сетки"
-                                    : "Close %: какую часть позиции закрыть на этом уровне Main TP"}
+                                  tooltip={isResetRow
+                                    ? "Процент позиции закрытый при Reset TP. Освободившаяся маржа идёт на ребилд хвоста сетки"
+                                    : undefined}
                                 />
                               </div>
                             )
