@@ -683,22 +683,31 @@ export function GridConfigTab({
       return
     }
 
-    // Partial removal
+    // Partial removal — user removed one TP on the chart
     if (!isPlaced) {
       // Preview: sync cfg to match remaining chart TPs
       const remaining = chartTpLevels ?? []
       setCfg((p) => {
+        const isLong = p.side === "long"
+        const viz = calcGridVisualization(p)
+        const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
+        const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
         const newLevels = remaining.map((price, i) => {
-          const base = calcGridVisualization(p).tpLevels[0]
-          const isLong = p.side === "long"
-          const firstOrderPrice = base ?? p.entryPrice
-          const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
           const pct = isLong
             ? (price / basePrice - 1) * 100
             : (1 - price / basePrice) * 100
-          return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent: p.multiTpLevels[i]?.closePercent ?? 50 }
+          // When only 1 TP remains, give it 100% close volume
+          const closePercent = remaining.length === 1 ? 100 : (p.multiTpLevels[i]?.closePercent ?? 50)
+          return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent }
         })
-        return { ...p, multiTpCount: remaining.length, multiTpLevels: newLevels, multiTpEnabled: remaining.length > 1 }
+        const newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
+        return {
+          ...p,
+          tpPercent: newTpPercent,
+          multiTpCount: remaining.length,
+          multiTpLevels: newLevels,
+          multiTpEnabled: remaining.length > 1,
+        }
       })
     } else {
       // Placed: mark pending update so user sees Apply button

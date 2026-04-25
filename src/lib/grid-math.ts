@@ -107,6 +107,10 @@ export function calcGridVisualization(cfg: GridConfig): GridVisualization {
         return isLong ? base * (1 + pct) : base * (1 - pct)
       })
       tpPrice = tpLevels[0] ?? tpPrice
+    } else {
+      // Single TP — still populate tpLevels with the one price so chart sync
+      // can distinguish "TP present" from "all TPs removed"
+      tpLevels = [tpPrice]
     }
   }
 
