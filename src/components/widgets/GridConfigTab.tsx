@@ -320,22 +320,41 @@ function SectionHead({
   badge?: React.ReactNode; pro?: boolean; rightSlot?: React.ReactNode
 }) {
   return (
-    <button
+    <div
       className="flex items-center justify-between w-full"
-      style={{ background: "transparent", border: "none", padding: "5px 0", cursor: "pointer" }}
-      onClick={onToggle}
-      onMouseDown={(e) => e.stopPropagation()}
+      style={{ padding: "5px 0" }}
     >
-      <span className="flex items-center gap-1.5" style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-        {title}
-        {pro && <span style={{ fontSize: 7, background: "rgba(255,170,0,0.2)", color: "#ffaa00", border: "1px solid rgba(255,170,0,0.3)", borderRadius: 2, padding: "0 3px" }}>PRO</span>}
-        {badge}
-      </span>
+      <button
+        className="flex items-center gap-1.5"
+        style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, flex: 1, textAlign: "left" }}
+        onClick={onToggle}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <span className="flex items-center gap-1.5" style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+          {title}
+          {pro && <span style={{ fontSize: 7, background: "rgba(255,170,0,0.2)", color: "#ffaa00", border: "1px solid rgba(255,170,0,0.3)", borderRadius: 2, padding: "0 3px" }}>PRO</span>}
+          {badge}
+        </span>
+      </button>
       <div className="flex items-center gap-1.5">
-        {rightSlot}
-        {expanded ? <ChevronUp size={9} style={{ opacity: 0.4 }} /> : <ChevronDown size={9} style={{ opacity: 0.4 }} />}
+        {rightSlot && (
+          <div
+            className="flex items-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {rightSlot}
+          </div>
+        )}
+        <button
+          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
+          onClick={onToggle}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {expanded ? <ChevronUp size={9} style={{ opacity: 0.4 }} /> : <ChevronDown size={9} style={{ opacity: 0.4 }} />}
+        </button>
       </div>
-    </button>
+    </div>
   )
 }
 
