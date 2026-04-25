@@ -29,13 +29,22 @@ const readonlyBase: React.CSSProperties = {
 // ─── Primitive UI helpers ─────────────────────────────────────────────────────
 
 function TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
-  const [show, setShow] = useState(false)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const show = (visible: boolean) => {
+    if (!visible) { setPos(null); return }
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ x: r.left + r.width / 2, y: r.top })
+  }
+
   return (
-    <span style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+    <span style={{ display: "inline-flex", alignItems: "center" }}>
       <button
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={(e) => { e.stopPropagation(); setShow((s) => !s) }}
+        ref={btnRef}
+        onMouseEnter={() => show(true)}
+        onMouseLeave={() => show(false)}
+        onClick={(e) => { e.stopPropagation(); pos ? setPos(null) : show(true) }}
         style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", pointerEvents: "auto" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -44,10 +53,13 @@ function TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
           <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill={color ?? "rgba(200,214,229,0.8)"} fontFamily="monospace">?</text>
         </svg>
       </button>
-      {show && (
+      {pos && (
         <div style={{
-          position: "absolute", bottom: "calc(100% + 5px)", left: "50%", transform: "translateX(-50%)",
-          zIndex: 9999, minWidth: 170, maxWidth: 240,
+          position: "fixed",
+          left: Math.max(8, Math.min(pos.x - 110, window.innerWidth - 248)),
+          top: pos.y - 8,
+          transform: "translateY(-100%)",
+          zIndex: 99999, width: 220,
           background: "rgba(13,20,35,0.98)", border: `1px solid ${color ? "rgba(255,171,0,0.3)" : "rgba(30,111,239,0.25)"}`,
           borderRadius: 5, padding: "7px 9px",
           fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
