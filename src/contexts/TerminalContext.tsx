@@ -164,7 +164,7 @@ interface TerminalContextValue {
   applyGridTpSl: (consoleId: string, patch: { tpPrice?: number | null; slPrice?: number | null; tpLevels?: number[] }) => void
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
   markGridPendingUpdate: (consoleId: string) => void
-  removeGridTpSl: (consoleId: string, target: "tp" | "sl") => void
+  removeGridTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
 }
 
@@ -481,11 +481,19 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  const removeGridTpSl = useCallback((consoleId: string, target: "tp" | "sl") => {
+  const removeGridTpSl = useCallback((consoleId: string, target: "tp" | "sl", tpIndex?: number) => {
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
-      if (target === "tp") return { ...prev, [consoleId]: { ...entry, tpPrice: null, tpLevels: [] } }
+      if (target === "tp") {
+        if (tpIndex !== undefined) {
+          // Remove a single TP level by index
+          const newLevels = entry.tpLevels.filter((_, i) => i !== tpIndex)
+          const newTpPrice = newLevels.length > 0 ? newLevels[0] : null
+          return { ...prev, [consoleId]: { ...entry, tpPrice: newTpPrice, tpLevels: newLevels } }
+        }
+        return { ...prev, [consoleId]: { ...entry, tpPrice: null, tpLevels: [] } }
+      }
       return { ...prev, [consoleId]: { ...entry, slPrice: null } }
     })
   }, [])

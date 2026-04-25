@@ -636,13 +636,12 @@ export function GridConfigTab({
   const chartSlPrice = currentGridState?.slPrice
   const prevChartSlPriceRef = useRef<number | null | undefined>(undefined)
   useEffect(() => {
-    // Only react when placed and slPrice was non-null but became null (user removed SL on chart)
-    if (!isPlaced) { prevChartSlPriceRef.current = chartSlPrice; return }
+    // React whenever slPrice transitions from non-null to null (user clicked x on chart)
     if (prevChartSlPriceRef.current !== undefined && prevChartSlPriceRef.current !== null && chartSlPrice === null) {
       setCfg((p) => ({ ...p, slEnabled: false }))
     }
     prevChartSlPriceRef.current = chartSlPrice
-  }, [chartSlPrice, isPlaced])
+  }, [chartSlPrice])
 
   // When slEnabled is turned ON while placed → immediately apply SL to chart from config
   const prevSlEnabledRef = useRef(cfg.slEnabled)
@@ -656,15 +655,14 @@ export function GridConfigTab({
     }
   }, [cfg.slEnabled, isPlaced])
 
-  // ── TP sync: chart x (all removed) → form deactivation ─────────────────
-  // When ALL configured TPs are removed from chart, deactivate tpEnabled in form
-  const chartTpLevelsLen = currentGridState?.tpLevels.length
+  // ── TP sync: chart x button on individual TP lines ──────────────────────
+  const chartTpLevels = currentGridState?.tpLevels
+  const chartTpLevelsLen = chartTpLevels?.length
   const prevChartTpLevelsLenRef = useRef<number | undefined>(undefined)
   // Track how many TPs were active at placement so we know when "all" are removed
   const placedTpCountRef = useRef<number>(0)
   useEffect(() => {
     if (isPlaced && currentGridState?.state === "placed") {
-      // Record expected TP count whenever we transition to placed or TP count increases (re-apply)
       if (chartTpLevelsLen !== undefined && chartTpLevelsLen > 0) {
         placedTpCountRef.current = chartTpLevelsLen
       }
@@ -672,16 +670,50 @@ export function GridConfigTab({
   }, [isPlaced, chartTpLevelsLen])
 
   useEffect(() => {
-    if (!isPlaced) { prevChartTpLevelsLenRef.current = chartTpLevelsLen; return }
-    if (
-      prevChartTpLevelsLenRef.current !== undefined &&
-      prevChartTpLevelsLenRef.current > 0 &&
-      chartTpLevelsLen === 0 &&
-      placedTpCountRef.current > 0
-    ) {
-      setCfg((p) => ({ ...p, tpEnabled: false }))
-    }
+    const prev = prevChartTpLevelsLenRef.current
     prevChartTpLevelsLenRef.current = chartTpLevelsLen
+
+    if (prev === undefined || chartTpLevelsLen === undefined) return
+    // Count decreased — user removed a TP on the chart
+    if (chartTpLevelsLen >= prev) return
+
+    if (chartTpLevelsLen === 0) {
+      // All TPs removed → deactivate block
+      setCfg((p) => ({ ...p, tpEnabled: false }))
+      return
+    }
+
+    // Partial removal
+    if (!isPlaced) {
+      // Preview: sync cfg to match remaining chart TPs
+      const remaining = chartTpLevels ?? []
+      setCfg((p) => {
+        const newLevels = remaining.map((price, i) => {
+          const base = calcGridVisualization(p).tpLevels[0]
+          const isLong = p.side === "long"
+          const firstOrderPrice = base ?? p.entryPrice
+          const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
+          const pct = isLong
+            ? (price / basePrice - 1) * 100
+            : (1 - price / basePrice) * 100
+          return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent: p.multiTpLevels[i]?.closePercent ?? 50 }
+        })
+        return { ...p, multiTpCount: remaining.length, multiTpLevels: newLevels, multiTpEnabled: remaining.length > 1 }
+      })
+    } else {
+      // Placed: mark pending update so user sees Apply button
+      setGridPreview(consoleId, {
+        chartId: activeChartId ?? "",
+        consoleId,
+        side: cfg.side,
+        orders: [],
+        tpPrice: null,
+        slPrice: null,
+        tpLevels: [],
+        symbol: cfg.symbol,
+        leverage: cfg.leverage,
+      })
+    }
   }, [chartTpLevelsLen, isPlaced])
 
   // When tpEnabled is turned ON while placed → immediately apply TP to chart from config
@@ -693,7 +725,6 @@ export function GridConfigTab({
     if (!wasEnabled && cfg.tpEnabled) {
       const viz = calcGridVisualization(cfg)
       applyGridTpSl(consoleId, { tpPrice: viz.tpPrice, tpLevels: viz.tpLevels })
-      // Reset tracked count so next full-removal is detected correctly
       placedTpCountRef.current = viz.tpLevels.length
     }
   }, [cfg.tpEnabled, isPlaced])

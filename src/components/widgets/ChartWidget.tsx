@@ -415,7 +415,7 @@ interface GridOrdersOverlayProps {
   padding: { left: number; right: number; top: number; bottom: number }
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   onGridOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
-  onGridClose?: (consoleId: string, target: "tp" | "sl") => void
+  onGridClose?: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   onGridEntryClose?: (consoleId: string, orderId: string) => void
 }
 
@@ -641,7 +641,7 @@ function GridOrdersOverlay({
                 isDraft={isPreview} isDraggable={false}
                 clampToEdge edgeOffset={0}
                 {...tpColors}
-                onClose={() => onGridClose?.(grid.consoleId, "tp")}
+                onClose={() => onGridClose?.(grid.consoleId, "tp", 0)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             )}
@@ -657,7 +657,7 @@ function GridOrdersOverlay({
                 isDraft={isPreview} isDraggable={false}
                 clampToEdge edgeOffset={idx + 1}
                 {...tpColors}
-                onClose={() => onGridClose?.(grid.consoleId, "tp")}
+                onClose={() => onGridClose?.(grid.consoleId, "tp", idx + 1)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             ))}
@@ -1245,7 +1245,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     dragHandlers={localDragHandlers}
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
-                    onGridClose={(consoleId, target) => removeGridTpSl(consoleId, target)}
+                    onGridClose={(consoleId, target, tpIndex) => removeGridTpSl(consoleId, target, tpIndex)}
                     onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                   />
                 : <LineChart
@@ -1258,7 +1258,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     dragHandlers={localDragHandlers}
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
-                    onGridClose={(consoleId, target) => removeGridTpSl(consoleId, target)}
+                    onGridClose={(consoleId, target, tpIndex) => removeGridTpSl(consoleId, target, tpIndex)}
                     onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                   />
             )}
