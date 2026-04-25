@@ -344,9 +344,8 @@ export interface GridConfig {
   trailLimitPrice: number
 
   // Auto restart
-  autoEnabled: boolean      // master toggle — enables auto-cycle after TP/SL
-  autoRestartOnSl: boolean  // if true — do NOT restart after SL (block SL restart)
-  autoStopNew: boolean      // stop cycle on next TP/SL hit, rebuild TP to breakeven
+  autoRestartOnTp: boolean
+  autoRestartOnSl: boolean
 
   // TP/SL legacy (kept for compatibility)
   tpUpdateMode: TpUpdateMode
@@ -420,9 +419,8 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   trailLimitPriceEnabled: false,
   trailLimitPrice: 0,
 
-  autoEnabled: false,
+  autoRestartOnTp: false,
   autoRestartOnSl: false,
-  autoStopNew: false,
 
   tpUpdateMode: "fixed",
   trailingEnabled: false,

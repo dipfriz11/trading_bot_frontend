@@ -357,28 +357,22 @@ function Seg<T extends string>({
   )
 }
 
-type MiniToggleVariant = "green" | "yellow"
-function MiniToggle({ checked, onChange, variant = "green" }: { checked: boolean; onChange: (v: boolean) => void; variant?: MiniToggleVariant }) {
-  const colors: Record<MiniToggleVariant, { dot: string; bg: string; border: string }> = {
-    green:  { dot: "#00e5a0",   bg: "rgba(0,229,160,0.35)",   border: "rgba(0,229,160,0.5)" },
-    yellow: { dot: "#fbbf24",   bg: "rgba(251,191,36,0.25)",  border: "rgba(251,191,36,0.5)" },
-  }
-  const c = colors[variant]
+function MiniToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div
       onClick={() => onChange(!checked)}
       onMouseDown={(e) => e.stopPropagation()}
       style={{
         width: 32, height: 16, borderRadius: 8, flexShrink: 0, cursor: "pointer",
-        background: checked ? c.bg : "rgba(255,255,255,0.1)",
-        border: `1px solid ${checked ? c.border : "rgba(255,255,255,0.15)"}`,
+        background: checked ? "rgba(0,229,160,0.35)" : "rgba(255,255,255,0.1)",
+        border: `1px solid ${checked ? "rgba(0,229,160,0.5)" : "rgba(255,255,255,0.15)"}`,
         position: "relative", transition: "background 0.15s",
       }}
     >
       <div style={{
         position: "absolute", top: 2, left: checked ? 16 : 2,
         width: 10, height: 10, borderRadius: "50%",
-        background: checked ? c.dot : "rgba(255,255,255,0.4)",
+        background: checked ? "#00e5a0" : "rgba(255,255,255,0.4)",
         transition: "left 0.15s",
       }} />
     </div>
@@ -785,50 +779,16 @@ export function GridConfigTab({
           <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <LabelTooltip
               label="Auto"
-              tooltip="Авто-рестарт сетки: после срабатывания TP новая сетка автоматически размещается по текущей рыночной цене согласно текущему конфигу."
+              tooltip="Авто-рестарт сетки: после срабатывания TP или SL новая сетка автоматически размещается по текущей рыночной цене согласно текущему конфигу."
             />
-            {/* Master toggle */}
-            <MiniToggle
-              checked={cfg.autoEnabled}
-              onChange={(v) => {
-                upd("autoEnabled", v)
-                if (!v) {
-                  upd("autoRestartOnSl", false)
-                  upd("autoStopNew", false)
-                }
-              }}
-            />
-
-            {/* Extra options — shown only when auto is on */}
-            {cfg.autoEnabled && (
-              <>
-                <div style={{ width: 1, height: 10, background: "rgba(154,164,174,0.15)", marginLeft: 2 }} />
-
-                {/* SL toggle — when ON, do NOT restart after SL */}
-                <span style={{ fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)" }}>SL</span>
-                <TinyTooltipIcon
-                  text="SL — если активирован, после срабатывания Stop Loss новый цикл сетки НЕ запускается. По умолчанию выключен: после SL новая сетка создаётся автоматически."
-                  color="rgba(248,113,113,0.55)"
-                />
-                <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
-
-                <div style={{ width: 1, height: 10, background: "rgba(154,164,174,0.15)" }} />
-
-                {/* STOP NEW */}
-                <span style={{
-                  fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em",
-                  color: cfg.autoStopNew ? "rgba(251,191,36,0.85)" : "rgba(154,164,174,0.38)",
-                  whiteSpace: "nowrap",
-                }}>
-                  STOP NEW
-                </span>
-                <TinyTooltipIcon
-                  text={`STOP NEW — остановить авто-цикл после следующего срабатывания TP/SL.\n\nПри активации: TP перестраивается в один ордер на уровень безубытка на весь объём позиции (независимо от настроек Reset TP).\n\nМожно активировать вручную или через хук TradingView.`}
-                  color="rgba(251,191,36,0.7)"
-                />
-                <MiniToggle checked={cfg.autoStopNew} onChange={(v) => upd("autoStopNew", v)} variant="yellow" />
-              </>
-            )}
+            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.75)" : "rgba(154,164,174,0.38)", letterSpacing: "0.04em" }}>
+              TP
+            </span>
+            <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
+            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)", letterSpacing: "0.04em" }}>
+              SL
+            </span>
+            <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
           </div>
         </div>
 
