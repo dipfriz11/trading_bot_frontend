@@ -1,9 +1,8 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown, ChevronUp, Play, RotateCcw, Copy, Check } from "lucide-react"
+import { ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
-import { generateLevels, calcDerivedStats, exportGridConfig } from "@/lib/grid-helpers"
 
 // ─── Shared style constants ───────────────────────────────────────────────────
 
@@ -326,14 +325,6 @@ function BudgetInput({
   )
 }
 
-function TI({ value, onChange, placeholder, title }: { value: string; onChange: (v: string) => void; placeholder?: string; title?: string }) {
-  return (
-    <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder} title={title ?? placeholder} style={inputBase}
-      onMouseDown={(e) => e.stopPropagation()} />
-  )
-}
-
 function Seg<T extends string>({
   options, value, onChange, style,
 }: { options: { v: T; label: string; title?: string; pro?: boolean }[]; value: T; onChange: (v: T) => void; style?: React.CSSProperties }) {
@@ -553,26 +544,9 @@ export function GridConfigTab({
     }
   }, [cfg.ordersCount, cfg.perLevelTpEnabled])
 
-  // Auto-regenerate levels on key config change
-  const levels = useMemo(() => generateLevels(cfg), [
-    cfg.ordersCount, cfg.entryPrice, cfg.placementMode, cfg.firstOffsetPercent,
-    cfg.stepPercent, cfg.lastOffsetPercent, cfg.direction, cfg.totalQuote,
-    cfg.leverage, cfg.multiplierEnabled, cfg.multiplier, cfg.topPrice, cfg.bottomPrice,
-  ])
-
-  const cfgWithLevels = useMemo(() => ({ ...cfg, levels }), [cfg, levels])
-  const derived = useMemo(() => calcDerivedStats(cfgWithLevels, availableBalance), [cfgWithLevels, availableBalance])
-
   const handlePct = (pct: number) => {
     const amt = parseFloat(((pct / 100) * availableBalance).toFixed(2))
     upd("totalQuote", amt)
-  }
-
-  const [copied, setCopied] = useState(false)
-  const handleCopyJson = () => {
-    navigator.clipboard.writeText(exportGridConfig(cfgWithLevels)).catch(() => {})
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
   }
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
@@ -1080,24 +1054,48 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 7. STOP LOSS ─────────────────────────────── */}
+      {/* ── STOP LOSS ─────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="7. STOP LOSS"
+          title="STOP LOSS"
           expanded={open.sl}
           onToggle={() => tog("sl")}
           rightSlot={<MiniToggle checked={cfg.slEnabled} onChange={(v) => upd("slEnabled", v)} />}
         />
         {open.sl && cfg.slEnabled && (
           <div style={{ ...gap4, marginTop: 4 }}>
-            <Seg
-              options={[
-                { v: "extreme_order", label: "Extreme Order", title: "SL based on last filled grid order price" },
-                { v: "avg_entry", label: "Avg Entry", title: "SL based on average position price" },
-              ]}
-              value={cfg.slMode}
-              onChange={(v) => upd("slMode", v)}
-            />
+            <div style={{ display: "flex", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
+              {([
+                {
+                  v: "extreme_order" as const,
+                  label: "Extreme Order",
+                  tooltip: "SL рассчитывается от цены последнего исполненного ордера сетки.\n\nПодходит для защиты от глубокого пробоя — стоп активируется на крайнем уровне сетки.",
+                },
+                {
+                  v: "avg_entry" as const,
+                  label: "Avg Entry",
+                  tooltip: "SL рассчитывается от средней цены входа в позицию (средневзвешенная по всем исполненным ордерам сетки).\n\nПодходит для управления риском всей позиции.",
+                },
+              ] as const).map((o) => (
+                <div key={o.v} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                  background: cfg.slMode === o.v ? "rgba(30,111,239,0.18)" : "transparent",
+                  borderRight: o.v === "extreme_order" ? "1px solid rgba(255,255,255,0.1)" : undefined,
+                }}>
+                  <button
+                    onClick={() => upd("slMode", o.v)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{
+                      flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px",
+                      background: "transparent", border: "none", cursor: "pointer",
+                      color: cfg.slMode === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)",
+                      fontWeight: cfg.slMode === o.v ? 700 : 400, letterSpacing: "0.04em",
+                    }}
+                  >{o.label}</button>
+                  <TinyTooltipIcon text={o.tooltip} color={cfg.slMode === o.v ? "rgba(30,111,239,0.7)" : undefined} />
+                  <div style={{ width: 4 }} />
+                </div>
+              ))}
+            </div>
             <div className="grid grid-cols-2" style={{ gap: 4 }}>
               <NI value={cfg.slPercent} onChange={(v) => upd("slPercent", v)} label="SL %" min={0} step={0.1} title="Stop loss percentage" />
               <NI value={cfg.slClosePercent} onChange={(v) => upd("slClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close at stop loss" />
@@ -1116,253 +1114,15 @@ export function GridConfigTab({
         )}
       </div>
 
-      {/* ── 8. RESET TP (PRO) ────────────────────────── */}
-      {proMode && (
-        <>
-          <Divider />
-          <div style={{ marginBottom: 6 }}>
-            <SectionHead
-              title="8. RESET TP"
-              expanded={open.resetTp}
-              onToggle={() => tog("resetTp")}
-              pro
-              rightSlot={<MiniToggle checked={cfg.resetTpEnabled} onChange={(v) => upd("resetTpEnabled", v)} />}
-            />
-            {open.resetTp && (
-              <div style={{ ...gap4, marginTop: 4 }}>
-                {cfg.resetTpEnabled ? (
-                  <>
-                    <TI
-                      value={cfg.resetTpTriggerLevels.join(",")}
-                      onChange={(v) => upd("resetTpTriggerLevels", v.split(",").map((x) => parseInt(x.trim())).filter((x) => !isNaN(x)))}
-                      placeholder="Trigger levels (e.g. 3,5,7)"
-                      title="Comma-separated order levels that trigger a TP reset"
-                    />
-                    <div className="grid grid-cols-2" style={{ gap: 4 }}>
-                      <NI value={cfg.defaultResetTpPercent} onChange={(v) => upd("defaultResetTpPercent", v)} label="Reset TP %" step={0.1} title="TP percentage after reset" />
-                      <NI value={cfg.defaultResetTpClosePercent} onChange={(v) => upd("defaultResetTpClosePercent", v)} label="Close %" step={1} title="Position % to close during reset" />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.45, textTransform: "uppercase", letterSpacing: "0.06em" }}>Rebuild Tail</span>
-                      <MiniToggle checked={cfg.resetTpRebuildTail} onChange={(v) => upd("resetTpRebuildTail", v)} />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.45, textTransform: "uppercase", letterSpacing: "0.06em" }}>Per Level Settings</span>
-                      <MiniToggle checked={cfg.resetTpPerLevelEnabled} onChange={(v) => upd("resetTpPerLevelEnabled", v)} />
-                    </div>
-                    {cfg.resetTpPerLevelEnabled && derived.totalLevels > 0 && (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9, fontFamily: "monospace" }}>
-                          <thead>
-                            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                              {["Level", "Reset TP %", "Close %"].map((h) => (
-                                <th key={h} style={{ padding: "2px 4px", opacity: 0.4, textAlign: "left", fontWeight: 500 }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {levels.map((_, i) => {
-                              const s = cfg.resetTpPerLevelSettings[i] ?? { level: i + 1, resetTpPercent: cfg.defaultResetTpPercent, resetClosePercent: cfg.defaultResetTpClosePercent }
-                              return (
-                                <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                                  <td style={{ padding: "2px 4px", opacity: 0.5 }}>{i + 1}</td>
-                                  <td style={{ padding: "2px 4px" }}>
-                                    <input type="number" value={s.resetTpPercent}
-                                      onChange={(e) => {
-                                        const next = [...cfg.resetTpPerLevelSettings]
-                                        next[i] = { ...s, resetTpPercent: parseFloat(e.target.value) || 0 }
-                                        upd("resetTpPerLevelSettings", next)
-                                      }}
-                                      style={{ ...inputBase, padding: "1px 4px", fontSize: 9 }}
-                                      onMouseDown={stopProp}
-                                    />
-                                  </td>
-                                  <td style={{ padding: "2px 4px" }}>
-                                    <input type="number" value={s.resetClosePercent}
-                                      onChange={(e) => {
-                                        const next = [...cfg.resetTpPerLevelSettings]
-                                        next[i] = { ...s, resetClosePercent: parseFloat(e.target.value) || 0 }
-                                        upd("resetTpPerLevelSettings", next)
-                                      }}
-                                      style={{ ...inputBase, padding: "1px 4px", fontSize: 9 }}
-                                      onMouseDown={stopProp}
-                                    />
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", padding: "4px 0" }}>
-                    Reset TP disabled — enable toggle to configure
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* ── SUMMARY PANEL ────────────────────────────── */}
-      <Divider />
-      <div style={{ marginBottom: 6 }}>
-        <SectionHead title="SUMMARY" expanded={open.summary} onToggle={() => tog("summary")} />
-        {open.summary && (
-          <div style={{ ...gap4, marginTop: 4 }}>
-            <div className="grid grid-cols-2" style={{ gap: 3 }}>
-              {[
-                { label: "Total Orders", value: derived.totalLevels },
-                { label: "Total Budget", value: `${cfg.totalQuote.toLocaleString("en-US")} USDT` },
-                { label: "Max Position", value: `${derived.maxPositionSize.toFixed(2)} USDT` },
-                { label: "Leverage", value: `${cfg.leverage}×` },
-                { label: "Max Margin (Est.)", value: `${derived.maxMarginRequired.toFixed(2)} USDT` },
-                { label: "Free Margin After", value: `${derived.freeMarginAfter.toFixed(2)} USDT` },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ padding: "3px 6px", borderRadius: 4, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.35, marginBottom: 1 }}>{label}</div>
-                  <div style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.9)", fontWeight: 600 }}>{value}</div>
-                </div>
-              ))}
-            </div>
-            {/* TP/SL summary */}
-            <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 4, padding: "5px 7px" }}>
-              <div style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.4, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>TP / SL Summary</div>
-              <div className="flex flex-col" style={{ gap: 3 }}>
-                {[
-                  { label: "Avg Entry", value: `${derived.avgEntryPrice.toFixed(2)} USDT` },
-                  { label: "Take Profit", value: derived.tpPrice ? `${cfg.tpPercent}% (${derived.tpPrice.toFixed(2)} USDT)` : "Disabled", color: derived.tpPrice ? "#00e5a0" : undefined },
-                  { label: "Stop Loss", value: derived.slPrice ? `${cfg.slPercent}% (${derived.slPrice.toFixed(2)} USDT)` : "Disabled", color: derived.slPrice ? "#ff4757" : undefined },
-                  { label: "Reset TP", value: cfg.resetTpEnabled ? "Enabled" : "Disabled" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="flex items-center justify-between">
-                    <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.45 }}>{label}</span>
-                    <span style={{ fontSize: 9, fontFamily: "monospace", color: color ?? "rgba(200,214,229,0.7)", fontWeight: 600 }}>{value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── GRID TABLE ───────────────────────────────── */}
-      <Divider />
-      <div style={{ marginBottom: 6 }}>
-        <SectionHead
-          title={`GRID PREVIEW (${derived.totalLevels} LEVELS)`}
-          expanded={open.gridTable}
-          onToggle={() => tog("gridTable")}
-        />
-        {open.gridTable && (
-          derived.totalLevels === 0 ? (
-            <div style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.3, textAlign: "center", padding: "8px 0" }}>
-              Configure grid to see level breakdown
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto", marginTop: 4 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9, fontFamily: "monospace" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                    {["#", "Price", "Qty", "Notional", "Cum.Exp."].map((h) => (
-                      <th key={h} style={{ padding: "2px 4px", opacity: 0.4, textAlign: "right", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {levels.map((lvl) => (
-                    <tr key={lvl.index} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                      <td style={{ padding: "2px 4px", opacity: 0.45, textAlign: "right" }}>{lvl.index}</td>
-                      <td style={{ padding: "2px 4px", textAlign: "right", color: "#60a5fa" }}>{lvl.price.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
-                      <td style={{ padding: "2px 4px", textAlign: "right", color: "rgba(200,214,229,0.8)" }}>{lvl.qty.toFixed(2)}</td>
-                      <td style={{ padding: "2px 4px", textAlign: "right", color: "rgba(200,214,229,0.8)" }}>{lvl.notional.toFixed(2)}</td>
-                      <td style={{ padding: "2px 4px", textAlign: "right", color: "rgba(200,214,229,0.6)" }}>{lvl.cumExposure.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                    <td colSpan={3} style={{ padding: "3px 4px", opacity: 0.4, textAlign: "right", fontSize: 8 }}>Est. Avg Entry</td>
-                    <td colSpan={2} style={{ padding: "3px 4px", textAlign: "right", color: "#00e5a0", fontWeight: 700 }}>
-                      {derived.avgEntryPrice.toFixed(2)} USDT
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan={3} style={{ padding: "2px 4px", opacity: 0.4, textAlign: "right", fontSize: 8 }}>Est. Max Exposure</td>
-                    <td colSpan={2} style={{ padding: "2px 4px", textAlign: "right", color: "#00e5a0", fontWeight: 700 }}>
-                      {derived.maxPositionSize.toFixed(2)} USDT
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )
-        )}
-      </div>
-
-      {/* ── CONFIG JSON (PRO) ────────────────────────── */}
-      {proMode && (
-        <>
-          <Divider />
-          <div style={{ marginBottom: 6 }}>
-            <SectionHead
-              title="CONFIG JSON"
-              expanded={open.configJson}
-              onToggle={() => tog("configJson")}
-              pro
-              rightSlot={
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleCopyJson() }}
-                  style={{ fontSize: 8, fontFamily: "monospace", padding: "1px 5px", background: "rgba(255,255,255,0.06)", color: "rgba(200,214,229,0.6)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, cursor: "pointer" }}
-                  onMouseDown={stopProp}
-                >
-                  {copied ? <Check size={8} /> : <Copy size={8} />}
-                </button>
-              }
-            />
-            {open.configJson && (
-              <pre style={{
-                fontSize: 8, fontFamily: "monospace", color: "rgba(100,160,255,0.65)",
-                background: "rgba(30,111,239,0.04)", border: "1px solid rgba(30,111,239,0.12)",
-                borderRadius: 4, padding: "6px 8px", overflowX: "auto",
-                maxHeight: 160, overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-all",
-                marginTop: 4,
-              }}>
-                {JSON.stringify({
-                  strategy: "grid",
-                  symbol: cfgWithLevels.symbol.replace("/", ""),
-                  position_side: cfgWithLevels.side.toUpperCase(),
-                  leverage: cfgWithLevels.leverage,
-                  grid: {
-                    orders_count: cfgWithLevels.ordersCount,
-                    total_budget: cfgWithLevels.totalQuote,
-                    placement_mode: cfgWithLevels.placementMode,
-                    first_offset_percent: cfgWithLevels.firstOffsetPercent,
-                    step_percent: cfgWithLevels.stepPercent,
-                    last_offset_percent: cfgWithLevels.lastOffsetPercent,
-                    direction: cfgWithLevels.direction,
-                    qty_mode: cfgWithLevels.multiplierEnabled ? "multiplier" : "fixed",
-                    qty_multiplier: cfgWithLevels.multiplier,
-                  },
-                }, null, 2)}
-              </pre>
-            )}
-          </div>
-        </>
-      )}
-
       {/* ── ACTIONS ──────────────────────────────────── */}
       <div className="flex gap-2 sticky bottom-0" style={{ paddingTop: 6, paddingBottom: 2, background: "rgba(13,17,25,0.95)" }}>
         <button
           onClick={() => setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfg.symbol, side: cfg.side, entryPrice: cfg.entryPrice, leverage: cfg.leverage })}
-          className="flex items-center justify-center gap-1 flex-1"
+          className="flex items-center justify-center gap-1"
           style={{
-            fontSize: 10, fontFamily: "monospace", fontWeight: 600, padding: "6px 0",
+            fontSize: 10, fontFamily: "monospace", fontWeight: 600, padding: "6px 10px",
             background: "rgba(255,255,255,0.04)", color: "rgba(200,214,229,0.6)",
-            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, cursor: "pointer",
+            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, cursor: "pointer", flexShrink: 0,
           }}
           onMouseDown={stopProp}
           title="Reset all settings to defaults"
@@ -1370,29 +1130,19 @@ export function GridConfigTab({
           <RotateCcw size={10} /> Reset
         </button>
         <button
-          onClick={() => tog("gridTable")}
-          className="flex items-center justify-center gap-1 flex-1"
-          style={{
-            fontSize: 10, fontFamily: "monospace", fontWeight: 600, padding: "6px 0",
-            background: "rgba(30,111,239,0.1)", color: "#1e6fef",
-            border: "1px solid rgba(30,111,239,0.35)", borderRadius: 4, cursor: "pointer",
-          }}
-          onMouseDown={stopProp}
-          title="Preview calculated grid orders"
-        >
-          Preview Orders
-        </button>
-        <button
           className="flex items-center justify-center gap-1.5 flex-1"
           style={{
-            fontSize: 10, fontFamily: "monospace", fontWeight: 700, padding: "6px 0",
-            background: "rgba(0,229,160,0.15)", color: "#00e5a0",
-            border: "1px solid rgba(0,229,160,0.4)", borderRadius: 4, cursor: "pointer",
+            fontSize: 11, fontFamily: "monospace", fontWeight: 700, padding: "7px 0",
+            background: cfg.side === "long" ? "rgba(0,229,160,0.18)" : "rgba(248,113,113,0.15)",
+            color: cfg.side === "long" ? "#00e5a0" : "#f87171",
+            border: `1px solid ${cfg.side === "long" ? "rgba(0,229,160,0.45)" : "rgba(248,113,113,0.4)"}`,
+            borderRadius: 4, cursor: "pointer",
           }}
           onMouseDown={stopProp}
-          title="Create and activate this grid bot"
+          title={cfg.side === "long" ? "Place Long grid orders on chart" : "Place Short grid orders on chart"}
         >
-          <Play size={10} /> Create Bot
+          <Play size={11} />
+          {cfg.side === "long" ? "Long / Grid" : "Short / Grid"}
         </button>
       </div>
     </div>
