@@ -692,21 +692,24 @@ export function GridConfigTab({
         const viz = calcGridVisualization(p)
         const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
         const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
+        const n = remaining.length
+        // Redistribute closePercent evenly: floor for all, add remainder to last
+        const base = Math.floor(100 / n)
+        const remainder = 100 - base * n
         const newLevels = remaining.map((price, i) => {
           const pct = isLong
             ? (price / basePrice - 1) * 100
             : (1 - price / basePrice) * 100
-          // When only 1 TP remains, give it 100% close volume
-          const closePercent = remaining.length === 1 ? 100 : (p.multiTpLevels[i]?.closePercent ?? 50)
+          const closePercent = i === n - 1 ? base + remainder : base
           return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent }
         })
         const newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
         return {
           ...p,
           tpPercent: newTpPercent,
-          multiTpCount: remaining.length,
+          multiTpCount: n,
           multiTpLevels: newLevels,
-          multiTpEnabled: remaining.length > 1,
+          multiTpEnabled: n > 1,
         }
       })
     } else {
