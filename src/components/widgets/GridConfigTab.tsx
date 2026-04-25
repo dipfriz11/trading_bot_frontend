@@ -89,17 +89,33 @@ function NITooltip({
   label?: string; min?: number; step?: number; title?: string; tooltip: string
 }) {
   const [show, setShow] = useState(false)
+  const [localVal, setLocalVal] = useState(String(value))
   const labelText = label ?? ""
+
+  // Sync external value only when input is not focused
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setLocalVal(String(value))
+    }
+  }, [value])
 
   return (
     <div style={{ position: "relative" }}>
       <input
-        type="text" inputMode="decimal" value={value}
+        ref={inputRef}
+        type="text" inputMode="decimal" value={localVal}
         onChange={(e) => {
           const raw = e.target.value.replace(/[^0-9.]/g, "")
+          setLocalVal(raw)
           const parsed = parseFloat(raw)
           if (!isNaN(parsed)) onChange(min !== undefined ? Math.max(min, parsed) : parsed)
-          else if (raw === "" || raw === ".") onChange(0)
+        }}
+        onBlur={() => {
+          const parsed = parseFloat(localVal)
+          if (isNaN(parsed) || localVal === "") {
+            setLocalVal(String(value))
+          }
         }}
         placeholder="0" title={title ?? label}
         style={{ ...inputBase, paddingRight: 60 }}
