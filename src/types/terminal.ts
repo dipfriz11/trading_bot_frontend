@@ -138,7 +138,7 @@ export type DcaEntryType = "market" | "limit"
 export type DcaPlacementMode = "step_percent" | "price_range"
 export type DcaQtyMode = "fixed" | "multiplier"
 export type DcaTpMode = "avg_entry"
-export type DcaSlMode = "avg_entry" | "extreme_order"
+export type DcaSlMode = "avg_entry" | "extreme_order" | "first_order"
 export type DcaRebuildMode = "from_avg_entry"
 
 export interface DcaMultiTpLevel {
@@ -253,7 +253,7 @@ export type GridDirection = "below_price" | "above_price"
 export type GridType = "simple" | "custom"
 export type GridEntryType = "market" | "limit"
 export type GridTpMode = "avg_entry" | "breakeven_offset"
-export type GridSlMode = "avg_entry" | "extreme_order"
+export type GridSlMode = "avg_entry" | "extreme_order" | "first_order"
 
 export interface GridMultiTpLevel {
   tpPercent: number
@@ -411,7 +411,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   ],
 
   slEnabled: true,
-  slMode: "extreme_order",
+  slMode: "first_order",
   slPercent: 2.5,
   slClosePercent: 100,
 
