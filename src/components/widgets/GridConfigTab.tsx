@@ -62,8 +62,6 @@ function NI({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/[^0-9.-]/g, "")
     setLocalVal(raw)
-    const parsed = parseFloat(raw)
-    if (!isNaN(parsed)) onChange(min !== undefined ? Math.max(min, parsed) : parsed)
   }
 
   const handleBlur = () => {
