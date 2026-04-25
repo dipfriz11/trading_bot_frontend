@@ -1159,13 +1159,6 @@ export function GridConfigTab({
               <NI value={cfg.slPercent} onChange={(v) => upd("slPercent", v)} label="SL %" min={0} step={0.1} title="Stop loss percentage" />
               <NI value={cfg.slClosePercent} onChange={(v) => upd("slClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close at stop loss" />
             </div>
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", lineHeight: 1.5 }}>
-              {cfg.slMode === "extreme_order"
-                ? "SL размещается на заданном % от крайнего ордера сетки — превью сразу, реальный ордер после входа в позицию"
-                : cfg.slMode === "avg_entry"
-                ? "SL размещается на заданном % от средней цены входа — перемещается автоматически после каждого усреднения"
-                : "SL размещается на заданном % от первого ордера сетки — превью сразу, реальный ордер после входа в позицию"}
-            </div>
 
           </div>
         )}
