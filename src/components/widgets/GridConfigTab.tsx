@@ -364,6 +364,7 @@ export function GridConfigTab({
     entry: true,
     gridSetup: true,
     summary: false,
+    trail: true,
     tp: true,
     sl: true,
     resetTp: false,
@@ -550,10 +551,40 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 5. TAKE PROFIT ───────────────────────────── */}
+      {/* ── 5. TRAIL ─────────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="5. TAKE PROFIT"
+          title="5. TRAIL"
+          expanded={open.trail}
+          onToggle={() => tog("trail")}
+          rightSlot={<MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />}
+        />
+        {open.trail && cfg.trailEnabled && (
+          <div style={{ ...gap4, marginTop: 4 }}>
+            {/* Trigger % */}
+            <div className="grid grid-cols-1" style={{ gap: 4 }}>
+              <NITooltip
+                value={cfg.trailTriggerPercent}
+                onChange={(v) => upd("trailTriggerPercent", Math.max(0.01, v))}
+                label="Trigger %"
+                min={0.01}
+                title="Trail trigger %"
+                tooltip="Процент движения цены от края сетки, при котором сетка начинает перемещаться за ценой, сохраняя настроенное расстояние от тренда."
+              />
+            </div>
+            {/* Info hint */}
+            <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(154,164,174,0.55)", lineHeight: 1.45, padding: "4px 6px", background: "rgba(30,111,239,0.05)", border: "1px solid rgba(30,111,239,0.1)", borderRadius: 3 }}>
+              Сетка перемещается за ценой сохраняя расстояние до тренда согласно конфига
+            </div>
+          </div>
+        )}
+      </div>
+      <Divider />
+
+      {/* ── 6. TAKE PROFIT ───────────────────────────── */}
+      <div style={{ marginBottom: 6 }}>
+        <SectionHead
+          title="6. TAKE PROFIT"
           expanded={open.tp}
           onToggle={() => tog("tp")}
           rightSlot={<MiniToggle checked={cfg.tpEnabled} onChange={(v) => upd("tpEnabled", v)} />}
@@ -632,10 +663,10 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 6. STOP LOSS ─────────────────────────────── */}
+      {/* ── 7. STOP LOSS ─────────────────────────────── */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
-          title="6. STOP LOSS"
+          title="7. STOP LOSS"
           expanded={open.sl}
           onToggle={() => tog("sl")}
           rightSlot={<MiniToggle checked={cfg.slEnabled} onChange={(v) => upd("slEnabled", v)} />}

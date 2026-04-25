@@ -326,6 +326,10 @@ export interface GridConfig {
   slPercent: number
   slClosePercent: number
 
+  // Trail (grid trailing)
+  trailEnabled: boolean
+  trailTriggerPercent: number
+
   // TP/SL legacy (kept for compatibility)
   tpUpdateMode: TpUpdateMode
   trailingEnabled: boolean
@@ -386,6 +390,9 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   slMode: "extreme_order",
   slPercent: 2.5,
   slClosePercent: 100,
+
+  trailEnabled: false,
+  trailTriggerPercent: 1,
 
   tpUpdateMode: "fixed",
   trailingEnabled: false,
