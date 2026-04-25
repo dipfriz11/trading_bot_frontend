@@ -423,12 +423,12 @@ interface GridOrdersOverlayProps {
 // When clampToEdge=true the line is always shown even if price is outside visible range
 // (needed for TP above maxPrice / SL below minPrice).
 function GridOrderLine({
-  id, price, label, toY, minPrice, maxPrice, width, padding,
+  id, price, label, side, toY, minPrice, maxPrice, width, padding,
   isDraft, isDraggable, clampToEdge, edgeOffset,
   color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
   onClose, onDragStart, registerMove,
 }: {
-  id: string; price: number; label: string
+  id: string; price: number; label: string; side: "long" | "short"
   toY: (p: number) => number; minPrice: number; maxPrice: number
   width: number; padding: { left: number; right: number; top: number; bottom: number }
   isDraft: boolean; isDraggable: boolean; clampToEdge?: boolean; edgeOffset?: number
@@ -482,24 +482,57 @@ function GridOrderLine({
   const badgeX = padding.left + 4
   const opacity = isDraft ? 0.55 : 0.85
 
+  const isShort = side === "short"
+
+  // For Short: badge anchors right (before price axis), lines fill left side
+  const PAD_SELL = 8
+  const CLOSE_W_SELL = 20
+  const charW_SELL = 5.8
+  const labelW_SELL = PAD_SELL + label.length * charW_SELL + PAD_SELL
+  const badgeW_SELL = labelW_SELL + CLOSE_W_SELL
+  const badgeRightEdge = axisX - 4  // right edge of sell badge
+
   return (
     <g ref={groupRef} opacity={opacity}>
-      <line x1={padding.left} y1={y} x2={badgeX - 1} y2={y}
-        stroke={color} strokeWidth={1} strokeDasharray="4,3" />
-      <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
-        stroke={color} strokeWidth={1} strokeDasharray="4,3" />
-      <BuyOrderBadge
-        y={y} label={label}
-        color={color} textColor={textColor}
-        closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
-        priceTagColor={priceTagColor} priceTagFg={priceTagFg}
-        priceTag={formatPrice(price)}
-        onClose={onClose ?? (() => {})}
-        onDragStart={onDragStart ?? (() => {})}
-        axisX={axisX} padLeft={padding.left}
-        isEditing={false}
-        isDraft={isDraggable ? true : isDraft}
-      />
+      {isShort ? (
+        <>
+          <line x1={padding.left} y1={y} x2={badgeRightEdge - badgeW_SELL - 1} y2={y}
+            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+          <line x1={badgeRightEdge + 2} y1={y} x2={axisX - 1} y2={y}
+            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+          <SellOrderBadge
+            y={y} label={label}
+            color={color} textColor={textColor}
+            closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
+            priceTagColor={priceTagColor} priceTagFg={priceTagFg}
+            priceTag={formatPrice(price)}
+            onClose={onClose ?? (() => {})}
+            onDragStart={onDragStart ?? (() => {})}
+            axisX={axisX}
+            isEditing={false}
+            isDraft={isDraggable ? true : isDraft}
+          />
+        </>
+      ) : (
+        <>
+          <line x1={padding.left} y1={y} x2={badgeX - 1} y2={y}
+            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+          <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
+            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+          <BuyOrderBadge
+            y={y} label={label}
+            color={color} textColor={textColor}
+            closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
+            priceTagColor={priceTagColor} priceTagFg={priceTagFg}
+            priceTag={formatPrice(price)}
+            onClose={onClose ?? (() => {})}
+            onDragStart={onDragStart ?? (() => {})}
+            axisX={axisX} padLeft={padding.left}
+            isEditing={false}
+            isDraft={isDraggable ? true : isDraft}
+          />
+        </>
+      )}
     </g>
   )
 }
@@ -587,6 +620,7 @@ function GridOrdersOverlay({
                 id={`grid:${grid.consoleId}:${o.id}`}
                 price={o.price}
                 label={`${isLong ? "BUY" : "SELL"} #${idx + 1}${isPreview ? " — draft" : ""}`}
+                side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={isPreview}
@@ -601,6 +635,7 @@ function GridOrdersOverlay({
                 id={`grid:${grid.consoleId}:tp`}
                 price={grid.tpPrice}
                 label={isPreview ? "TP 1 — draft" : "TP 1"}
+                side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
@@ -616,6 +651,7 @@ function GridOrdersOverlay({
                 id={`grid:${grid.consoleId}:tp${idx + 2}`}
                 price={tp}
                 label={isPreview ? `TP ${idx + 2} — draft` : `TP ${idx + 2}`}
+                side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
@@ -630,6 +666,7 @@ function GridOrdersOverlay({
                 id={`grid:${grid.consoleId}:sl`}
                 price={grid.slPrice}
                 label={isPreview ? "SL — draft" : "STOP LOSS"}
+                side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={isPreview} isDraggable={false}
