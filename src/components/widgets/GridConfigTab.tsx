@@ -527,7 +527,19 @@ export function GridConfigTab({
   }
 
   // Sync from active chart
-  useEffect(() => { if (externalSymbol) setCfg((p) => ({ ...p, symbol: externalSymbol })) }, [externalSymbol])
+  useEffect(() => {
+    if (!externalSymbol) return
+    setCfg((p) => {
+      if (p.symbol === externalSymbol) return p
+      // Symbol changed — reset price range so old coin's prices don't carry over.
+      // Use externalEntryPrice if available, else keep topPrice/bottomPrice as 0
+      // so the preview falls back to the chart's live price.
+      const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
+      const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
+      const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
+      return { ...p, symbol: externalSymbol, entryPrice: ref, topPrice: top, bottomPrice: bottom }
+    })
+  }, [externalSymbol])
   useEffect(() => { if (externalEntryPrice && externalEntryPrice > 0) setCfg((p) => ({ ...p, entryPrice: externalEntryPrice })) }, [externalEntryPrice])
   useEffect(() => { if (externalLeverage && externalLeverage > 0) setCfg((p) => ({ ...p, leverage: externalLeverage })) }, [externalLeverage])
   useEffect(() => { if (externalFuturesSide) setCfg((p) => ({ ...p, side: externalFuturesSide })) }, [externalFuturesSide])
