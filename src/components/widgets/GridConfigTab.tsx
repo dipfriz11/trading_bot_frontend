@@ -5,6 +5,9 @@ import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
+import { useTerminal } from "@/contexts/TerminalContext"
+import { calcGridVisualization } from "@/lib/grid-math"
+import { nanoid } from "@/lib/nanoid"
 
 // ─── Shared style constants ───────────────────────────────────────────────────
 
@@ -476,6 +479,8 @@ interface GridConfigTabProps {
   availableBalance?: number
   leverage?: number
   onSideChange?: (side: "long" | "short") => void
+  consoleWidgetId?: string
+  activeChartId?: string | null
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -488,6 +493,8 @@ export function GridConfigTab({
   availableBalance = 10000,
   leverage: externalLeverage,
   onSideChange,
+  consoleWidgetId,
+  activeChartId,
 }: GridConfigTabProps) {
   const [cfg, setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
@@ -574,6 +581,108 @@ export function GridConfigTab({
     const amt = parseFloat(((pct / 100) * availableBalance).toFixed(2))
     upd("totalQuote", amt)
   }
+
+  // ── Grid chart integration ────────────────────────────────────────────────
+  const { setGridPreview, placeGridOrders, cancelGridOrders, gridOrders } = useTerminal()
+  const consoleId = consoleWidgetId ?? "__grid_console__"
+  const currentGridState = gridOrders[consoleId]
+  const isPlaced = currentGridState?.state === "placed"
+  const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
+
+  // Stable ID refs for order levels
+  const orderIdRefs = useRef<string[]>([])
+
+  // Push preview whenever config changes and totalQuote > 0
+  useEffect(() => {
+    if (!activeChartId) {
+      if (gridOrders[consoleId]) cancelGridOrders(consoleId)
+      return
+    }
+    if (cfg.totalQuote <= 0) {
+      cancelGridOrders(consoleId)
+      return
+    }
+    // Don't overwrite placed orders automatically — just mark pending
+    if (isPlaced) {
+      return
+    }
+
+    const viz = calcGridVisualization(cfg)
+    // Ensure stable IDs for drag handlers
+    while (orderIdRefs.current.length < viz.orders.length) {
+      orderIdRefs.current.push(nanoid())
+    }
+    orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
+
+    setGridPreview(consoleId, {
+      chartId: activeChartId,
+      consoleId,
+      side: cfg.side,
+      orders: viz.orders.map((o, i) => ({
+        id: orderIdRefs.current[i],
+        price: o.price,
+        qty: o.qty,
+      })),
+      tpPrice: viz.tpPrice,
+      slPrice: viz.slPrice,
+      tpLevels: viz.tpLevels,
+      symbol: cfg.symbol,
+      leverage: cfg.leverage,
+    })
+  }, [cfg, activeChartId, isPlaced])
+
+  // Clear preview when component unmounts or no chart
+  useEffect(() => {
+    return () => { cancelGridOrders(consoleId) }
+  }, [consoleId])
+
+  const handlePlaceGrid = () => {
+    if (!activeChartId) return
+    const viz = calcGridVisualization(cfg)
+    while (orderIdRefs.current.length < viz.orders.length) {
+      orderIdRefs.current.push(nanoid())
+    }
+    orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
+    const newData = {
+      chartId: activeChartId,
+      consoleId,
+      side: cfg.side,
+      orders: viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty })),
+      tpPrice: viz.tpPrice,
+      slPrice: viz.slPrice,
+      tpLevels: viz.tpLevels,
+      symbol: cfg.symbol,
+      leverage: cfg.leverage,
+    }
+    // Cancel first to reset state from "placed" to allow setGridPreview to write fresh data
+    cancelGridOrders(consoleId)
+    // Then set fresh preview and immediately place
+    setTimeout(() => {
+      setGridPreview(consoleId, newData)
+      setTimeout(() => placeGridOrders(consoleId), 0)
+    }, 0)
+  }
+
+  // When config changes while placed → mark pending update
+  const prevCfgRef = useRef(cfg)
+  useEffect(() => {
+    if (!isPlaced) { prevCfgRef.current = cfg; return }
+    if (JSON.stringify(prevCfgRef.current) !== JSON.stringify(cfg)) {
+      // markGridPendingUpdate will be called via setGridPreview which checks placed state
+      setGridPreview(consoleId, {
+        chartId: activeChartId ?? "",
+        consoleId,
+        side: cfg.side,
+        orders: [],
+        tpPrice: null,
+        slPrice: null,
+        tpLevels: [],
+        symbol: cfg.symbol,
+        leverage: cfg.leverage,
+      })
+    }
+    prevCfgRef.current = cfg
+  }, [cfg, isPlaced])
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
   const baseSymbol = cfg.symbol.split("/")[0] ?? "BTC"
@@ -1186,18 +1295,31 @@ export function GridConfigTab({
         </button>
         <button
           className="flex items-center justify-center gap-1.5 flex-1"
+          onClick={handlePlaceGrid}
           style={{
             fontSize: 11, fontFamily: "monospace", fontWeight: 700, padding: "7px 0",
-            background: cfg.side === "long" ? "rgba(0,229,160,0.18)" : "rgba(248,113,113,0.15)",
-            color: cfg.side === "long" ? "#00e5a0" : "#f87171",
-            border: `1px solid ${cfg.side === "long" ? "rgba(0,229,160,0.45)" : "rgba(248,113,113,0.4)"}`,
-            borderRadius: 4, cursor: "pointer",
+            background: hasPendingUpdate
+              ? "rgba(251,191,36,0.18)"
+              : cfg.side === "long" ? "rgba(0,229,160,0.18)" : "rgba(248,113,113,0.15)",
+            color: hasPendingUpdate
+              ? "rgba(251,191,36,0.9)"
+              : cfg.side === "long" ? "#00e5a0" : "#f87171",
+            border: `1px solid ${hasPendingUpdate
+              ? "rgba(251,191,36,0.45)"
+              : cfg.side === "long" ? "rgba(0,229,160,0.45)" : "rgba(248,113,113,0.4)"}`,
+            borderRadius: 4, cursor: activeChartId ? "pointer" : "not-allowed", opacity: activeChartId ? 1 : 0.5,
           }}
           onMouseDown={stopProp}
-          title={cfg.side === "long" ? "Place Long grid orders on chart" : "Place Short grid orders on chart"}
+          disabled={!activeChartId}
+          title={hasPendingUpdate ? "Применить изменения к размещённым ордерам" : cfg.side === "long" ? "Place Long grid orders on chart" : "Place Short grid orders on chart"}
         >
           {cfg.autoEnabled && <Play size={11} />}
-          {cfg.side === "long" ? "Long / Grid" : "Short / Grid"}
+          {hasPendingUpdate
+            ? "Apply Changes"
+            : isPlaced
+              ? `${cfg.side === "long" ? "Long" : "Short"} / Grid ✓`
+              : cfg.side === "long" ? "Long / Grid" : "Short / Grid"
+          }
         </button>
       </div>
       </div>

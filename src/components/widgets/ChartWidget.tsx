@@ -3,7 +3,7 @@ import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES } 
 import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget, Candle } from "@/types/terminal"
 import { useTerminal } from "@/contexts/TerminalContext"
-import type { ChartPlacedOrder, ChartDraftOrder } from "@/contexts/TerminalContext"
+import type { ChartPlacedOrder, ChartDraftOrder, ChartGridOrders } from "@/contexts/TerminalContext"
 import { ChevronDown, User, Building2 } from "lucide-react"
 import { PositionBarCompact } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
@@ -355,6 +355,8 @@ interface ChartProps {
   onOrderDragStart: (id: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
   onBackgroundClick?: () => void
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
+  gridOrdersList?: ChartGridOrders[]
+  onGridOrderDragStart?: GridOrdersOverlayProps["onGridOrderDragStart"]
 }
 
 interface OrdersOverlayProps {
@@ -391,6 +393,186 @@ function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice,
           (e) => onOrderDragStart(order.id, e, toPrice, minPrice, maxPrice, chartHeight, padTop),
           registerImperativeMove,
           editingOrderId === order.id,
+        )
+      })}
+    </svg>
+  )
+}
+
+// ─── Grid Orders Overlay ──────────────────────────────────────────────────────
+
+interface GridOrdersOverlayProps {
+  gridOrdersList: ChartGridOrders[]
+  width: number
+  height: number
+  toY: (price: number) => number
+  toPrice: (yPx: number) => number
+  minPrice: number
+  maxPrice: number
+  padding: { left: number; right: number; top: number; bottom: number }
+  dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
+  onGridOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+}
+
+function GridOrderLine({
+  price, toY, minPrice, maxPrice, width, padding,
+  color, opacity, label, priceTag, isDraggable,
+  id, onDragStart, registerMove,
+}: {
+  price: number; toY: (p: number) => number; minPrice: number; maxPrice: number
+  width: number; padding: { left: number; right: number; top: number; bottom: number }
+  color: string; opacity: number; label: string; priceTag: string
+  isDraggable?: boolean; id: string
+  onDragStart?: (e: React.MouseEvent) => void
+  registerMove?: (id: string, fn: (p: number) => void) => void
+}) {
+  const groupRef = useRef<SVGGElement>(null)
+  const renderedYRef = useRef(toY(price))
+  const toYRef = useRef(toY)
+  toYRef.current = toY
+
+  useEffect(() => {
+    if (!registerMove) return
+    registerMove(id, (newPrice: number) => {
+      const el = groupRef.current
+      if (!el) return
+      const newY = toYRef.current(newPrice)
+      const delta = newY - renderedYRef.current
+      el.setAttribute("transform", `translate(0, ${delta})`)
+    })
+  }, [id, registerMove])
+
+  useEffect(() => {
+    if (groupRef.current) groupRef.current.removeAttribute("transform")
+    renderedYRef.current = toY(price)
+  })
+
+  if (price < minPrice || price > maxPrice) return null
+
+  const y = toY(price)
+  renderedYRef.current = y
+  const axisX = width - padding.right
+  const charW = 5.5
+  const PAD = 6
+  const labelW = PAD + label.length * charW + PAD
+  const tagW = 52
+
+  return (
+    <g ref={groupRef}>
+      {/* Full-width dashed line */}
+      <line x1={padding.left} y1={y} x2={axisX} y2={y}
+        stroke={color} strokeWidth={1} strokeDasharray="3,3" opacity={opacity} />
+      {/* Left label badge */}
+      <g style={{ cursor: isDraggable ? "ns-resize" : "default" }}
+        onMouseDown={isDraggable ? onDragStart : undefined}>
+        <rect x={padding.left + 3} y={y - 9} width={labelW} height={18}
+          fill={`${color}18`} stroke={color} strokeWidth={0.8} rx={2} opacity={opacity} />
+        <text x={padding.left + 3 + PAD} y={y + 4} fontSize={9} fill={color}
+          fontFamily="Geist Variable, monospace" fontWeight="600" opacity={opacity}
+          style={{ pointerEvents: "none" }}>
+          {label}
+        </text>
+      </g>
+      {/* Right price tag */}
+      <rect x={axisX} y={y - 9} width={tagW} height={18}
+        fill={`${color}bb`} rx={2} opacity={opacity} />
+      <text x={axisX + tagW / 2} y={y + 4} textAnchor="middle" fontSize={9}
+        fill="rgba(0,0,0,0.85)" fontFamily="Geist Variable, monospace" fontWeight="700"
+        opacity={opacity} style={{ pointerEvents: "none" }}>
+        {priceTag}
+      </text>
+    </g>
+  )
+}
+
+function GridOrdersOverlay({
+  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart,
+}: GridOrdersOverlayProps) {
+  if (!gridOrdersList.length) return null
+
+  return (
+    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}>
+      {gridOrdersList.map((grid) => {
+        const isPreview = grid.state === "preview"
+        const isLong = grid.side === "long"
+        const entryTextColor = isPreview
+          ? "rgba(160,175,200,0.9)"
+          : isLong ? "#00e5a0" : "#ff4757"
+        const tpColor = isPreview
+          ? "rgba(160,175,200,0.5)"
+          : isLong ? "#7a1a1a" : "#1a7a5a"  // TP: long=red, short=green
+        const slColor = isPreview
+          ? "rgba(160,175,200,0.4)"
+          : "rgba(255,140,0,0.85)"            // SL always orange
+
+        const entryOpacity = isPreview ? 0.55 : 0.85
+
+        return (
+          <g key={grid.consoleId}>
+            {/* Entry orders */}
+            {grid.orders.map((o, idx) => (
+              <GridOrderLine
+                key={o.id}
+                id={`grid:${grid.consoleId}:${o.id}`}
+                price={o.price}
+                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+                width={width} padding={padding}
+                color={isPreview ? "rgba(160,175,200,0.6)" : entryTextColor}
+                opacity={entryOpacity}
+                label={`${isLong ? "BUY" : "SELL"} #${idx + 1}`}
+                priceTag={formatPrice(o.price)}
+                isDraggable={isPreview}
+                onDragStart={(e) => onGridOrderDragStart?.(grid.consoleId, o.id, e, toPrice, minPrice, maxPrice, height - padding.top - padding.bottom, padding.top)}
+                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+              />
+            ))}
+            {/* TP line */}
+            {grid.tpPrice !== null && (
+              <GridOrderLine
+                id={`grid:${grid.consoleId}:tp`}
+                price={grid.tpPrice}
+                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+                width={width} padding={padding}
+                color={tpColor}
+                opacity={isPreview ? 0.5 : 0.85}
+                label="TP"
+                priceTag={formatPrice(grid.tpPrice)}
+                isDraggable={false}
+                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+              />
+            )}
+            {/* Multi TP lines */}
+            {grid.tpLevels.slice(1).map((tp, idx) => (
+              <GridOrderLine
+                key={`tp${idx + 2}`}
+                id={`grid:${grid.consoleId}:tp${idx + 2}`}
+                price={tp}
+                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+                width={width} padding={padding}
+                color={tpColor}
+                opacity={isPreview ? 0.4 : 0.7}
+                label={`TP ${idx + 2}`}
+                priceTag={formatPrice(tp)}
+                isDraggable={false}
+                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+              />
+            ))}
+            {/* SL line */}
+            {grid.slPrice !== null && (
+              <GridOrderLine
+                id={`grid:${grid.consoleId}:sl`}
+                price={grid.slPrice}
+                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+                width={width} padding={padding}
+                color={slColor}
+                opacity={isPreview ? 0.5 : 0.85}
+                label="SL"
+                priceTag={formatPrice(grid.slPrice)}
+                isDraggable={false}
+                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+              />
+            )}
+          </g>
         )
       })}
     </svg>
@@ -482,7 +664,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -497,6 +679,17 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   return (
     <div style={{ position: "relative", width, height }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
+      {gridOrdersList && gridOrdersList.length > 0 && (
+        <GridOrdersOverlay
+          gridOrdersList={gridOrdersList}
+          width={width} height={height}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
+          dragHandlers={dragHandlers}
+          onGridOrderDragStart={onGridOrderDragStart}
+        />
+      )}
       <OrdersOverlay
         allOrders={allOrders} editingOrderId={editingOrderId}
         width={width} height={height}
@@ -580,7 +773,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -593,6 +786,17 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
   return (
     <div style={{ position: "relative", width, height }}>
       <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
+      {gridOrdersList && gridOrdersList.length > 0 && (
+        <GridOrdersOverlay
+          gridOrdersList={gridOrdersList}
+          width={width} height={height}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
+          dragHandlers={dragHandlers}
+          onGridOrderDragStart={onGridOrderDragStart}
+        />
+      )}
       <OrdersOverlay
         allOrders={allOrders} editingOrderId={editingOrderId}
         width={width} height={height}
@@ -620,6 +824,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
+    gridOrders, updateGridPreviewPrice,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -668,6 +873,11 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // Always read placed orders from context so PortfolioWidget sees them regardless of mode
   const placedForChart: PlacedOrder[] = ctxPlacedOrders[widget.id] ?? []
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
+
+  // Grid orders for this chart
+  const gridOrdersList: ChartGridOrders[] = Object.values(gridOrders).filter(
+    (g): g is ChartGridOrders => !!g && g.chartId === widget.id
+  )
 
   // ---- Close handler ----
   const handleOrderClose = useCallback((id: string) => {
@@ -797,6 +1007,56 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     localDragHandlers.current.set(id, fn)
   }, [])
 
+  const handleGridOrderDragStart = useCallback((
+    consoleId: string,
+    orderId: string,
+    e: React.MouseEvent,
+    _toPrice: (yPx: number) => number,
+    minP: number,
+    maxP: number,
+    chartH: number,
+    _padTop: number,
+  ) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const dragKey = `grid:${consoleId}:${orderId}`
+    const grid = gridOrders[consoleId]
+    if (!grid || grid.state !== "preview") return
+    const order = grid.orders.find((o) => o.id === orderId)
+    if (!order) return
+
+    const startPrice = order.price
+    const startY = e.clientY
+    const DRAG_THRESHOLD = 4
+    let dragStarted = false
+    const finalPriceRef = { current: startPrice }
+
+    const onMove = (mv: MouseEvent) => {
+      const dy = mv.clientY - startY
+      if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) {
+        dragStarted = true
+        document.body.style.cursor = "grabbing"
+      }
+      if (!dragStarted) return
+      const pricePerPx = (maxP - minP) / chartH
+      const newPrice = Math.max(minP, Math.min(maxP, startPrice - dy * pricePerPx))
+      finalPriceRef.current = newPrice
+      localDragHandlers.current.get(dragKey)?.(newPrice)
+    }
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+      document.body.style.cursor = ""
+      if (dragStarted) {
+        updateGridPreviewPrice(consoleId, orderId, finalPriceRef.current)
+      }
+    }
+
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+  }, [gridOrders, updateGridPreviewPrice])
+
   const registerDraftDragHandler = useCallback((fn: (p: number) => void) => {
     localDragHandlers.current.set(LOCAL_DRAFT_ID, fn)
   }, [])
@@ -875,6 +1135,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onOrderDragStart={handleOrderDragStart}
                     onBackgroundClick={handleBackgroundClick}
                     dragHandlers={localDragHandlers}
+                    gridOrdersList={gridOrdersList}
+                    onGridOrderDragStart={handleGridOrderDragStart}
                   />
                 : <LineChart
                     candles={candles} width={size.width} height={Math.max(chartAreaHeight, 80)}
@@ -884,6 +1146,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onOrderDragStart={handleOrderDragStart}
                     onBackgroundClick={handleBackgroundClick}
                     dragHandlers={localDragHandlers}
+                    gridOrdersList={gridOrdersList}
+                    onGridOrderDragStart={handleGridOrderDragStart}
                   />
             )}
           </div>

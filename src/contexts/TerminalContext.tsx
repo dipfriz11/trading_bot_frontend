@@ -59,6 +59,27 @@ function loadState(): TerminalState {
   return getDefaultState()
 }
 
+// ---- Grid order bridge types ----
+
+export type GridOrderState = "preview" | "placed"
+
+export interface ChartGridOrders {
+  chartId: string
+  consoleId: string          // which order-console widget owns this
+  state: GridOrderState
+  side: "long" | "short"
+  orders: Array<{ id: string; price: number; qty: number }>
+  tpPrice: number | null
+  slPrice: number | null
+  tpLevels: number[]
+  symbol: string
+  leverage: number
+  pendingUpdate: boolean     // config changed after placement — show "Apply" button
+}
+
+// keyed by consoleWidgetId
+type GridOrderMap = Record<string, ChartGridOrders | undefined>
+
 // ---- Order bridge types ----
 
 export interface ChartDraftOrder {
@@ -133,6 +154,14 @@ interface TerminalContextValue {
   getBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures") => BalanceEntry
   deductOrderBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => void
   refundOrderBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => void
+
+  // Grid orders bridge
+  gridOrders: GridOrderMap
+  setGridPreview: (consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => void
+  placeGridOrders: (consoleId: string) => void
+  cancelGridOrders: (consoleId: string) => void
+  updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
+  markGridPendingUpdate: (consoleId: string) => void
 }
 
 const TerminalContext = createContext<TerminalContextValue | null>(null)
@@ -145,6 +174,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
+  const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
 
   useEffect(() => {
     try {
@@ -386,6 +416,55 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => {
+    setGridOrdersMap((prev) => {
+      if (data === null) {
+        const n = { ...prev }
+        delete n[consoleId]
+        return n
+      }
+      const existing = prev[consoleId]
+      // If already placed, mark as pending update instead of overwriting
+      if (existing?.state === "placed") {
+        return { ...prev, [consoleId]: { ...existing, pendingUpdate: true } }
+      }
+      return { ...prev, [consoleId]: { ...data, state: "preview", pendingUpdate: false } }
+    })
+  }, [])
+
+  const placeGridOrders = useCallback((consoleId: string) => {
+    setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry) return prev
+      return { ...prev, [consoleId]: { ...entry, state: "placed", pendingUpdate: false } }
+    })
+  }, [])
+
+  const cancelGridOrders = useCallback((consoleId: string) => {
+    setGridOrdersMap((prev) => {
+      const n = { ...prev }
+      delete n[consoleId]
+      return n
+    })
+  }, [])
+
+  const updateGridPreviewPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
+    setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry || entry.state !== "preview") return prev
+      const orders = entry.orders.map((o) => o.id === orderId ? { ...o, price: newPrice } : o)
+      return { ...prev, [consoleId]: { ...entry, orders } }
+    })
+  }, [])
+
+  const markGridPendingUpdate = useCallback((consoleId: string) => {
+    setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry || entry.state !== "placed") return prev
+      return { ...prev, [consoleId]: { ...entry, pendingUpdate: true } }
+    })
+  }, [])
+
   return (
     <TerminalContext.Provider
       value={{
@@ -421,6 +500,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         getBalance,
         deductOrderBalance,
         refundOrderBalance,
+        gridOrders,
+        setGridPreview,
+        placeGridOrders,
+        cancelGridOrders,
+        updateGridPreviewPrice,
+        markGridPendingUpdate,
       }}
     >
       {children}
