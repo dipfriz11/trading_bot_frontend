@@ -346,6 +346,7 @@ export interface GridConfig {
   // Auto restart
   autoRestartOnTp: boolean
   autoRestartOnSl: boolean
+  autoStopNew: boolean
 
   // TP/SL legacy (kept for compatibility)
   tpUpdateMode: TpUpdateMode
@@ -421,6 +422,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
 
   autoRestartOnTp: false,
   autoRestartOnSl: false,
+  autoStopNew: false,
 
   tpUpdateMode: "fixed",
   trailingEnabled: false,
