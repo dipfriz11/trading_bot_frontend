@@ -155,6 +155,39 @@ function NITooltip({
   )
 }
 
+function LabelTooltip({ label, tooltip, color }: { label: string; tooltip: string; color?: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 3 }}>
+      <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: color ?? "rgba(200,214,229,0.55)", fontWeight: 600 }}>
+        {label}
+      </span>
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", lineHeight: 1 }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45 }}>
+          <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
+          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.8)" fontFamily="monospace">?</text>
+        </svg>
+      </button>
+      {show && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 999, minWidth: 160, maxWidth: 220,
+          background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
+          borderRadius: 5, padding: "7px 9px",
+          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none", whiteSpace: "normal",
+        }}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BudgetInput({
   value, onChange, mode, onModeChange, baseSymbol,
 }: {
@@ -569,41 +602,65 @@ export function GridConfigTab({
 
       {/* ── 5. TRAIL + AUTO RESTART ───────────────────── */}
       <div style={{ marginBottom: 6 }}>
-        {/* Single row: Trail toggle | Trigger % (when open) | Auto Restart label | После TP toggle | После SL toggle */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* Row 1: Trail [toggle] [Trigger% field] [Limit price toggle+field] · · Auto [?] TP [toggle] SL [toggle] */}
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           {/* Trail label + toggle */}
-          <div
-            style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}
-            onClick={() => tog("trail")}
-          >
-            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.55)", fontWeight: 600 }}>
-              Trail
-            </span>
-          </div>
+          <LabelTooltip
+            label="Trail"
+            tooltip="Трейлинг сетки — сетка автоматически перемещается за ценой, когда цена уходит за край сетки на заданный процент."
+          />
           <MiniToggle checked={cfg.trailEnabled} onChange={(v) => upd("trailEnabled", v)} />
+
           {cfg.trailEnabled && (
-            <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-              <NITooltip
-                value={cfg.trailTriggerPercent}
-                onChange={(v) => upd("trailTriggerPercent", v)}
-                label="Trigger %"
-                title="Trail trigger %"
-                tooltip="Процент движения цены от края сетки, при котором сетка начинает перемещаться за ценой."
-              />
-            </div>
+            <>
+              {/* Trigger % field */}
+              <div style={{ width: 80, flexShrink: 0 }}>
+                <NITooltip
+                  value={cfg.trailTriggerPercent}
+                  onChange={(v) => upd("trailTriggerPercent", v)}
+                  label="Trigger %"
+                  title="Trail trigger %"
+                  tooltip="Процент выхода цены за край сетки, при котором запускается перемещение сетки. Например, 1% — сетка сдвигается когда цена ушла на 1% за крайний ордер."
+                />
+              </div>
+
+              {/* Limit price sub-row: enable toggle + price field */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                <LabelTooltip
+                  label="Lim"
+                  tooltip="Предельная цена трейлинга. Если цена достигает этого уровня — трейлинг останавливается. Возобновляется автоматически, когда цена снова выполняет условие триггера."
+                  color="rgba(200,214,229,0.4)"
+                />
+                <MiniToggle checked={cfg.trailLimitPriceEnabled} onChange={(v) => upd("trailLimitPriceEnabled", v)} />
+                {cfg.trailLimitPriceEnabled && (
+                  <div style={{ width: 72, flexShrink: 0 }}>
+                    <NI
+                      value={cfg.trailLimitPrice}
+                      onChange={(v) => upd("trailLimitPrice", v)}
+                      label="price"
+                      min={0}
+                      title="Trail limit price"
+                    />
+                  </div>
+                )}
+              </div>
+            </>
           )}
+
           {/* Spacer */}
           <div style={{ flex: 1 }} />
-          {/* Auto Restart label + sub-toggles */}
-          <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.55)", fontWeight: 600 }}>
-              Auto
-            </span>
-            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.75)" : "rgba(154,164,174,0.4)", letterSpacing: "0.04em" }}>
+
+          {/* Auto Restart label + TP/SL toggles */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            <LabelTooltip
+              label="Auto"
+              tooltip="Авто-рестарт сетки: после срабатывания TP или SL новая сетка автоматически размещается по текущей рыночной цене согласно текущему конфигу."
+            />
+            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.75)" : "rgba(154,164,174,0.38)", letterSpacing: "0.04em" }}>
               TP
             </span>
             <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
-            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.4)", letterSpacing: "0.04em" }}>
+            <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)", letterSpacing: "0.04em" }}>
               SL
             </span>
             <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />

@@ -329,6 +329,8 @@ export interface GridConfig {
   // Trail (grid trailing)
   trailEnabled: boolean
   trailTriggerPercent: number
+  trailLimitPriceEnabled: boolean
+  trailLimitPrice: number
 
   // Auto restart
   autoRestartOnTp: boolean
@@ -397,6 +399,8 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
 
   trailEnabled: false,
   trailTriggerPercent: 1,
+  trailLimitPriceEnabled: false,
+  trailLimitPrice: 0,
 
   autoRestartOnTp: false,
   autoRestartOnSl: false,
