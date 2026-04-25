@@ -804,10 +804,10 @@ export function GridConfigTab({
               <>
                 <div style={{ width: 1, height: 10, background: "rgba(154,164,174,0.15)", marginLeft: 2 }} />
 
-                {/* SL toggle — when ON, restart also after SL */}
+                {/* SL toggle — when ON, do NOT restart after SL */}
                 <span style={{ fontSize: 8.5, fontFamily: "monospace", letterSpacing: "0.04em", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.75)" : "rgba(154,164,174,0.38)" }}>SL</span>
                 <TinyTooltipIcon
-                  text="SL — если активирован, авто-цикл продолжается и после срабатывания Stop Loss. По умолчанию выключен: после SL цикл останавливается."
+                  text="SL — если активирован, после срабатывания Stop Loss новый цикл сетки НЕ запускается. По умолчанию выключен: после SL новая сетка создаётся автоматически."
                   color="rgba(248,113,113,0.55)"
                 />
                 <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />

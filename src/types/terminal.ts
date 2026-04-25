@@ -345,7 +345,7 @@ export interface GridConfig {
 
   // Auto restart
   autoEnabled: boolean      // master toggle — enables auto-cycle after TP/SL
-  autoRestartOnSl: boolean  // if false — do NOT restart after SL (only after TP)
+  autoRestartOnSl: boolean  // if true — do NOT restart after SL (block SL restart)
   autoStopNew: boolean      // stop cycle on next TP/SL hit, rebuild TP to breakeven
 
   // TP/SL legacy (kept for compatibility)
