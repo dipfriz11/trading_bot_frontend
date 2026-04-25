@@ -330,6 +330,9 @@ export interface GridConfig {
   trailEnabled: boolean
   trailTriggerPercent: number
 
+  // Auto restart
+  autoRestartEnabled: boolean
+
   // TP/SL legacy (kept for compatibility)
   tpUpdateMode: TpUpdateMode
   trailingEnabled: boolean
@@ -393,6 +396,8 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
 
   trailEnabled: false,
   trailTriggerPercent: 1,
+
+  autoRestartEnabled: false,
 
   tpUpdateMode: "fixed",
   trailingEnabled: false,
