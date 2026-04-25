@@ -1168,7 +1168,7 @@ export function GridConfigTab({
           onMouseDown={stopProp}
           title={cfg.side === "long" ? "Place Long grid orders on chart" : "Place Short grid orders on chart"}
         >
-          <Play size={11} />
+          {cfg.autoEnabled && <Play size={11} />}
           {cfg.side === "long" ? "Long / Grid" : "Short / Grid"}
         </button>
       </div>
