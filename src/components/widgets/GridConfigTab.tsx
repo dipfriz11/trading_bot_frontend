@@ -526,12 +526,30 @@ export function GridConfigTab({
     }, 0)
   }
 
-  // Sync from active chart — when the chart changes, reset symbol + prices together
+  // Per-chart price range storage: save topPrice/bottomPrice per chartId so switching
+  // between charts restores each chart's own price range instead of bleeding across.
+  const priceRangeByChartRef = useRef<Record<string, { topPrice: number; bottomPrice: number }>>({})
+  const prevChartIdRef = useRef<string | null>(activeChartId ?? null)
+
   useEffect(() => {
     if (!externalSymbol) return
+    const prevId = prevChartIdRef.current
+    const nextId = activeChartId ?? null
+
+    // Save current price range for the chart we're leaving
+    if (prevId) {
+      setCfg((p) => {
+        priceRangeByChartRef.current[prevId] = { topPrice: p.topPrice, bottomPrice: p.bottomPrice }
+        return p
+      })
+    }
+    prevChartIdRef.current = nextId
+
     const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
-    const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
-    const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
+    const saved = nextId ? priceRangeByChartRef.current[nextId] : undefined
+    const top = saved ? saved.topPrice : (ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0)
+    const bottom = saved ? saved.bottomPrice : (ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0)
+
     setCfg((p) => ({
       ...p,
       symbol: externalSymbol,
