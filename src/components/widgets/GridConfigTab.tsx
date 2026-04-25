@@ -620,7 +620,7 @@ export function GridConfigTab({
 
           {cfg.placementMode === "step_percent" && (
             <div className="grid grid-cols-3" style={{ gap: 4 }}>
-              <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} label="1st order %" min={0} step={0.1} title="Distance from entry price to 1st order" />
+              <NI value={cfg.firstOffsetPercent} onChange={(v) => upd("firstOffsetPercent", v)} label="1st order %" step={0.1} title="Distance from entry price to 1st order (negative = market order simulation)" />
               <NI value={cfg.lastOffsetPercent} onChange={(v) => upd("lastOffsetPercent", v)} label="Last order %" min={0} step={0.1} title="Distance from entry to last order" />
               <NI value={cfg.stepPercent} onChange={(v) => upd("stepPercent", Math.max(0.01, v))} label="Step %" min={0.01} step={0.1} title="Price step between each grid level" />
             </div>
