@@ -567,8 +567,9 @@ export function GridConfigTab({
       </div>
       <Divider />
 
-      {/* ── 5. TRAIL ─────────────────────────────────── */}
+      {/* ── 5. TRAIL + AUTO RESTART ───────────────────── */}
       <div style={{ marginBottom: 6 }}>
+        {/* Trail row */}
         <SectionHead
           title="5. TRAIL"
           expanded={open.trail}
@@ -577,7 +578,6 @@ export function GridConfigTab({
         />
         {open.trail && cfg.trailEnabled && (
           <div style={{ ...gap4, marginTop: 4 }}>
-            {/* Trigger % */}
             <div className="grid grid-cols-1" style={{ gap: 4 }}>
               <NITooltip
                 value={cfg.trailTriggerPercent}
@@ -587,12 +587,41 @@ export function GridConfigTab({
                 tooltip="Процент движения цены от края сетки, при котором сетка начинает перемещаться за ценой, сохраняя настроенное расстояние от тренда."
               />
             </div>
-            {/* Info hint */}
             <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(154,164,174,0.55)", lineHeight: 1.45, padding: "4px 6px", background: "rgba(30,111,239,0.05)", border: "1px solid rgba(30,111,239,0.1)", borderRadius: 3 }}>
               Сетка перемещается за ценой сохраняя расстояние до тренда согласно конфига
             </div>
           </div>
         )}
+
+        {/* Divider between Trail and Auto Restart */}
+        <div style={{ height: 1, background: "rgba(30,111,239,0.08)", margin: "6px 0" }} />
+
+        {/* Auto Restart row */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.6)", fontWeight: 600, lineHeight: 1 }}>
+              Auto Restart
+            </span>
+            <span style={{ fontSize: 8, fontFamily: "monospace", color: "rgba(154,164,174,0.38)", lineHeight: 1.4 }}>
+              Новая сетка по текущей цене
+            </span>
+            {/* Sub-toggles */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 5 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnTp ? "rgba(52,211,153,0.85)" : "rgba(154,164,174,0.45)", letterSpacing: "0.04em" }}>
+                  После TP
+                </span>
+                <MiniToggle checked={cfg.autoRestartOnTp} onChange={(v) => upd("autoRestartOnTp", v)} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 8.5, fontFamily: "monospace", color: cfg.autoRestartOnSl ? "rgba(248,113,113,0.85)" : "rgba(154,164,174,0.45)", letterSpacing: "0.04em" }}>
+                  После SL
+                </span>
+                <MiniToggle checked={cfg.autoRestartOnSl} onChange={(v) => upd("autoRestartOnSl", v)} />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <Divider />
 
@@ -804,40 +833,6 @@ export function GridConfigTab({
           </div>
         </>
       )}
-
-      {/* ── AUTO RESTART ─────────────────────────────── */}
-      <Divider />
-      <div style={{ marginBottom: 6 }}>
-        <div
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "5px 0",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(200,214,229,0.6)", fontWeight: 600 }}>
-              Auto Restart
-            </span>
-            <span style={{ fontSize: 8, fontFamily: "monospace", color: "rgba(154,164,174,0.45)", lineHeight: 1.4 }}>
-              После TP / SL — новая сетка по текущей цене
-            </span>
-          </div>
-          <MiniToggle checked={cfg.autoRestartEnabled} onChange={(v) => upd("autoRestartEnabled", v)} />
-        </div>
-        {cfg.autoRestartEnabled && (
-          <div style={{
-            fontSize: 9, fontFamily: "monospace", lineHeight: 1.5,
-            color: "rgba(154,164,174,0.55)",
-            padding: "5px 7px",
-            background: "rgba(30,111,239,0.05)",
-            border: "1px solid rgba(30,111,239,0.12)",
-            borderRadius: 3,
-            marginTop: 2,
-          }}>
-            При срабатывании TP или SL сетка будет автоматически пересоздана согласно текущему конфигу относительно рыночной цены в момент срабатывания.
-          </div>
-        )}
-      </div>
 
       {/* ── SUMMARY PANEL ────────────────────────────── */}
       <Divider />
