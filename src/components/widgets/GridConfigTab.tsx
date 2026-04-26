@@ -622,6 +622,10 @@ export function GridConfigTab({
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
+  // Ref always pointing at latest cfg — used by effects to avoid stale closures
+  // and by the chart-switch effect to pre-sync prevCfgRef before pendingUpdate fires
+  const prevCfgRef = useRef(cfg)
+
   // Per-chart per-side cfg storage: keyed by "chartId:side"
   // Saves full cfg when leaving a chart/side and restores it when returning
   const cfgByChartSideRef = useRef<Partial<Record<string, GridConfig>>>({})
@@ -660,6 +664,8 @@ export function GridConfigTab({
     const saved = cfgByChartSideRef.current[newKey]
     if (saved) {
       setCfg(saved)
+      // Sync prevCfgRef so the pendingUpdate effect doesn't fire for the restored cfg
+      prevCfgRef.current = saved
       initialisedKeyRef.current = `${activeChartId ?? ""}:${saved.symbol}`
     }
   }, [activeChartId, cfg.side])
@@ -1010,7 +1016,6 @@ export function GridConfigTab({
   }
 
   // When config changes while placed → mark pending update
-  const prevCfgRef = useRef(cfg)
   useEffect(() => {
     if (!isPlaced) { prevCfgRef.current = cfg; return }
     if (JSON.stringify(prevCfgRef.current) !== JSON.stringify(cfg)) {
