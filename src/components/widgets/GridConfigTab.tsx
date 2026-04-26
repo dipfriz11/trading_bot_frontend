@@ -614,7 +614,13 @@ export function GridConfigTab({
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each side gets its own independent slot so Long and Short are separate legs
   const consoleId = `${baseConsoleId}:${cfg.side}`
-  const currentGridState = gridOrders[consoleId]
+  const currentGridState = (() => {
+    const state = gridOrders[consoleId]
+    if (!state) return undefined
+    // Only consider this grid state if it belongs to the currently active chart
+    if (activeChartId && state.chartId && state.chartId !== activeChartId) return undefined
+    return state
+  })()
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
