@@ -718,51 +718,33 @@ export function GridConfigTab({
     }
 
     // Partial removal — user removed one TP on the chart
-    if (!isPlaced) {
-      // Preview: sync cfg to match remaining chart TPs
-      const remaining = chartTpLevels ?? []
-      setCfg((p) => {
-        const isLong = p.side === "long"
-        const viz = calcGridVisualization(p)
-        const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
-        const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
-        const n = remaining.length
-        // Redistribute closePercent evenly: floor for all, add remainder to last
-        const base = Math.floor(100 / n)
-        const remainder = 100 - base * n
-        const newLevels = remaining.map((price, i) => {
-          const pct = isLong
-            ? (price / basePrice - 1) * 100
-            : (1 - price / basePrice) * 100
-          const closePercent = i === n - 1 ? base + remainder : base
-          return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent }
-        })
-        const newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
-        return {
-          ...p,
-          tpPercent: newTpPercent,
-          multiTpCount: n,
-          multiTpLevels: newLevels,
-          multiTpEnabled: n > 1,
-        }
+    // Same logic for both preview and placed: sync form to match remaining chart TPs
+    const remaining = chartTpLevels ?? []
+    setCfg((p) => {
+      const isLong = p.side === "long"
+      const viz = calcGridVisualization(p)
+      const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
+      const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
+      const n = remaining.length
+      // Redistribute closePercent evenly: floor for all, add remainder to last
+      const base = Math.floor(100 / n)
+      const remainder = 100 - base * n
+      const newLevels = remaining.map((price, i) => {
+        const pct = isLong
+          ? (price / basePrice - 1) * 100
+          : (1 - price / basePrice) * 100
+        const closePercent = i === n - 1 ? base + remainder : base
+        return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent }
       })
-    } else {
-      // Placed: mark pending update so user sees Apply button
-      setGridPreview(consoleId, {
-        chartId: activeChartId ?? "",
-        consoleId,
-        side: cfg.side,
-        orders: [],
-        tpPrice: null,
-        slPrice: null,
-        tpLevels: [],
-        symbol: cfg.symbol,
-        leverage: cfg.leverage,
-        accountId,
-        exchangeId,
-        marketType,
-      })
-    }
+      const newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
+      return {
+        ...p,
+        tpPercent: newTpPercent,
+        multiTpCount: n,
+        multiTpLevels: newLevels,
+        multiTpEnabled: n > 1,
+      }
+    })
   }, [chartTpLevelsLen, isPlaced])
 
   // When tpEnabled is turned ON while placed → immediately apply TP to chart from config
