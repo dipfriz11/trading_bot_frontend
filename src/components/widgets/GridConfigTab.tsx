@@ -636,7 +636,7 @@ export function GridConfigTab({
 
   const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
     setCfg((p) => ({ ...p, [key]: val }))
-    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
+    if (isPlacedRef.current) { console.warn("[mark] from upd, key=", key); markGridPendingUpdate(consoleIdRef.current) }
   }, [markGridPendingUpdate])
 
   // Ref always pointing at latest cfg — used by chart-switch effect to pre-sync before saving
@@ -836,7 +836,7 @@ export function GridConfigTab({
         : (chartSlPrice / basePrice - 1) * 100
       return { ...p, slPercent: Math.max(0.01, Math.round(newPct * 100) / 100) }
     })
-    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
+    if (isPlacedRef.current) { console.warn("[mark] from chartSlPrice effect"); markGridPendingUpdate(consoleIdRef.current) }
   }, [chartSlPrice])
 
   // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
@@ -897,7 +897,7 @@ export function GridConfigTab({
         multiTpLevels: newMultiLevels,
       }
     })
-    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
+    if (isPlacedRef.current) { console.warn("[mark] from chartTpLevels effect"); markGridPendingUpdate(consoleIdRef.current) }
   }, [chartTpLevels])
 
   // Sync form fields when first or last grid order is dragged on the chart
@@ -957,12 +957,12 @@ export function GridConfigTab({
         return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep }
       }
     })
-    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
+    if (isPlacedRef.current) { console.warn("[mark] from chartFirstPrice/LastPrice effect"); markGridPendingUpdate(consoleIdRef.current) }
   }, [chartFirstPrice, chartLastPrice])
 
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
-    if (import.meta.env.DEV) console.log("[preview-effect] fired", { consoleId, isPlaced, activeChartId: !!activeChartId, totalQuote: cfg.totalQuote })
+    if (import.meta.env.DEV) console.log("[preview-effect] fired", { consoleId, isPlaced, activeChartId: !!activeChartId, totalQuote: cfg.totalQuote, side: cfg.side })
     if (!activeChartId) {
       if (gridOrders[consoleId]) cancelGridOrders(consoleId)
       return
