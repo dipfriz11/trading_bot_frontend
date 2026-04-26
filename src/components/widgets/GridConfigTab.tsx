@@ -941,14 +941,14 @@ export function GridConfigTab({
     return () => { cancelGridPreview(consoleId) }
   }, [consoleId])
 
-  // On full unmount, cancel all grid slots that belong to this console (any chart, any side)
+  // On full unmount, cancel only preview slots (placed grids must survive tab switching)
   const gridOrdersRef = useRef(gridOrders)
   gridOrdersRef.current = gridOrders
   useEffect(() => {
     return () => {
       const prefix = `${baseConsoleId}:`
       Object.keys(gridOrdersRef.current).forEach((id) => {
-        if (id.startsWith(prefix)) cancelGridOrders(id)
+        if (id.startsWith(prefix)) cancelGridPreview(id)
       })
     }
   }, [baseConsoleId])
