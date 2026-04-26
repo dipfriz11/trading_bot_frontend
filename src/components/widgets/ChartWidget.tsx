@@ -208,6 +208,11 @@ interface OrderLineProps {
   registerImperativeMove?: (id: string, fn: (newY: number) => void) => void
 }
 
+function orderSideLabel(side: "buy" | "sell", marketType?: "spot" | "futures"): string {
+  if (marketType === "futures") return side === "buy" ? "LONG" : "SHORT"
+  return side === "buy" ? "BUY" : "SELL"
+}
+
 function getOrderColors(order: PlacedOrder, isEditing: boolean) {
   if (order.isDraft) {
     return {
@@ -217,12 +222,13 @@ function getOrderColors(order: PlacedOrder, isEditing: boolean) {
       closeBtnFg: "rgba(200,214,229,0.9)",
       priceTagColor: "rgba(80,95,115,0.9)",
       priceTagFg: "rgba(200,214,229,0.9)",
-      label: `${order.side === "buy" ? "BUY" : "SELL"} | ${order.qty} — draft`,
+      label: `${orderSideLabel(order.side, order.marketType)} | ${order.qty} — draft`,
     }
   }
   const isBuy = order.side === "buy"
   const color = isEditing ? (isBuy ? "#236e52" : "#8a2030") : (isBuy ? "#1a7a5a" : "#7a1a1a")
   const textColor = isBuy ? "#00e5a0" : "#e06070"
+  const gridSuffix = order.gridIndex != null ? ` #${order.gridIndex}` : ""
   return {
     color,
     textColor,
@@ -230,7 +236,7 @@ function getOrderColors(order: PlacedOrder, isEditing: boolean) {
     closeBtnFg: textColor,
     priceTagColor: isBuy ? "#1a7a5a" : "#7a1a1a",
     priceTagFg: textColor,
-    label: `${isBuy ? "LONG" : "SHORT"} | ${order.qty}`,
+    label: `${orderSideLabel(order.side, order.marketType)} | ${order.qty}${gridSuffix}`,
   }
 }
 
@@ -622,7 +628,7 @@ function GridOrdersOverlay({
                 key={o.id}
                 id={`grid:${grid.consoleId}:${o.id}`}
                 price={o.price}
-                label={`${isLong ? "BUY" : "SELL"} #${o.gridIndex ?? idx + 1}${isPreview ? " — draft" : ""}`}
+                label={`${orderSideLabel(isLong ? "buy" : "sell", grid.marketType)} | ${o.qty} #${o.gridIndex ?? idx + 1}${isPreview ? " — draft" : ""}`}
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
