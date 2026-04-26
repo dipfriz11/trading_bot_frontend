@@ -636,7 +636,7 @@ export function GridConfigTab({
 
   const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
     setCfg((p) => ({ ...p, [key]: val }))
-    if (isPlacedRef.current) { console.warn("[mark] from upd, key=", key); markGridPendingUpdate(consoleIdRef.current) }
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [markGridPendingUpdate])
 
   // Ref always pointing at latest cfg — used by chart-switch effect to pre-sync before saving
@@ -836,7 +836,7 @@ export function GridConfigTab({
         : (chartSlPrice / basePrice - 1) * 100
       return { ...p, slPercent: Math.max(0.01, Math.round(newPct * 100) / 100) }
     })
-    if (isPlacedRef.current) { console.warn("[mark] from chartSlPrice effect"); markGridPendingUpdate(consoleIdRef.current) }
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartSlPrice])
 
   // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
@@ -897,7 +897,7 @@ export function GridConfigTab({
         multiTpLevels: newMultiLevels,
       }
     })
-    if (isPlacedRef.current) { console.warn("[mark] from chartTpLevels effect"); markGridPendingUpdate(consoleIdRef.current) }
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartTpLevels])
 
   // Sync form fields when first or last grid order is dragged on the chart
@@ -957,12 +957,11 @@ export function GridConfigTab({
         return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep }
       }
     })
-    if (isPlacedRef.current) { console.warn("[mark] from chartFirstPrice/LastPrice effect"); markGridPendingUpdate(consoleIdRef.current) }
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartFirstPrice, chartLastPrice])
 
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
-    if (import.meta.env.DEV) console.log("[preview-effect] fired", { consoleId, isPlaced, activeChartId: !!activeChartId, totalQuote: cfg.totalQuote, side: cfg.side })
     if (!activeChartId) {
       if (gridOrders[consoleId]) cancelGridOrders(consoleId)
       return
@@ -1006,13 +1005,14 @@ export function GridConfigTab({
   }, [cfg, activeChartId, isPlaced])
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
+  const prevSideConsoleIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (import.meta.env.DEV) console.log("[consoleId-effect] new consoleId:", consoleId)
-    return () => {
-      if (import.meta.env.DEV) console.log("[consoleId-effect] cleanup (cancelPreview):", consoleId)
-      cancelGridPreview(consoleId)
+    const prev = prevSideConsoleIdRef.current
+    if (prev && prev !== consoleId) {
+      cancelGridPreview(prev)
     }
-  }, [consoleId])
+    prevSideConsoleIdRef.current = consoleId
+  }, [consoleId, cancelGridPreview])
 
   // On full unmount, cancel only preview slots (placed grids must survive tab switching)
   const gridOrdersRef = useRef(gridOrders)
