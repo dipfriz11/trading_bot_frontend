@@ -787,6 +787,21 @@ export function GridConfigTab({
 
   // ── TP drag sync: chart drag → update cfg tpPercent / multiTpLevels ─────
   const prevChartTpLevelsRef = useRef<number[] | undefined>(undefined)
+
+  // Reset all prev-value tracking refs when switching chart (consoleId changes).
+  // Without this, stale prev-values from the old chart trigger spurious sync effects
+  // (e.g. computing SL % against a BTC price when now on AVAX chart).
+  const prevConsoleIdRef = useRef(consoleId)
+  if (prevConsoleIdRef.current !== consoleId) {
+    prevConsoleIdRef.current = consoleId
+    orderIdRefs.current = []
+    prevChartOrdersLenRef.current = undefined
+    prevChartSlPriceRef.current = undefined
+    prevChartTpLevelsLenRef.current = undefined
+    prevChartSlPriceValueRef.current = undefined
+    prevChartTpLevelsRef.current = undefined
+  }
+
   useEffect(() => {
     const prev = prevChartTpLevelsRef.current
     const cur = chartTpLevels
