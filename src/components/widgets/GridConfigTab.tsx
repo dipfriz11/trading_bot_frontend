@@ -547,6 +547,8 @@ export function GridConfigTab({
     const ref = externalEntryPrice && externalEntryPrice > 0 ? externalEntryPrice : 0
     const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
     const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
+    // Mark as init change so pendingUpdate effect doesn't fire for this
+    initSettledRef.current = false
     setCfg((p) => ({
       ...p,
       symbol: externalSymbol,
@@ -555,8 +557,18 @@ export function GridConfigTab({
       bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
     }))
   }, [activeChartId, externalSymbol, externalEntryPrice])
-  useEffect(() => { if (externalLeverage && externalLeverage > 0) setCfg((p) => ({ ...p, leverage: externalLeverage })) }, [externalLeverage])
-  useEffect(() => { if (externalFuturesSide) setCfg((p) => ({ ...p, side: externalFuturesSide })) }, [externalFuturesSide])
+  useEffect(() => {
+    if (externalLeverage && externalLeverage > 0) {
+      initSettledRef.current = false
+      setCfg((p) => ({ ...p, leverage: externalLeverage }))
+    }
+  }, [externalLeverage])
+  useEffect(() => {
+    if (externalFuturesSide) {
+      initSettledRef.current = false
+      setCfg((p) => ({ ...p, side: externalFuturesSide }))
+    }
+  }, [externalFuturesSide])
 
 
   const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
@@ -661,6 +673,8 @@ export function GridConfigTab({
     prevChartSideKeyRef.current = newKey
     orderIdRefs.current = []
     const saved = cfgByChartSideRef.current[newKey]
+    // All setCfg calls during chart-switch are restoration/init, not user edits
+    initSettledRef.current = false
     if (saved) {
       setCfg(saved)
       // Sync prevCfgRef so the pendingUpdate effect doesn't fire for the restored cfg
