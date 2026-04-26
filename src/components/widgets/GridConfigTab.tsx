@@ -612,15 +612,10 @@ export function GridConfigTab({
   // ── Grid chart integration ────────────────────────────────────────────────
   const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
-  // Each side gets its own independent slot so Long and Short are separate legs
-  const consoleId = `${baseConsoleId}:${cfg.side}`
-  const currentGridState = (() => {
-    const state = gridOrders[consoleId]
-    if (!state) return undefined
-    // Only consider this grid state if it belongs to the currently active chart
-    if (activeChartId && state.chartId && state.chartId !== activeChartId) return undefined
-    return state
-  })()
+  // Each console+chart+side combination is its own independent slot so switching charts
+  // never interferes with placed grids on another chart
+  const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}`
+  const currentGridState = gridOrders[consoleId]
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
@@ -931,11 +926,15 @@ export function GridConfigTab({
     return () => { cancelGridPreview(consoleId) }
   }, [consoleId])
 
-  // On full unmount, cancel both sides completely (including placed)
+  // On full unmount, cancel all grid slots that belong to this console (any chart, any side)
+  const gridOrdersRef = useRef(gridOrders)
+  gridOrdersRef.current = gridOrders
   useEffect(() => {
     return () => {
-      cancelGridOrders(`${baseConsoleId}:long`)
-      cancelGridOrders(`${baseConsoleId}:short`)
+      const prefix = `${baseConsoleId}:`
+      Object.keys(gridOrdersRef.current).forEach((id) => {
+        if (id.startsWith(prefix)) cancelGridOrders(id)
+      })
     }
   }, [baseConsoleId])
 
