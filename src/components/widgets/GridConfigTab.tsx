@@ -1176,18 +1176,19 @@ export function GridConfigTab({
             style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "2px 4px", borderRadius: 3, cursor: "default",
-              background: availTooltip ? "rgba(30,111,239,0.04)" : "transparent",
-              transition: "background 0.15s",
             }}
-            onMouseEnter={() => setAvailTooltip(true)}
-            onMouseLeave={() => setAvailTooltip(false)}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
               <span style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.35)" }}>
                 Available
               </span>
               {marketType === "futures" && (
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45, flexShrink: 0 }}>
+                <svg
+                  width="9" height="9" viewBox="0 0 10 10" fill="none"
+                  style={{ opacity: 0.45, flexShrink: 0, cursor: "help" }}
+                  onMouseEnter={() => setAvailTooltip(true)}
+                  onMouseLeave={() => setAvailTooltip(false)}
+                >
                   <circle cx="5" cy="5" r="4.5" stroke="rgba(30,111,239,0.7)" />
                   <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(77,159,255,0.9)" fontFamily="monospace">i</text>
                 </svg>
