@@ -75,6 +75,10 @@ export interface ChartGridOrders {
   symbol: string
   leverage: number
   pendingUpdate: boolean     // config changed after placement — show "Apply" button
+  // Account context — needed to sync balance and placedOrders on place/cancel
+  accountId?: string
+  exchangeId?: string
+  marketType?: "spot" | "futures"
 }
 
 // keyed by consoleWidgetId
@@ -88,6 +92,8 @@ export interface ChartDraftOrder {
   qty: number
   orderType: "limit" | "market"
 }
+
+export type OrderSource = "manual" | "grid" | "dca" | "bot" | "webhook"
 
 export interface ChartPlacedOrder {
   id: string
@@ -105,6 +111,12 @@ export interface ChartPlacedOrder {
   margin?: number   // actual margin locked (notional / leverage)
   time?: string
   status?: "pending" | "filled" | "cancelled"
+  // Source flags — where this order originated
+  source?: OrderSource
+  gridIndex?: number        // 1-based index within a grid (#1, #2, …)
+  gridConsoleId?: string    // groups all orders belonging to the same grid session
+  botName?: string          // e.g. "ScalpBot v2"
+  webhookName?: string      // e.g. "TradingView Alert"
 }
 
 // keyed by chartWidgetId
@@ -437,20 +449,112 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const placeGridOrders = useCallback((consoleId: string) => {
+    // Read current grid entry synchronously via ref-pattern — use functional updater to get latest state
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
+
+      if (entry.accountId && entry.exchangeId && entry.marketType) {
+        const now = new Date()
+        const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+          .map((n) => String(n).padStart(2, "0")).join(":")
+        const side: "buy" | "sell" = entry.side === "long" ? "buy" : "sell"
+
+        const newOrders: ChartPlacedOrder[] = entry.orders.map((o, i) => {
+          const notional = o.price * o.qty
+          const margin = entry.marketType === "futures" && entry.leverage
+            ? notional / entry.leverage
+            : notional
+          return {
+            id: o.id,
+            side,
+            price: o.price,
+            qty: o.qty,
+            orderType: "limit" as const,
+            isDraft: false,
+            symbol: entry.symbol,
+            accountId: entry.accountId,
+            exchangeId: entry.exchangeId,
+            marketType: entry.marketType,
+            leverage: entry.leverage,
+            margin,
+            time,
+            status: "pending" as const,
+            source: "grid" as const,
+            gridIndex: i + 1,
+            gridConsoleId: consoleId,
+          }
+        })
+
+        const totalMargin = newOrders.reduce((s, o) => s + (o.margin ?? 0), 0)
+        const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
+        const chartId = entry.chartId
+
+        // Remove old grid orders for this session from placedOrders, add new ones
+        setPlacedOrdersMap((prevPlaced) => {
+          const chartOrders = prevPlaced[chartId] ?? []
+          const withoutOld = chartOrders.filter((o) => o.gridConsoleId !== consoleId)
+          return { ...prevPlaced, [chartId]: [...withoutOld, ...newOrders] }
+        })
+
+        // Recompute inOrders: remove old grid margin, add new
+        setBalances((b) => {
+          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+          // We don't have the old margin here directly — recompute from all placed orders
+          // excluding old grid entries (they'll be gone after setPlacedOrdersMap settles).
+          // Since React batches these in the same event, we approximate by recalculating
+          // from existing inOrders: strip old grid contribution and add new totalMargin.
+          // The updatePlacedOrderPrice effect always recomputes fully on any drag.
+          // Safest: use the absolute recalculation — read current inOrders, subtract the
+          // previous grid margin contribution (stored in entry.orders), add new.
+          const prevGridMargin = entry.orders.reduce((s, o) => {
+            const notional = o.price * o.qty
+            const m = entry.marketType === "futures" && entry.leverage ? notional / entry.leverage : notional
+            return s + m
+          }, 0)
+          const newInOrders = Math.max(0, Math.round((cur.inOrders - prevGridMargin + totalMargin) * 100) / 100)
+          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+        })
+      }
+
       return { ...prev, [consoleId]: { ...entry, state: "placed", pendingUpdate: false } }
     })
-  }, [])
+  }, [setPlacedOrdersMap, setBalances])
 
   const cancelGridOrders = useCallback((consoleId: string) => {
     setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+
+      if (entry && entry.accountId && entry.exchangeId && entry.marketType && entry.state === "placed") {
+        const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
+
+        // Remove all placed orders belonging to this grid session
+        setPlacedOrdersMap((prevPlaced) => {
+          const result: typeof prevPlaced = {}
+          for (const [chartId, orders] of Object.entries(prevPlaced)) {
+            result[chartId] = orders.filter((o) => o.gridConsoleId !== consoleId)
+          }
+          return result
+        })
+
+        // Recalculate inOrders from scratch excluding cancelled grid orders
+        setBalances((b) => {
+          const gridMargin = entry.orders.reduce((s, o) => {
+            const notional = o.price * o.qty
+            const m = entry.marketType === "futures" && entry.leverage ? notional / entry.leverage : notional
+            return s + m
+          }, 0)
+          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+          const newInOrders = Math.max(0, Math.round((cur.inOrders - gridMargin) * 100) / 100)
+          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+        })
+      }
+
       const n = { ...prev }
       delete n[consoleId]
       return n
     })
-  }, [])
+  }, [setPlacedOrdersMap, setBalances])
 
   // Cancel only if still in preview state — placed grids survive side switching
   const cancelGridPreview = useCallback((consoleId: string) => {

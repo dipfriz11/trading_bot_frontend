@@ -2,7 +2,7 @@ import { useState } from "react"
 import { generatePositions, formatPrice, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
 import type { Widget } from "@/types/terminal"
 import { useTerminal } from "@/contexts/TerminalContext"
-import type { ChartPlacedOrder } from "@/contexts/TerminalContext"
+import type { ChartPlacedOrder, OrderSource } from "@/contexts/TerminalContext"
 import { X } from "lucide-react"
 
 const positions = generatePositions()
@@ -19,6 +19,40 @@ function fmtPrice(n: number) {
 
 function fmtUSDT(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const SOURCE_BADGE_STYLES: Record<OrderSource, { bg: string; color: string; border: string }> = {
+  manual: { bg: "transparent", color: "transparent", border: "transparent" },
+  grid:    { bg: "rgba(77,159,255,0.1)",  color: "#4d9fff",  border: "rgba(77,159,255,0.25)" },
+  dca:     { bg: "rgba(168,85,247,0.1)",  color: "#a855f7",  border: "rgba(168,85,247,0.25)" },
+  bot:     { bg: "rgba(255,171,0,0.1)",   color: "#ffab00",  border: "rgba(255,171,0,0.25)" },
+  webhook: { bg: "rgba(0,229,160,0.08)",  color: "#00e5a0",  border: "rgba(0,229,160,0.2)" },
+}
+
+function SourceBadge({ order }: { order: FlatOrder }) {
+  const source = order.source ?? "manual"
+  if (source === "manual") return null
+  const style = SOURCE_BADGE_STYLES[source]
+
+  let label = source.toUpperCase()
+  if (source === "grid" && order.gridIndex != null) label = `GRID #${order.gridIndex}`
+  if (source === "bot" && order.botName) label = `BOT · ${order.botName}`
+  if (source === "webhook" && order.webhookName) label = `⚡ ${order.webhookName}`
+
+  return (
+    <span
+      className="px-1.5 py-0.5 font-mono rounded"
+      style={{
+        fontSize: 8,
+        background: style.bg,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+        letterSpacing: "0.03em",
+      }}
+    >
+      {label}
+    </span>
+  )
 }
 
 function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void }) {
@@ -79,6 +113,9 @@ function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void 
               {order.leverage}×
             </span>
           )}
+
+          {/* Source badge */}
+          <SourceBadge order={order} />
         </div>
 
         <div className="flex items-center gap-2">

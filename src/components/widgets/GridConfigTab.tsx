@@ -482,6 +482,8 @@ interface GridConfigTabProps {
   onSideChange?: (side: "long" | "short") => void
   consoleWidgetId?: string
   activeChartId?: string | null
+  accountId?: string
+  exchangeId?: string
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -497,6 +499,8 @@ export function GridConfigTab({
   onSideChange,
   consoleWidgetId,
   activeChartId,
+  accountId,
+  exchangeId,
 }: GridConfigTabProps) {
   const [cfg, setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
@@ -754,6 +758,9 @@ export function GridConfigTab({
         tpLevels: [],
         symbol: cfg.symbol,
         leverage: cfg.leverage,
+        accountId,
+        exchangeId,
+        marketType,
       })
     }
   }, [chartTpLevelsLen, isPlaced])
@@ -867,6 +874,9 @@ export function GridConfigTab({
       tpLevels: viz.tpLevels,
       symbol: cfg.symbol,
       leverage: cfg.leverage,
+      accountId,
+      exchangeId,
+      marketType,
     })
   }, [cfg, activeChartId, isPlaced])
 
@@ -900,6 +910,9 @@ export function GridConfigTab({
       tpLevels: viz.tpLevels,
       symbol: cfg.symbol,
       leverage: cfg.leverage,
+      accountId,
+      exchangeId,
+      marketType,
     }
     // Cancel first to reset state from "placed" to allow setGridPreview to write fresh data
     cancelGridOrders(consoleId)
@@ -926,6 +939,9 @@ export function GridConfigTab({
         tpLevels: [],
         symbol: cfg.symbol,
         leverage: cfg.leverage,
+        accountId,
+        exchangeId,
+        marketType,
       })
     }
     prevCfgRef.current = cfg
