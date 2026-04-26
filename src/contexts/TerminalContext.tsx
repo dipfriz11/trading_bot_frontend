@@ -204,6 +204,13 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
   const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
+  // Stable refs for reading latest state in callbacks without triggering re-renders
+  const placedOrdersRef = React.useRef<PlacedOrderMap>({})
+  const gridOrdersRef = React.useRef<GridOrderMap>({})
+  const balancesRef = React.useRef<BalanceStore>(buildInitialBalances())
+  placedOrdersRef.current = placedOrders
+  gridOrdersRef.current = gridOrders
+  balancesRef.current = balances
   const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
 
   useEffect(() => {
@@ -401,76 +408,63 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const removePlacedOrder = useCallback((chartId: string, orderId: string) => {
-    setPlacedOrdersMap((prev) => {
-      const chartOrders = prev[chartId] ?? []
-      const removed = chartOrders.find((o) => o.id === orderId)
+    const prev = placedOrdersRef.current
+    const chartOrders = prev[chartId] ?? []
+    const removed = chartOrders.find((o) => o.id === orderId)
 
-      // If it's a grid order, also remove it from gridOrders and refund its margin
-      if (removed?.source === "grid" && removed.gridConsoleId) {
-        const consoleId = removed.gridConsoleId
+    setPlacedOrdersMap({ ...prev, [chartId]: chartOrders.filter((o) => o.id !== orderId) })
 
-        setGridOrdersMap((prevGrid) => {
-          const entry = prevGrid[consoleId]
-          if (!entry) return prevGrid
-          const orders = entry.orders.filter((o) => o.id !== orderId)
-          if (orders.length === 0) {
-            // Last order removed — clear the whole grid entry
-            const n = { ...prevGrid }
-            delete n[consoleId]
-            return n
-          }
-          return { ...prevGrid, [consoleId]: { ...entry, orders } }
-        })
-
-        // Refund the margin for this individual order
-        if (removed.accountId && removed.exchangeId && removed.marketType && removed.margin != null) {
-          const k = balKey(removed.accountId, removed.exchangeId, removed.marketType)
-          setBalances((b) => {
-            const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-            const newInOrders = Math.max(0, Math.round((cur.inOrders - removed.margin!) * 100) / 100)
-            return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
-          })
+    if (removed?.source === "grid" && removed.gridConsoleId) {
+      const consoleId = removed.gridConsoleId
+      const prevGrid = gridOrdersRef.current
+      const entry = prevGrid[consoleId]
+      if (entry) {
+        const orders = entry.orders.filter((o) => o.id !== orderId)
+        if (orders.length === 0) {
+          const n = { ...prevGrid }
+          delete n[consoleId]
+          setGridOrdersMap(n)
+        } else {
+          setGridOrdersMap({ ...prevGrid, [consoleId]: { ...entry, orders } })
         }
       }
 
-      return {
-        ...prev,
-        [chartId]: chartOrders.filter((o) => o.id !== orderId),
+      if (removed.accountId && removed.exchangeId && removed.marketType && removed.margin != null) {
+        const k = balKey(removed.accountId, removed.exchangeId, removed.marketType)
+        const b = balancesRef.current
+        const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+        const newInOrders = Math.max(0, Math.round((cur.inOrders - removed.margin) * 100) / 100)
+        setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } })
       }
-    })
-  }, [setGridOrdersMap, setBalances])
+    }
+  }, [])
 
   const updatePlacedOrderPrice = useCallback((chartId: string, orderId: string, price: number) => {
-    setPlacedOrdersMap((prev) => {
-      const orders = prev[chartId] ?? []
-      const order = orders.find((o) => o.id === orderId)
-      if (!order) return prev
+    const prev = placedOrdersRef.current
+    const orders = prev[chartId] ?? []
+    const order = orders.find((o) => o.id === orderId)
+    if (!order) return
 
-      const newNotional = order.qty * price
-      const newMargin = order.marketType === "futures" && order.leverage
-        ? newNotional / order.leverage
-        : newNotional
+    const newNotional = order.qty * price
+    const newMargin = order.marketType === "futures" && order.leverage
+      ? newNotional / order.leverage
+      : newNotional
 
-      const updatedOrders = orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o)
-      const newMap = { ...prev, [chartId]: updatedOrders }
+    const updatedOrders = orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o)
+    const newMap = { ...prev, [chartId]: updatedOrders }
+    setPlacedOrdersMap(newMap)
 
-      // Recompute inOrders as sum of all order margins for this account/exchange/marketType
-      if (order.accountId && order.exchangeId && order.marketType) {
-        const k = balKey(order.accountId, order.exchangeId, order.marketType)
-        const totalInOrders = Object.values(newMap)
-          .flat()
-          .filter((o) => o.accountId === order.accountId && o.exchangeId === order.exchangeId && o.marketType === order.marketType && o.margin != null)
-          .reduce((sum, o) => sum + (o.margin ?? 0), 0)
-
-        setBalances((b) => {
-          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } }
-        })
-      }
-
-      return newMap
-    })
-  }, [setBalances])
+    if (order.accountId && order.exchangeId && order.marketType) {
+      const k = balKey(order.accountId, order.exchangeId, order.marketType)
+      const totalInOrders = Object.values(newMap)
+        .flat()
+        .filter((o) => o.accountId === order.accountId && o.exchangeId === order.exchangeId && o.marketType === order.marketType && o.margin != null)
+        .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+      const b = balancesRef.current
+      const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+      setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
+    }
+  }, [])
 
   const updatePlacedOrder = useCallback((chartId: string, orderId: string, updates: Partial<ChartPlacedOrder>) => {
     setPlacedOrdersMap((prev) => ({
@@ -496,108 +490,88 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const placeGridOrders = useCallback((consoleId: string) => {
-    // Read current grid entry synchronously via ref-pattern — use functional updater to get latest state
-    setGridOrdersMap((prev) => {
-      const entry = prev[consoleId]
-      if (!entry) return prev
+    const prev = gridOrdersRef.current
+    const entry = prev[consoleId]
+    if (!entry) return
 
-      if (entry.accountId && entry.exchangeId && entry.marketType) {
-        const now = new Date()
-        const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
-          .map((n) => String(n).padStart(2, "0")).join(":")
-        const side: "buy" | "sell" = entry.side === "long" ? "buy" : "sell"
+    const ordersWithIndex = entry.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
+    setGridOrdersMap({ ...prev, [consoleId]: { ...entry, orders: ordersWithIndex, state: "placed", pendingUpdate: false } })
 
-        const newOrders: ChartPlacedOrder[] = entry.orders.map((o, i) => {
-          const notional = o.price * o.qty
-          const margin = entry.marketType === "futures" && entry.leverage
-            ? notional / entry.leverage
-            : notional
-          return {
-            id: o.id,
-            side,
-            price: o.price,
-            qty: o.qty,
-            orderType: "limit" as const,
-            isDraft: false,
-            symbol: entry.symbol,
-            accountId: entry.accountId,
-            exchangeId: entry.exchangeId,
-            marketType: entry.marketType,
-            leverage: entry.leverage,
-            margin,
-            time,
-            status: "pending" as const,
-            source: "grid" as const,
-            gridIndex: i + 1,
-            gridConsoleId: consoleId,
-          }
-        })
+    if (entry.accountId && entry.exchangeId && entry.marketType) {
+      const now = new Date()
+      const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+        .map((n) => String(n).padStart(2, "0")).join(":")
+      const side: "buy" | "sell" = entry.side === "long" ? "buy" : "sell"
 
-        const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
-        const chartId = entry.chartId
+      const newOrders: ChartPlacedOrder[] = entry.orders.map((o, i) => {
+        const notional = o.price * o.qty
+        const margin = entry.marketType === "futures" && entry.leverage
+          ? notional / entry.leverage
+          : notional
+        return {
+          id: o.id,
+          side,
+          price: o.price,
+          qty: o.qty,
+          orderType: "limit" as const,
+          isDraft: false,
+          symbol: entry.symbol,
+          accountId: entry.accountId,
+          exchangeId: entry.exchangeId,
+          marketType: entry.marketType,
+          leverage: entry.leverage,
+          margin,
+          time,
+          status: "pending" as const,
+          source: "grid" as const,
+          gridIndex: i + 1,
+          gridConsoleId: consoleId,
+        }
+      })
 
-        // Remove old grid orders for this session from placedOrders, add new ones
-        // Also recompute inOrders from scratch to avoid drift from nested setState ordering
-        setPlacedOrdersMap((prevPlaced) => {
-          const chartOrders = prevPlaced[chartId] ?? []
-          const withoutOld = chartOrders.filter((o) => o.gridConsoleId !== consoleId)
-          const updatedMap = { ...prevPlaced, [chartId]: [...withoutOld, ...newOrders] }
+      const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
+      const chartId = entry.chartId
+      const prevPlaced = placedOrdersRef.current
+      const chartOrders = prevPlaced[chartId] ?? []
+      const withoutOld = chartOrders.filter((o) => o.gridConsoleId !== consoleId)
+      const updatedMap = { ...prevPlaced, [chartId]: [...withoutOld, ...newOrders] }
+      setPlacedOrdersMap(updatedMap)
 
-          // Recompute inOrders as the exact sum of all placed order margins for this account/market
-          const totalInOrders = Object.values(updatedMap)
-            .flat()
-            .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
-            .reduce((sum, o) => sum + (o.margin ?? 0), 0)
-
-          setBalances((b) => {
-            const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-            return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } }
-          })
-
-          return updatedMap
-        })
-      }
-
-      // Store gridIndex on grid.orders items so ChartWidget can use stable labels after partial removal
-      const ordersWithIndex = entry.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
-      return { ...prev, [consoleId]: { ...entry, orders: ordersWithIndex, state: "placed", pendingUpdate: false } }
-    })
-  }, [setPlacedOrdersMap, setBalances])
+      const totalInOrders = Object.values(updatedMap)
+        .flat()
+        .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
+        .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+      const b = balancesRef.current
+      const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+      setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
+    }
+  }, [])
 
   const cancelGridOrders = useCallback((consoleId: string) => {
-    setGridOrdersMap((prev) => {
-      const entry = prev[consoleId]
+    const prev = gridOrdersRef.current
+    const entry = prev[consoleId]
+    const n = { ...prev }
+    delete n[consoleId]
+    setGridOrdersMap(n)
 
-      if (entry && entry.accountId && entry.exchangeId && entry.marketType && entry.state === "placed") {
-        const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
-
-        // Remove all placed orders belonging to this grid session and recompute balance
-        setPlacedOrdersMap((prevPlaced) => {
-          const updatedMap: typeof prevPlaced = {}
-          for (const [chartId, orders] of Object.entries(prevPlaced)) {
-            updatedMap[chartId] = orders.filter((o) => o.gridConsoleId !== consoleId)
-          }
-
-          // Recompute inOrders as exact sum of remaining placed order margins
-          const totalInOrders = Object.values(updatedMap)
-            .flat()
-            .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
-            .reduce((sum, o) => sum + (o.margin ?? 0), 0)
-
-          setBalances((b) => {
-            const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-            return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } }
-          })
-
-          return updatedMap
-        })
+    if (entry && entry.accountId && entry.exchangeId && entry.marketType && entry.state === "placed") {
+      const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
+      const prevPlaced = placedOrdersRef.current
+      const updatedMap: typeof prevPlaced = {}
+      for (const [chartId, orders] of Object.entries(prevPlaced)) {
+        updatedMap[chartId] = orders.filter((o) => o.gridConsoleId !== consoleId)
       }
+      setPlacedOrdersMap(updatedMap)
 
-      const n = { ...prev }
-      delete n[consoleId]
-      return n
-    })
-  }, [setPlacedOrdersMap, setBalances])
+      const totalInOrders = Object.values(updatedMap)
+        .flat()
+        .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
+        .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+      const b = balancesRef.current
+      const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+      setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } })
+    }
+  }, [])
 
   // Cancel only if still in preview state — placed grids survive side switching
   const cancelGridPreview = useCallback((consoleId: string) => {

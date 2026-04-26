@@ -647,15 +647,19 @@ export function GridConfigTab({
   const cfgByChartSideRef = useRef<Partial<Record<string, GridConfig>>>({})
   const prevChartSideKeyRef = useRef(`${activeChartId ?? ""}:${cfg.side}`)
 
-  // Track side switches (within the same chart) — save/restore cfg
+  // Track side switches (within the same chart) — save/restore cfg.
+  // Runs only when cfg.side changes; does NOT trigger when activeChartId changes
+  // (that is handled by the chart-switch effect below, which fires first).
   const prevSideRef = useRef<"long" | "short">(cfg.side)
   useEffect(() => {
     const prevSide = prevSideRef.current
     if (prevSide === cfg.side) return
+    // Save cfg for the side we're leaving, preserving the correct side value
     const prevKey = `${activeChartId ?? ""}:${prevSide}`
-    cfgByChartSideRef.current[prevKey] = { ...cfg, side: prevSide }
+    cfgByChartSideRef.current[prevKey] = { ...cfgRef.current, side: prevSide }
     prevSideRef.current = cfg.side
     orderIdRefs.current = []
+    // Restore cfg for the side we're switching to, if previously saved
     const savedKey = `${activeChartId ?? ""}:${cfg.side}`
     const saved = cfgByChartSideRef.current[savedKey]
     if (saved) {
@@ -667,30 +671,31 @@ export function GridConfigTab({
         side: cfg.side,
       }))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.side])
 
-  // Track chart switches — save cfg for old chart/side, restore for new chart/side
+  // Track chart switches — save cfg for old chart/side, restore for new chart/side.
+  // Depends only on activeChartId so it never fires on side-only changes.
   useEffect(() => {
-    const newKey = `${activeChartId ?? ""}:${cfg.side}`
-    if (prevChartSideKeyRef.current === newKey) return
+    const currentSide = prevSideRef.current
+    const newKey = `${activeChartId ?? ""}:${currentSide}`
     const oldKey = prevChartSideKeyRef.current
-    cfgByChartSideRef.current[oldKey] = cfgRef.current
+    if (oldKey === newKey) return
+    // Save cfg for the chart+side we're leaving, with the correct side from the old key
+    const oldSide = oldKey.split(":").pop() as "long" | "short"
+    cfgByChartSideRef.current[oldKey] = { ...cfgRef.current, side: oldSide }
     prevChartSideKeyRef.current = newKey
     orderIdRefs.current = []
     const saved = cfgByChartSideRef.current[newKey]
-    // All setCfg calls during chart-switch are restoration/init, not user edits
-
     if (saved) {
       setCfg(saved)
-      // Sync prevCfgRef so the pendingUpdate effect doesn't fire for the restored cfg
       prevCfgRef.current = saved
       initialisedKeyRef.current = `${activeChartId ?? ""}:${saved.symbol}`
     }
-    // Clear any stale pendingUpdate on the new consoleId — the cfg we're restoring
-    // matches what was placed, so there's nothing to apply.
-    const newConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}`
+    const newConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${currentSide}`
     clearGridPendingUpdate(newConsoleId)
-  }, [activeChartId, cfg.side])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChartId])
 
   // Stable ID refs for order levels
   const orderIdRefs = useRef<string[]>([])
@@ -815,6 +820,7 @@ export function GridConfigTab({
   useEffect(() => {
     const prev = prevChartSlPriceValueRef.current
     prevChartSlPriceValueRef.current = chartSlPrice ?? null
+    if (!isPlacedRef.current) return
     // Only react to non-null→non-null changes (i.e. drag moved the price)
     if (prev === undefined || prev === null || chartSlPrice === null || chartSlPrice === undefined) return
     if (Math.abs(chartSlPrice - prev) < 1e-8) return
@@ -869,6 +875,7 @@ export function GridConfigTab({
     const prev = prevChartTpLevelsRef.current
     const cur = chartTpLevels
     prevChartTpLevelsRef.current = cur ? [...cur] : undefined
+    if (!isPlacedRef.current) return
     if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
     // Check if any price changed
     const changed = cur.some((p, i) => Math.abs(p - prev[i]) > 1e-8)
@@ -907,6 +914,7 @@ export function GridConfigTab({
   const chartFirstPrice = useMemo(() => rawChartFirstPrice, [rawChartFirstPrice])
   const chartLastPrice = useMemo(() => rawChartLastPrice, [rawChartLastPrice])
   useEffect(() => {
+    if (!isPlacedRef.current) return
     if (chartFirstPrice === undefined || chartLastPrice === undefined) return
 
     // Skip if this matches what the form itself pushed (form-driven update, not a drag)
@@ -1002,9 +1010,14 @@ export function GridConfigTab({
   }, [cfg, activeChartId, isPlaced])
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
+  const prevSideConsoleIdRef = useRef<string | null>(null)
   useEffect(() => {
-    return () => { cancelGridPreview(consoleId) }
-  }, [consoleId])
+    const prev = prevSideConsoleIdRef.current
+    if (prev && prev !== consoleId) {
+      cancelGridPreview(prev)
+    }
+    prevSideConsoleIdRef.current = consoleId
+  }, [consoleId, cancelGridPreview])
 
   // On full unmount, cancel only preview slots (placed grids must survive tab switching)
   const gridOrdersRef = useRef(gridOrders)
