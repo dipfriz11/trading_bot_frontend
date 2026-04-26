@@ -474,7 +474,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => {
-    if (import.meta.env.DEV) console.log("[setGridPreview]", consoleId, data ? `side=${data.side}` : "null", new Error().stack?.split("\n").slice(1, 4).join(" | "))
     setGridOrdersMap((prev) => {
       if (data === null) {
         const n = { ...prev }
@@ -549,7 +548,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const cancelGridOrders = useCallback((consoleId: string) => {
-    if (import.meta.env.DEV) console.log("[cancelGridOrders]", consoleId, new Error().stack?.split("\n").slice(1, 4).join(" | "))
     const prev = gridOrdersRef.current
     const entry = prev[consoleId]
     const n = { ...prev }
@@ -577,7 +575,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   // Cancel only if still in preview state — placed grids survive side switching
   const cancelGridPreview = useCallback((consoleId: string) => {
-    if (import.meta.env.DEV) console.log("[cancelGridPreview]", consoleId, new Error().stack?.split("\n").slice(1, 4).join(" | "))
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry || entry.state === "placed") return prev
