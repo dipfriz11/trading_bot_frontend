@@ -123,6 +123,12 @@ export interface ChartPlacedOrder {
 type DraftOrderMap = Record<string, ChartDraftOrder | undefined>
 type PlacedOrderMap = Record<string, ChartPlacedOrder[]>
 
+export interface ChartTpSl {
+  tp: number | null
+  sl: number | null
+}
+type TpSlMap = Record<string, ChartTpSl>
+
 interface TerminalContextValue {
   state: TerminalState
   activeTab: Tab | undefined
@@ -167,6 +173,11 @@ interface TerminalContextValue {
   deductOrderBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => void
   refundOrderBalance: (accountId: string, exchangeId: string, marketType: "spot" | "futures", amount: number) => void
 
+  // TP/SL per chart
+  tpSlOrders: TpSlMap
+  setTpSl: (chartId: string, tpSl: Partial<ChartTpSl>) => void
+  clearTpSl: (chartId: string) => void
+
   // Grid orders bridge
   gridOrders: GridOrderMap
   setGridPreview: (consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => void
@@ -192,6 +203,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
   const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
+  const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
 
   useEffect(() => {
     try {
@@ -685,6 +697,21 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const setTpSl = useCallback((chartId: string, patch: Partial<ChartTpSl>) => {
+    setTpSlOrders((prev) => {
+      const existing: ChartTpSl = prev[chartId] ?? { tp: null, sl: null }
+      return { ...prev, [chartId]: { ...existing, ...patch } }
+    })
+  }, [])
+
+  const clearTpSl = useCallback((chartId: string) => {
+    setTpSlOrders((prev) => {
+      const n = { ...prev }
+      delete n[chartId]
+      return n
+    })
+  }, [])
+
   const markGridPendingUpdate = useCallback((consoleId: string) => {
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -728,6 +755,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         getBalance,
         deductOrderBalance,
         refundOrderBalance,
+        tpSlOrders,
+        setTpSl,
+        clearTpSl,
         gridOrders,
         setGridPreview,
         placeGridOrders,

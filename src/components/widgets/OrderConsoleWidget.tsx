@@ -54,6 +54,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     getBalance,
     deductOrderBalance,
     refundOrderBalance,
+    tpSlOrders, setTpSl,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "history" | "grid" | "dca">("new")
@@ -61,6 +62,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
   const [stopPrice, setStopPrice] = useState("")
+  const [tp, setTp] = useState("")
+  const [sl, setSl] = useState("")
   const [qty, setQty] = useState("")
   const [amount, setAmount] = useState("")
   const [anchor, setAnchor] = useState<AnchorField>("qty")
@@ -113,6 +116,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // True while we are programmatically updating price (init or drag sync).
   // Prevents push-draft from immediately echoing the change back as a new draft.
   const settingPriceFromExternalRef = useRef(false)
+  // Prevents TP/SL form→context push when we're syncing context→form
+  const settingTpSlFromContextRef = useRef(false)
+  const lastTpPushedRef = useRef<number | null>(null)
+  const lastSlPushedRef = useRef<number | null>(null)
 
   // Init price on symbol/activeChart change — runs once per chart focus
   const initialisedKeyRef = useRef<string>("")
@@ -242,6 +249,66 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     prevChartIdRef.current = activeChart?.id ?? null
   }, [activeChart?.id])
 
+  // ---- Push TP to context when form changes ----
+  useEffect(() => {
+    if (!activeChart) return
+    if (settingTpSlFromContextRef.current) return
+    const tpNum = parseFloat(tp)
+    const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
+    lastTpPushedRef.current = newTp
+    setTpSl(activeChart.id, { tp: newTp })
+  }, [tp, activeChart?.id])
+
+  // ---- Push SL to context when form changes ----
+  useEffect(() => {
+    if (!activeChart) return
+    if (settingTpSlFromContextRef.current) return
+    const slNum = parseFloat(sl)
+    const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
+    lastSlPushedRef.current = newSl
+    setTpSl(activeChart.id, { sl: newSl })
+  }, [sl, activeChart?.id])
+
+  // ---- Sync TP/SL form from context (chart drag) ----
+  useEffect(() => {
+    if (!activeChart) return
+    const tpsl = tpSlOrders[activeChart.id]
+    const ctxTp = tpsl?.tp ?? null
+    const ctxSl = tpsl?.sl ?? null
+
+    // Check if context TP changed externally (chart drag)
+    const threshold = (v: number) => Math.max(v * 0.00001, 1e-8)
+    if (ctxTp !== null && (lastTpPushedRef.current === null || Math.abs(ctxTp - (lastTpPushedRef.current ?? 0)) > threshold(ctxTp))) {
+      settingTpSlFromContextRef.current = true
+      setTp(priceToString(ctxTp))
+      lastTpPushedRef.current = ctxTp
+      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+    } else if (ctxTp === null && lastTpPushedRef.current !== null && lastTpPushedRef.current !== 0) {
+      settingTpSlFromContextRef.current = true
+      setTp("")
+      lastTpPushedRef.current = null
+      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+    }
+
+    if (ctxSl !== null && (lastSlPushedRef.current === null || Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)) > threshold(ctxSl))) {
+      settingTpSlFromContextRef.current = true
+      setSl(priceToString(ctxSl))
+      lastSlPushedRef.current = ctxSl
+      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+    } else if (ctxSl === null && lastSlPushedRef.current !== null && lastSlPushedRef.current !== 0) {
+      settingTpSlFromContextRef.current = true
+      setSl("")
+      lastSlPushedRef.current = null
+      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+    }
+  }, [tpSlOrders, activeChart?.id])
+
+  // Reset TP/SL refs on chart switch
+  useEffect(() => {
+    lastTpPushedRef.current = null
+    lastSlPushedRef.current = null
+  }, [activeChart?.id])
+
   const handlePriceChange = (v: string) => {
     setPrice(v)
     if (editingOrderId) setFormEditMode(true)
@@ -340,6 +407,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       suppressDraftRef.current = false
       settingPriceFromExternalRef.current = false
     })
+  }
+
+  const handleTpChange = (v: string) => {
+    setTp(v)
+  }
+
+  const handleSlChange = (v: string) => {
+    setSl(v)
   }
 
   const handleSubmit = () => {
@@ -656,6 +731,34 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                 {pct}%
               </button>
             ))}
+          </div>
+
+          {/* TP / SL */}
+          <div className="grid grid-cols-2 gap-1">
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-mono" style={{ opacity: 0.4, fontSize: 10, color: "#00e5a0" }}>Take Profit</label>
+              <input
+                type="number"
+                value={tp}
+                onChange={(e) => handleTpChange(e.target.value)}
+                placeholder="0.00"
+                className="text-xs font-mono outline-none px-2 py-1 w-full"
+                style={{ border: tp ? "1px solid rgba(0,229,160,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: tp ? "#00e5a0" : "rgba(200,214,229,0.9)", background: "rgba(0,229,160,0.04)" }}
+                onMouseDown={stopProp}
+              />
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-mono" style={{ opacity: 0.4, fontSize: 10, color: "#ffaa44" }}>Stop Loss</label>
+              <input
+                type="number"
+                value={sl}
+                onChange={(e) => handleSlChange(e.target.value)}
+                placeholder="0.00"
+                className="text-xs font-mono outline-none px-2 py-1 w-full"
+                style={{ border: sl ? "1px solid rgba(255,170,68,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: sl ? "#ffaa44" : "rgba(200,214,229,0.9)", background: "rgba(255,170,68,0.04)" }}
+                onMouseDown={stopProp}
+              />
+            </div>
           </div>
 
           {/* Edit mode banner */}
