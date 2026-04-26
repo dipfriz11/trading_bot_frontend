@@ -1043,7 +1043,7 @@ export function GridConfigTab({
       <div style={{ marginBottom: 6 }}>
         <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
           <div style={{ width: 80, flexShrink: 0 }}>
-            <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(3, Math.min(100, Math.round(v))))} label="Orders" placeholder="8" title="Number of grid levels (3–100)" min={3} />
+            <NI value={cfg.ordersCount} onChange={(v) => upd("ordersCount", Math.max(1, Math.min(100, Math.round(v))))} label="Orders" placeholder="8" title="Number of grid levels (1–100)" min={1} />
           </div>
           <BudgetInput
             value={cfg.totalQuote}

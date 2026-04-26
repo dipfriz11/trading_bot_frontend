@@ -68,7 +68,7 @@ export interface ChartGridOrders {
   consoleId: string          // which order-console widget owns this
   state: GridOrderState
   side: "long" | "short"
-  orders: Array<{ id: string; price: number; qty: number }>
+  orders: Array<{ id: string; price: number; qty: number; gridIndex?: number }>
   tpPrice: number | null
   slPrice: number | null
   tpLevels: number[]
@@ -387,11 +387,44 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const removePlacedOrder = useCallback((chartId: string, orderId: string) => {
-    setPlacedOrdersMap((prev) => ({
-      ...prev,
-      [chartId]: (prev[chartId] ?? []).filter((o) => o.id !== orderId),
-    }))
-  }, [])
+    setPlacedOrdersMap((prev) => {
+      const chartOrders = prev[chartId] ?? []
+      const removed = chartOrders.find((o) => o.id === orderId)
+
+      // If it's a grid order, also remove it from gridOrders and refund its margin
+      if (removed?.source === "grid" && removed.gridConsoleId) {
+        const consoleId = removed.gridConsoleId
+
+        setGridOrdersMap((prevGrid) => {
+          const entry = prevGrid[consoleId]
+          if (!entry) return prevGrid
+          const orders = entry.orders.filter((o) => o.id !== orderId)
+          if (orders.length === 0) {
+            // Last order removed — clear the whole grid entry
+            const n = { ...prevGrid }
+            delete n[consoleId]
+            return n
+          }
+          return { ...prevGrid, [consoleId]: { ...entry, orders } }
+        })
+
+        // Refund the margin for this individual order
+        if (removed.accountId && removed.exchangeId && removed.marketType && removed.margin != null) {
+          const k = balKey(removed.accountId, removed.exchangeId, removed.marketType)
+          setBalances((b) => {
+            const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+            const newInOrders = Math.max(0, Math.round((cur.inOrders - removed.margin!) * 100) / 100)
+            return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+          })
+        }
+      }
+
+      return {
+        ...prev,
+        [chartId]: chartOrders.filter((o) => o.id !== orderId),
+      }
+    })
+  }, [setGridOrdersMap, setBalances])
 
   const updatePlacedOrderPrice = useCallback((chartId: string, orderId: string, price: number) => {
     setPlacedOrdersMap((prev) => {
@@ -517,7 +550,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         })
       }
 
-      return { ...prev, [consoleId]: { ...entry, state: "placed", pendingUpdate: false } }
+      // Store gridIndex on grid.orders items so ChartWidget can use stable labels after partial removal
+      const ordersWithIndex = entry.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
+      return { ...prev, [consoleId]: { ...entry, orders: ordersWithIndex, state: "placed", pendingUpdate: false } }
     })
   }, [setPlacedOrdersMap, setBalances])
 

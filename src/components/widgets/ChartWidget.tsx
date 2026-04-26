@@ -622,7 +622,7 @@ function GridOrdersOverlay({
                 key={o.id}
                 id={`grid:${grid.consoleId}:${o.id}`}
                 price={o.price}
-                label={`${isLong ? "BUY" : "SELL"} #${idx + 1}${isPreview ? " — draft" : ""}`}
+                label={`${isLong ? "BUY" : "SELL"} #${o.gridIndex ?? idx + 1}${isPreview ? " — draft" : ""}`}
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
@@ -974,7 +974,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     ? (draftOrders[widget.id] ? { ...draftOrders[widget.id]!, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
     : localDraft
   // Always read placed orders from context so PortfolioWidget sees them regardless of mode
-  const placedForChart: PlacedOrder[] = ctxPlacedOrders[widget.id] ?? []
+  // Exclude grid orders — they are rendered by GridOrdersOverlay (avoid double render)
+  const placedForChart: PlacedOrder[] = (ctxPlacedOrders[widget.id] ?? []).filter(
+    (o) => o.source !== "grid"
+  )
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
 
   // Grid orders for this chart
