@@ -635,6 +635,9 @@ export function GridConfigTab({
   consoleIdRef.current = consoleId
 
   const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
+    if (import.meta.env.DEV && isPlacedRef.current) {
+      console.trace(`[upd] key=${String(key)} isPlaced=${isPlacedRef.current}`)
+    }
     setCfg((p) => ({ ...p, [key]: val }))
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [markGridPendingUpdate])
