@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
@@ -613,7 +613,7 @@ export function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each console+chart+side combination is its own independent slot so switching charts
   // never interferes with placed grids on another chart
@@ -668,6 +668,10 @@ export function GridConfigTab({
       prevCfgRef.current = saved
       initialisedKeyRef.current = `${activeChartId ?? ""}:${saved.symbol}`
     }
+    // Clear any stale pendingUpdate on the new consoleId — the cfg we're restoring
+    // matches what was placed, so there's nothing to apply.
+    const newConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}`
+    clearGridPendingUpdate(newConsoleId)
   }, [activeChartId, cfg.side])
 
   // Stable ID refs for order levels
@@ -712,7 +716,13 @@ export function GridConfigTab({
   }, [cfg.slEnabled, isPlaced])
 
   // ── TP sync: chart x button on individual TP lines ──────────────────────
-  const chartTpLevels = currentGridState?.tpLevels
+  // Stabilize by value so array-reference churn in context doesn't re-fire effects
+  const rawChartTpLevels = currentGridState?.tpLevels
+  const chartTpLevels = useMemo(
+    () => rawChartTpLevels,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawChartTpLevels?.join(",") ?? ""]
+  )
   const chartTpLevelsLen = chartTpLevels?.length
   const prevChartTpLevelsLenRef = useRef<number | undefined>(undefined)
   // Track how many TPs were active at placement so we know when "all" are removed
@@ -867,10 +877,13 @@ export function GridConfigTab({
   }, [chartTpLevels])
 
   // Sync form fields when first or last grid order is dragged on the chart
-  const chartFirstPrice = currentGridState?.orders[0]?.price
-  const chartLastPrice = currentGridState?.orders.length
+  // Stabilize by value to avoid firing when context creates a new array reference with same prices
+  const rawChartFirstPrice = currentGridState?.orders[0]?.price
+  const rawChartLastPrice = currentGridState?.orders.length
     ? currentGridState.orders[currentGridState.orders.length - 1]?.price
     : undefined
+  const chartFirstPrice = useMemo(() => rawChartFirstPrice, [rawChartFirstPrice])
+  const chartLastPrice = useMemo(() => rawChartLastPrice, [rawChartLastPrice])
   useEffect(() => {
     if (chartFirstPrice === undefined || chartLastPrice === undefined) return
 

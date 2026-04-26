@@ -188,6 +188,7 @@ interface TerminalContextValue {
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
   updateGridPlacedPrice: (consoleId: string, orderId: string, newPrice: number) => void
   markGridPendingUpdate: (consoleId: string) => void
+  clearGridPendingUpdate: (consoleId: string) => void
   removeGridTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
 }
@@ -720,6 +721,14 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const clearGridPendingUpdate = useCallback((consoleId: string) => {
+    setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry || !entry.pendingUpdate) return prev
+      return { ...prev, [consoleId]: { ...entry, pendingUpdate: false } }
+    })
+  }, [])
+
   return (
     <TerminalContext.Provider
       value={{
@@ -767,6 +776,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         updateGridPreviewPrice,
         updateGridPlacedPrice,
         markGridPendingUpdate,
+        clearGridPendingUpdate,
         removeGridTpSl,
         removeGridEntry,
       }}
