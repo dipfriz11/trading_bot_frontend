@@ -651,6 +651,7 @@ export function GridConfigTab({
   const prevSideRef = useRef<"long" | "short">(cfg.side)
   useEffect(() => {
     const prevSide = prevSideRef.current
+    if (import.meta.env.DEV) console.log("[side-switch-effect] prevSide=", prevSide, "cfg.side=", cfg.side)
     if (prevSide === cfg.side) return
     const prevKey = `${activeChartId ?? ""}:${prevSide}`
     cfgByChartSideRef.current[prevKey] = { ...cfg, side: prevSide }
@@ -658,6 +659,7 @@ export function GridConfigTab({
     orderIdRefs.current = []
     const savedKey = `${activeChartId ?? ""}:${cfg.side}`
     const saved = cfgByChartSideRef.current[savedKey]
+    if (import.meta.env.DEV) console.log("[side-switch-effect] restoring saved cfg?", !!saved)
     if (saved) {
       setCfg((p) => ({
         ...saved,
@@ -962,6 +964,7 @@ export function GridConfigTab({
 
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
+    if (import.meta.env.DEV) console.log("[preview-effect] fired consoleId=", consoleId, "side=", cfg.side, "isPlaced=", isPlaced, "activeChartId=", !!activeChartId)
     if (!activeChartId) {
       if (gridOrders[consoleId]) cancelGridOrders(consoleId)
       return
@@ -1008,6 +1011,7 @@ export function GridConfigTab({
   const prevSideConsoleIdRef = useRef<string | null>(null)
   useEffect(() => {
     const prev = prevSideConsoleIdRef.current
+    if (import.meta.env.DEV) console.log("[sideSwitch-effect] consoleId=", consoleId, "prev=", prev)
     if (prev && prev !== consoleId) {
       cancelGridPreview(prev)
     }
