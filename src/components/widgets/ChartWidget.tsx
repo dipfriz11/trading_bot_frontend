@@ -626,7 +626,7 @@ function GridOrdersOverlay({
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                isDraft={isPreview} isDraggable={isPreview}
+                isDraft={isPreview} isDraggable={true}
                 {...entryColors}
                 onClose={() => onGridEntryClose?.(grid.consoleId, o.id)}
                 onDragStart={(e) => onGridOrderDragStart?.(grid.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
@@ -927,7 +927,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    gridOrders, updateGridPreviewPrice, removeGridTpSl, removeGridEntry,
+    gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridEntry,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1127,7 +1127,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     e.preventDefault()
     const dragKey = `grid:${consoleId}:${orderId}`
     const grid = gridOrders[consoleId]
-    if (!grid || grid.state !== "preview") return
+    if (!grid) return
     const order = grid.orders.find((o) => o.id === orderId)
     if (!order) return
 
@@ -1155,13 +1155,17 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       window.removeEventListener("mouseup", onUp)
       document.body.style.cursor = ""
       if (dragStarted) {
-        updateGridPreviewPrice(consoleId, orderId, finalPriceRef.current)
+        if (grid.state === "preview") {
+          updateGridPreviewPrice(consoleId, orderId, finalPriceRef.current)
+        } else {
+          updateGridPlacedPrice(consoleId, orderId, finalPriceRef.current)
+        }
       }
     }
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [gridOrders, updateGridPreviewPrice])
+  }, [gridOrders, updateGridPreviewPrice, updateGridPlacedPrice])
 
   const registerDraftDragHandler = useCallback((fn: (p: number) => void) => {
     localDragHandlers.current.set(LOCAL_DRAFT_ID, fn)

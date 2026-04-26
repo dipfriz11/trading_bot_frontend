@@ -175,6 +175,7 @@ interface TerminalContextValue {
   cancelGridPreview: (consoleId: string) => void
   applyGridTpSl: (consoleId: string, patch: { tpPrice?: number | null; slPrice?: number | null; tpLevels?: number[] }) => void
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
+  updateGridPlacedPrice: (consoleId: string, orderId: string, newPrice: number) => void
   markGridPendingUpdate: (consoleId: string) => void
   removeGridTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
@@ -611,6 +612,26 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const updateGridPlacedPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
+    setGridOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry || entry.state !== "placed") return prev
+      const orders = entry.orders.map((o) => o.id === orderId ? { ...o, price: newPrice } : o)
+      return { ...prev, [consoleId]: { ...entry, orders } }
+    })
+    setPlacedOrdersMap((prev) => {
+      const result: typeof prev = {}
+      for (const [chartId, orders] of Object.entries(prev)) {
+        result[chartId] = orders.map((o) =>
+          o.id === orderId && o.source === "grid" && o.gridConsoleId === consoleId
+            ? { ...o, price: newPrice }
+            : o
+        )
+      }
+      return result
+    })
+  }, [])
+
   const removeGridEntry = useCallback((consoleId: string, orderId: string) => {
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -720,6 +741,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         cancelGridPreview,
         applyGridTpSl,
         updateGridPreviewPrice,
+        updateGridPlacedPrice,
         markGridPendingUpdate,
         removeGridTpSl,
         removeGridEntry,
