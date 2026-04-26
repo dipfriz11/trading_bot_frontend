@@ -477,6 +477,7 @@ interface GridConfigTabProps {
   futuresSide?: "long" | "short"
   entryPrice?: number
   availableBalance?: number
+  inOrders?: number
   leverage?: number
   onSideChange?: (side: "long" | "short") => void
   consoleWidgetId?: string
@@ -491,6 +492,7 @@ export function GridConfigTab({
   futuresSide: externalFuturesSide,
   entryPrice: externalEntryPrice,
   availableBalance = 10000,
+  inOrders = 0,
   leverage: externalLeverage,
   onSideChange,
   consoleWidgetId,
@@ -560,6 +562,7 @@ export function GridConfigTab({
 
   // Pro mode toggle
   const [proMode, setProMode] = useState(false)
+  const [availTooltip, setAvailTooltip] = useState(false)
   // Collapsed sections
   const [open, setOpen] = useState({
     entry: true,
@@ -594,8 +597,11 @@ export function GridConfigTab({
     }
   }, [cfg.ordersCount, cfg.perLevelTpEnabled])
 
+  const freeMargin = Math.max(0, availableBalance - inOrders)
+  const availableForGrid = marketType === "futures" ? freeMargin * cfg.leverage : freeMargin
+
   const handlePct = (pct: number) => {
-    const amt = parseFloat(((pct / 100) * availableBalance).toFixed(2))
+    const amt = parseFloat(((pct / 100) * availableForGrid).toFixed(2))
     upd("totalQuote", amt)
   }
 
@@ -1030,6 +1036,80 @@ export function GridConfigTab({
             onModeChange={(m) => upd("budgetMode", m)}
             baseSymbol={baseSymbol}
           />
+        </div>
+        {/* Available balance row */}
+        <div style={{ position: "relative", marginBottom: 4 }}>
+          <div
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "2px 4px", borderRadius: 3, cursor: "default",
+              background: availTooltip ? "rgba(30,111,239,0.04)" : "transparent",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={() => setAvailTooltip(true)}
+            onMouseLeave={() => setAvailTooltip(false)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.35)" }}>
+                Available
+              </span>
+              {marketType === "futures" && (
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45, flexShrink: 0 }}>
+                  <circle cx="5" cy="5" r="4.5" stroke="rgba(30,111,239,0.7)" />
+                  <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(77,159,255,0.9)" fontFamily="monospace">i</text>
+                </svg>
+              )}
+            </div>
+            <span style={{
+              fontSize: 9, fontFamily: "monospace", fontWeight: 600,
+              color: marketType === "futures" ? "#4d9fff" : "rgba(200,214,229,0.75)",
+            }}>
+              {availableForGrid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+            </span>
+          </div>
+
+          {availTooltip && marketType === "futures" && (
+            <div style={{
+              position: "absolute", bottom: "calc(100% + 4px)", left: 0,
+              minWidth: 220, zIndex: 9999,
+              background: "#0a1220",
+              border: "1px solid rgba(30,111,239,0.25)",
+              borderRadius: 5, padding: "8px 10px",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+              pointerEvents: "none",
+            }}>
+              <span style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 600, color: "rgba(200,214,229,0.9)", letterSpacing: "0.05em" }}>
+                AVAILABLE BALANCE
+              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.4)" }}>Wallet balance</span>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.75)" }}>{availableBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.4)" }}>In open orders</span>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,71,87,0.85)" }}>−{inOrders.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.4)" }}>Free margin</span>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(200,214,229,0.75)" }}>{freeMargin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.4)" }}>Leverage</span>
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "#4d9fff" }}>×{cfg.leverage}</span>
+                </div>
+              </div>
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", margin: "6px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+                <span style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 600, color: "rgba(255,255,255,0.55)" }}>Available (with leverage)</span>
+                <span style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#4d9fff" }}>{availableForGrid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+              </div>
+              <p style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.5, marginTop: 4 }}>
+                = (Wallet − In orders) × {cfg.leverage}×<br/>
+                = {freeMargin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {cfg.leverage} = {availableForGrid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          )}
         </div>
         <PctBtns onPct={handlePct} />
       </div>

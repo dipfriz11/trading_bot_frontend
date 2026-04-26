@@ -783,7 +783,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             marketType={marketType}
             futuresSide={futuresSide}
             entryPrice={mockPrice}
-            availableBalance={freeMargin}
+            availableBalance={walletBalance}
+            inOrders={inOrders}
             leverage={posSettings.leverage}
             onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
             consoleWidgetId={_props.widget.id}
