@@ -962,6 +962,7 @@ export function GridConfigTab({
 
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
+    if (import.meta.env.DEV) console.log("[preview-effect] fired", { consoleId, isPlaced, activeChartId: !!activeChartId, totalQuote: cfg.totalQuote })
     if (!activeChartId) {
       if (gridOrders[consoleId]) cancelGridOrders(consoleId)
       return
@@ -1006,7 +1007,11 @@ export function GridConfigTab({
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
   useEffect(() => {
-    return () => { cancelGridPreview(consoleId) }
+    if (import.meta.env.DEV) console.log("[consoleId-effect] new consoleId:", consoleId)
+    return () => {
+      if (import.meta.env.DEV) console.log("[consoleId-effect] cleanup (cancelPreview):", consoleId)
+      cancelGridPreview(consoleId)
+    }
   }, [consoleId])
 
   // On full unmount, cancel only preview slots (placed grids must survive tab switching)

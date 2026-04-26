@@ -474,6 +474,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => {
+    if (import.meta.env.DEV) console.warn("[setGridPreview]", consoleId, new Error().stack?.split("\n").slice(1, 5).join(" | "))
     setGridOrdersMap((prev) => {
       if (data === null) {
         const n = { ...prev }
