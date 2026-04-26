@@ -424,14 +424,14 @@ interface GridOrdersOverlayProps {
 // (needed for TP above maxPrice / SL below minPrice).
 function GridOrderLine({
   id, price, label, side, toY, minPrice, maxPrice, width, padding,
-  isDraft, isDraggable, clampToEdge, edgeOffset,
+  isDraft, clampToEdge, edgeOffset,
   color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
   onClose, onDragStart, registerMove,
 }: {
   id: string; price: number; label: string; side: "long" | "short"
   toY: (p: number) => number; minPrice: number; maxPrice: number
   width: number; padding: { left: number; right: number; top: number; bottom: number }
-  isDraft: boolean; isDraggable: boolean; clampToEdge?: boolean; edgeOffset?: number
+  isDraft: boolean; clampToEdge?: boolean; edgeOffset?: number
   color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
@@ -500,9 +500,9 @@ function GridOrderLine({
       {isShort ? (
         <>
           <line x1={padding.left} y1={y} x2={badgeRightEdge - badgeW_SELL - 1} y2={y}
-            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+            stroke={color} strokeWidth={1} strokeDasharray={isDraft ? "4,3" : undefined} />
           <line x1={badgeRightEdge + 2} y1={y} x2={axisX - 1} y2={y}
-            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+            stroke={color} strokeWidth={1} strokeDasharray={isDraft ? "4,3" : undefined} />
           <SellOrderBadge
             y={y} label={label}
             color={color} textColor={textColor}
@@ -513,15 +513,15 @@ function GridOrderLine({
             onDragStart={onDragStart ?? (() => {})}
             axisX={axisX}
             isEditing={false}
-            isDraft={isDraggable ? true : isDraft}
+            isDraft={isDraft}
           />
         </>
       ) : (
         <>
           <line x1={padding.left} y1={y} x2={badgeX - 1} y2={y}
-            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+            stroke={color} strokeWidth={1} strokeDasharray={isDraft ? "4,3" : undefined} />
           <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
-            stroke={color} strokeWidth={1} strokeDasharray="4,3" />
+            stroke={color} strokeWidth={1} strokeDasharray={isDraft ? "4,3" : undefined} />
           <BuyOrderBadge
             y={y} label={label}
             color={color} textColor={textColor}
@@ -532,7 +532,7 @@ function GridOrderLine({
             onDragStart={onDragStart ?? (() => {})}
             axisX={axisX} padLeft={padding.left}
             isEditing={false}
-            isDraft={isDraggable ? true : isDraft}
+            isDraft={isDraft}
           />
         </>
       )}
@@ -626,8 +626,7 @@ function GridOrdersOverlay({
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                isDraft={isPreview} isDraggable={true}
-                {...entryColors}
+                isDraft={isPreview}                {...entryColors}
                 onClose={() => onGridEntryClose?.(grid.consoleId, o.id)}
                 onDragStart={(e) => onGridOrderDragStart?.(grid.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
@@ -648,8 +647,7 @@ function GridOrdersOverlay({
                   side={grid.side}
                   toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                   width={width} padding={padding}
-                  isDraft={isPreview} isDraggable={false}
-                  clampToEdge edgeOffset={edgeOffset}
+                  isDraft={isPreview}                  clampToEdge edgeOffset={edgeOffset}
                   {...tpColors}
                   onClose={() => onGridClose?.(grid.consoleId, "tp", idx)}
                   registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
@@ -664,8 +662,7 @@ function GridOrdersOverlay({
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                isDraft={isPreview} isDraggable={false}
-                clampToEdge
+                isDraft={isPreview}                clampToEdge
                 {...slColors}
                 onClose={() => onGridClose?.(grid.consoleId, "sl")}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}

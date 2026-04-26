@@ -520,34 +520,28 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           }
         })
 
-        const totalMargin = newOrders.reduce((s, o) => s + (o.margin ?? 0), 0)
         const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
         const chartId = entry.chartId
 
         // Remove old grid orders for this session from placedOrders, add new ones
+        // Also recompute inOrders from scratch to avoid drift from nested setState ordering
         setPlacedOrdersMap((prevPlaced) => {
           const chartOrders = prevPlaced[chartId] ?? []
           const withoutOld = chartOrders.filter((o) => o.gridConsoleId !== consoleId)
-          return { ...prevPlaced, [chartId]: [...withoutOld, ...newOrders] }
-        })
+          const updatedMap = { ...prevPlaced, [chartId]: [...withoutOld, ...newOrders] }
 
-        // Recompute inOrders: remove old grid margin, add new
-        setBalances((b) => {
-          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-          // We don't have the old margin here directly — recompute from all placed orders
-          // excluding old grid entries (they'll be gone after setPlacedOrdersMap settles).
-          // Since React batches these in the same event, we approximate by recalculating
-          // from existing inOrders: strip old grid contribution and add new totalMargin.
-          // The updatePlacedOrderPrice effect always recomputes fully on any drag.
-          // Safest: use the absolute recalculation — read current inOrders, subtract the
-          // previous grid margin contribution (stored in entry.orders), add new.
-          const prevGridMargin = entry.orders.reduce((s, o) => {
-            const notional = o.price * o.qty
-            const m = entry.marketType === "futures" && entry.leverage ? notional / entry.leverage : notional
-            return s + m
-          }, 0)
-          const newInOrders = Math.max(0, Math.round((cur.inOrders - prevGridMargin + totalMargin) * 100) / 100)
-          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+          // Recompute inOrders as the exact sum of all placed order margins for this account/market
+          const totalInOrders = Object.values(updatedMap)
+            .flat()
+            .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
+            .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+
+          setBalances((b) => {
+            const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+            return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } }
+          })
+
+          return updatedMap
         })
       }
 
@@ -564,25 +558,25 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (entry && entry.accountId && entry.exchangeId && entry.marketType && entry.state === "placed") {
         const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
 
-        // Remove all placed orders belonging to this grid session
+        // Remove all placed orders belonging to this grid session and recompute balance
         setPlacedOrdersMap((prevPlaced) => {
-          const result: typeof prevPlaced = {}
+          const updatedMap: typeof prevPlaced = {}
           for (const [chartId, orders] of Object.entries(prevPlaced)) {
-            result[chartId] = orders.filter((o) => o.gridConsoleId !== consoleId)
+            updatedMap[chartId] = orders.filter((o) => o.gridConsoleId !== consoleId)
           }
-          return result
-        })
 
-        // Recalculate inOrders from scratch excluding cancelled grid orders
-        setBalances((b) => {
-          const gridMargin = entry.orders.reduce((s, o) => {
-            const notional = o.price * o.qty
-            const m = entry.marketType === "futures" && entry.leverage ? notional / entry.leverage : notional
-            return s + m
-          }, 0)
-          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-          const newInOrders = Math.max(0, Math.round((cur.inOrders - gridMargin) * 100) / 100)
-          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+          // Recompute inOrders as exact sum of remaining placed order margins
+          const totalInOrders = Object.values(updatedMap)
+            .flat()
+            .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
+            .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+
+          setBalances((b) => {
+            const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+            return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } }
+          })
+
+          return updatedMap
         })
       }
 
