@@ -558,10 +558,6 @@ export function GridConfigTab({
   useEffect(() => { if (externalLeverage && externalLeverage > 0) setCfg((p) => ({ ...p, leverage: externalLeverage })) }, [externalLeverage])
   useEffect(() => { if (externalFuturesSide) setCfg((p) => ({ ...p, side: externalFuturesSide })) }, [externalFuturesSide])
 
-  // Auto-set direction based on side
-  useEffect(() => {
-    setCfg((p) => ({ ...p, direction: p.side === "long" ? "below_price" : "above_price" }))
-  }, [cfg.side])
 
   const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
     setCfg((p) => ({ ...p, [key]: val }))
@@ -625,6 +621,9 @@ export function GridConfigTab({
   // Ref always pointing at latest cfg — used by effects to avoid stale closures
   // and by the chart-switch effect to pre-sync prevCfgRef before pendingUpdate fires
   const prevCfgRef = useRef(cfg)
+  // Tracks whether initialization effects (symbol/price/leverage) have all settled.
+  // pendingUpdate must not fire during the first render cycle.
+  const initSettledRef = useRef(false)
 
   // Per-chart per-side cfg storage: keyed by "chartId:side"
   // Saves full cfg when leaving a chart/side and restores it when returning
@@ -842,6 +841,8 @@ export function GridConfigTab({
     expectedFirstPriceRef.current = undefined
     expectedLastPriceRef.current = undefined
     expectedSlPriceRef.current = undefined
+    // Reset init flag so pendingUpdate effect skips the first settle cycle on the new chart
+    initSettledRef.current = false
   }
 
   useEffect(() => {
@@ -1036,21 +1037,35 @@ export function GridConfigTab({
   // Uses markGridPendingUpdate (not setGridPreview) to avoid touching orders/slPrice/tpLevels
   // and triggering the order-count / drag-sync effects.
   useEffect(() => {
+    // Always update prevCfgRef so the next run has the correct baseline
+    const prevCfg = prevCfgRef.current
+    prevCfgRef.current = cfg
+
     if (!isPlaced) {
-      prevCfgRef.current = cfg
       prevCfgConsoleIdRef.current = consoleId
+      initSettledRef.current = true
+      return
+    }
+    // Skip until initialization effects have settled (symbol/price/leverage sync on mount)
+    if (!initSettledRef.current) {
+      prevCfgConsoleIdRef.current = consoleId
+      initSettledRef.current = true
       return
     }
     // Skip when consoleId just changed — cfg difference is a restore, not a user edit
     if (prevCfgConsoleIdRef.current !== consoleId) {
-      prevCfgRef.current = cfg
       prevCfgConsoleIdRef.current = consoleId
       return
     }
-    if (JSON.stringify(prevCfgRef.current) !== JSON.stringify(cfg)) {
+    if (JSON.stringify(prevCfg) !== JSON.stringify(cfg)) {
+      if (import.meta.env.DEV) {
+        const prev = JSON.parse(JSON.stringify(prevCfg)) as Record<string, unknown>
+        const next = JSON.parse(JSON.stringify(cfg)) as Record<string, unknown>
+        const changed = Object.keys(next).filter(k => JSON.stringify(prev?.[k]) !== JSON.stringify(next[k]))
+        console.warn("[GridPendingUpdate] cfg changed while placed:", changed.map(k => `${k}: ${JSON.stringify(prev?.[k])} → ${JSON.stringify(next[k])}`))
+      }
       markGridPendingUpdate(consoleId)
     }
-    prevCfgRef.current = cfg
   }, [cfg, isPlaced, consoleId])
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
