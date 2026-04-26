@@ -40,15 +40,14 @@ export function OrderBookWidget({ widget }: OrderBookWidgetProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Symbol + mid price row */}
-      <div className="flex items-center gap-2 px-2 py-1 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <span className="font-mono text-xs" style={{ opacity: 0.8 }}>{symbol}</span>
-        {mid && (
+      {/* Mid price row */}
+      {mid && (
+        <div className="flex items-center px-2 py-1 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
           <span className="text-xs font-mono ml-auto" style={{ opacity: 0.6 }}>
             Mid: {formatPrice(mid)}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Column headers */}
       <div className="grid grid-cols-3 px-2 py-0.5 text-xs font-mono flex-shrink-0" style={{ opacity: 0.4, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
