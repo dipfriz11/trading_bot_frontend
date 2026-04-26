@@ -615,10 +615,34 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
+
+      // Also remove from placedOrders and refund balance (mirror of removePlacedOrder for grid orders)
+      setPlacedOrdersMap((prevPlaced) => {
+        const result: typeof prevPlaced = {}
+        for (const [chartId, orders] of Object.entries(prevPlaced)) {
+          const removed = orders.find((o) => o.id === orderId && o.source === "grid")
+          if (removed?.accountId && removed.exchangeId && removed.marketType && removed.margin != null) {
+            const k = balKey(removed.accountId, removed.exchangeId, removed.marketType)
+            setBalances((b) => {
+              const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+              const newInOrders = Math.max(0, Math.round((cur.inOrders - removed.margin!) * 100) / 100)
+              return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+            })
+          }
+          result[chartId] = orders.filter((o) => o.id !== orderId)
+        }
+        return result
+      })
+
       const orders = entry.orders.filter((o) => o.id !== orderId)
+      if (orders.length === 0) {
+        const n = { ...prev }
+        delete n[consoleId]
+        return n
+      }
       return { ...prev, [consoleId]: { ...entry, orders } }
     })
-  }, [])
+  }, [setPlacedOrdersMap, setBalances])
 
   const removeGridTpSl = useCallback((consoleId: string, target: "tp" | "sl", tpIndex?: number) => {
     setGridOrdersMap((prev) => {
