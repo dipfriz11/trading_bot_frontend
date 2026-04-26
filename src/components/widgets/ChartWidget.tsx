@@ -265,16 +265,19 @@ function OrderLine({ order, orderPrice, toY, minPrice, maxPrice, padding, width,
     })
   }, [order.id, registerImperativeMove])
 
-  if (orderPrice < minPrice || orderPrice > maxPrice) return null
-
-  const y = toY(orderPrice)
+  // Must be declared before any conditional return to satisfy Rules of Hooks
+  const isVisible = orderPrice >= minPrice && orderPrice <= maxPrice
+  const y = isVisible ? toY(orderPrice) : 0
   // When React re-renders with the committed price, reset any imperative transform
   useEffect(() => {
+    if (!isVisible) return
     if (groupRef.current) {
       groupRef.current.removeAttribute("transform")
     }
     renderedYRef.current = toY(orderPrice)
   })
+
+  if (!isVisible) return null
 
   renderedYRef.current = y
   const axisX = width - padding.right

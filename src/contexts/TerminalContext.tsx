@@ -714,6 +714,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const markGridPendingUpdate = useCallback((consoleId: string) => {
+    if (import.meta.env.DEV) console.warn("[markGridPendingUpdate]", consoleId, new Error().stack?.split("\n").slice(1, 5).join(" | "))
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry || entry.state !== "placed") return prev
