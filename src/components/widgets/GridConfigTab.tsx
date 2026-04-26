@@ -613,7 +613,7 @@ export function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each console+chart+side combination is its own independent slot so switching charts
   // never interferes with placed grids on another chart
@@ -1015,40 +1015,29 @@ export function GridConfigTab({
     }, 0)
   }
 
-  // Track the consoleId that was active when prevCfgRef was last set.
-  // When consoleId changes (chart/side switch) we must not fire pendingUpdate —
-  // the cfg difference is just a restore, not a user edit.
+  // Ref that tracks the consoleId baseline — reset whenever we switch chart/side so that
+  // the first cfg change after a switch is not treated as a user edit.
   const prevCfgConsoleIdRef = useRef(consoleId)
 
-  // When config changes while placed → mark pending update
+  // When config changes while placed → mark pending update.
+  // Uses markGridPendingUpdate (not setGridPreview) to avoid touching orders/slPrice/tpLevels
+  // and triggering the order-count / drag-sync effects.
   useEffect(() => {
-    if (!isPlaced) { prevCfgRef.current = cfg; prevCfgConsoleIdRef.current = consoleId; return }
-    // Ignore the first render after switching to a different chart/side — the cfg
-    // difference is a restore from cfgByChartSideRef, not a user edit.
+    if (!isPlaced) {
+      prevCfgRef.current = cfg
+      prevCfgConsoleIdRef.current = consoleId
+      return
+    }
+    // Skip when consoleId just changed — cfg difference is a restore, not a user edit
     if (prevCfgConsoleIdRef.current !== consoleId) {
       prevCfgRef.current = cfg
       prevCfgConsoleIdRef.current = consoleId
       return
     }
     if (JSON.stringify(prevCfgRef.current) !== JSON.stringify(cfg)) {
-      // markGridPendingUpdate will be called via setGridPreview which checks placed state
-      setGridPreview(consoleId, {
-        chartId: activeChartId ?? "",
-        consoleId,
-        side: cfg.side,
-        orders: [],
-        tpPrice: null,
-        slPrice: null,
-        tpLevels: [],
-        symbol: cfg.symbol,
-        leverage: cfg.leverage,
-        accountId,
-        exchangeId,
-        marketType,
-      })
+      markGridPendingUpdate(consoleId)
     }
     prevCfgRef.current = cfg
-    prevCfgConsoleIdRef.current = consoleId
   }, [cfg, isPlaced, consoleId])
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
