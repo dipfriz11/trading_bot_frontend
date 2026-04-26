@@ -509,6 +509,9 @@ export function GridConfigTab({
     entryPrice: externalEntryPrice ?? DEFAULT_GRID_CONFIG.entryPrice,
     leverage: externalLeverage ?? DEFAULT_GRID_CONFIG.leverage,
   })
+  // Always-current cfg ref for use in effects/callbacks without stale closure
+  const cfgRef = useRef(cfg)
+  cfgRef.current = cfg
 
   const { templates, saveTemplate, deleteTemplate } = useTemplates<GridConfig>("grid")
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
@@ -619,36 +622,47 @@ export function GridConfigTab({
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
-  // Per-side cfg storage: when switching sides, save current cfg and restore saved cfg for new side
-  const cfgBySideRef = useRef<Partial<Record<"long" | "short", GridConfig>>>({})
+  // Per-chart per-side cfg storage: keyed by "chartId:side"
+  // Saves full cfg when leaving a chart/side and restores it when returning
+  const cfgByChartSideRef = useRef<Partial<Record<string, GridConfig>>>({})
+  const prevChartSideKeyRef = useRef(`${activeChartId ?? ""}:${cfg.side}`)
+
+  // Track side switches (within the same chart) — save/restore cfg
   const prevSideRef = useRef<"long" | "short">(cfg.side)
   useEffect(() => {
     const prevSide = prevSideRef.current
     if (prevSide === cfg.side) return
-    // Save cfg for the side we're leaving (including its orderIdRefs)
-    cfgBySideRef.current[prevSide] = { ...cfg, side: prevSide }
+    const prevKey = `${activeChartId ?? ""}:${prevSide}`
+    cfgByChartSideRef.current[prevKey] = { ...cfg, side: prevSide }
     prevSideRef.current = cfg.side
-    // Reset order ID refs since new side has its own set of order slots
     orderIdRefs.current = []
-    // Restore saved cfg for the new side (keep symbol/entryPrice/leverage/priceRange from current context)
-    const saved = cfgBySideRef.current[cfg.side]
+    const savedKey = `${activeChartId ?? ""}:${cfg.side}`
+    const saved = cfgByChartSideRef.current[savedKey]
     if (saved) {
-      setCfg((p) => {
-        const ref = p.entryPrice > 0 ? p.entryPrice : 0
-        const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : saved.topPrice
-        const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : saved.bottomPrice
-        return {
-          ...saved,
-          symbol: p.symbol,
-          entryPrice: p.entryPrice,
-          leverage: p.leverage,
-          topPrice: top,
-          bottomPrice: bottom,
-          side: cfg.side,
-        }
-      })
+      setCfg((p) => ({
+        ...saved,
+        symbol: p.symbol,
+        entryPrice: p.entryPrice,
+        leverage: p.leverage,
+        side: cfg.side,
+      }))
     }
   }, [cfg.side])
+
+  // Track chart switches — save cfg for old chart/side, restore for new chart/side
+  useEffect(() => {
+    const newKey = `${activeChartId ?? ""}:${cfg.side}`
+    if (prevChartSideKeyRef.current === newKey) return
+    const oldKey = prevChartSideKeyRef.current
+    cfgByChartSideRef.current[oldKey] = cfgRef.current
+    prevChartSideKeyRef.current = newKey
+    orderIdRefs.current = []
+    const saved = cfgByChartSideRef.current[newKey]
+    if (saved) {
+      setCfg(saved)
+      initialisedKeyRef.current = `${activeChartId ?? ""}:${saved.symbol}`
+    }
+  }, [activeChartId, cfg.side])
 
   // Stable ID refs for order levels
   const orderIdRefs = useRef<string[]>([])
@@ -686,6 +700,7 @@ export function GridConfigTab({
     if (!isPlaced || !activeChartId) return
     if (!wasEnabled && cfg.slEnabled) {
       const viz = calcGridVisualization(cfg)
+      expectedSlPriceRef.current = viz.slPrice
       applyGridTpSl(consoleId, { slPrice: viz.slPrice })
     }
   }, [cfg.slEnabled, isPlaced])
@@ -769,6 +784,9 @@ export function GridConfigTab({
     // Only react to non-null→non-null changes (i.e. drag moved the price)
     if (prev === undefined || prev === null || chartSlPrice === null || chartSlPrice === undefined) return
     if (Math.abs(chartSlPrice - prev) < 1e-8) return
+    // Skip if this is a form-driven update (form just pushed this exact slPrice to the chart)
+    const expSl = expectedSlPriceRef.current
+    if (expSl !== undefined && expSl !== null && Math.abs(chartSlPrice - expSl) < 1e-8) return
     // Compute the new slPercent from the dragged price
     setCfg((p) => {
       const viz = calcGridVisualization(p)
@@ -785,6 +803,11 @@ export function GridConfigTab({
     })
   }, [chartSlPrice])
 
+  // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
+  const expectedFirstPriceRef = useRef<number | undefined>(undefined)
+  const expectedLastPriceRef = useRef<number | undefined>(undefined)
+  const expectedSlPriceRef = useRef<number | null | undefined>(undefined)
+
   // ── TP drag sync: chart drag → update cfg tpPercent / multiTpLevels ─────
   const prevChartTpLevelsRef = useRef<number[] | undefined>(undefined)
 
@@ -800,6 +823,9 @@ export function GridConfigTab({
     prevChartTpLevelsLenRef.current = undefined
     prevChartSlPriceValueRef.current = undefined
     prevChartTpLevelsRef.current = undefined
+    expectedFirstPriceRef.current = undefined
+    expectedLastPriceRef.current = undefined
+    expectedSlPriceRef.current = undefined
   }
 
   useEffect(() => {
@@ -833,10 +859,6 @@ export function GridConfigTab({
       }
     })
   }, [chartTpLevels])
-
-  // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
-  const expectedFirstPriceRef = useRef<number | undefined>(undefined)
-  const expectedLastPriceRef = useRef<number | undefined>(undefined)
 
   // Sync form fields when first or last grid order is dragged on the chart
   const chartFirstPrice = currentGridState?.orders[0]?.price
@@ -915,10 +937,11 @@ export function GridConfigTab({
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
 
-    // Record expected first/last prices so drag-sync effect can ignore form-driven updates
+    // Record expected prices so drag-sync effects can ignore form-driven updates
     const ordersForPreview = viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty }))
     expectedFirstPriceRef.current = ordersForPreview[0]?.price
     expectedLastPriceRef.current = ordersForPreview[ordersForPreview.length - 1]?.price
+    expectedSlPriceRef.current = viz.slPrice
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
@@ -960,6 +983,9 @@ export function GridConfigTab({
       orderIdRefs.current.push(nanoid())
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
+    expectedFirstPriceRef.current = viz.orders[0]?.price
+    expectedLastPriceRef.current = viz.orders[viz.orders.length - 1]?.price
+    expectedSlPriceRef.current = viz.slPrice
     const newData = {
       chartId: activeChartId,
       consoleId,
