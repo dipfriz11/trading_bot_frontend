@@ -14,6 +14,12 @@ type DraftOrder = ChartDraftOrder
 
 type AnchorField = "qty" | "amount"
 
+function fmtQty(qty: number): string {
+  const s = qty.toFixed(8)
+  // trim trailing zeros but keep at least 2 decimal places
+  return s.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ".00")
+}
+
 function priceToString(price: number): string {
   if (price >= 1000) return price.toFixed(2)
   if (price >= 10) return price.toFixed(2)
@@ -222,7 +228,7 @@ function getOrderColors(order: PlacedOrder, isEditing: boolean) {
       closeBtnFg: "rgba(200,214,229,0.9)",
       priceTagColor: "rgba(80,95,115,0.9)",
       priceTagFg: "rgba(200,214,229,0.9)",
-      label: `${orderSideLabel(order.side, order.marketType)} | ${order.qty} — draft`,
+      label: `${orderSideLabel(order.side, order.marketType)} | ${fmtQty(order.qty)} — draft`,
     }
   }
   const isBuy = order.side === "buy"
@@ -236,7 +242,7 @@ function getOrderColors(order: PlacedOrder, isEditing: boolean) {
     closeBtnFg: textColor,
     priceTagColor: isBuy ? "#1a7a5a" : "#7a1a1a",
     priceTagFg: textColor,
-    label: `${orderSideLabel(order.side, order.marketType)} | ${order.qty}${gridSuffix}`,
+    label: `${orderSideLabel(order.side, order.marketType)} | ${fmtQty(order.qty)}${gridSuffix}`,
   }
 }
 
@@ -628,7 +634,7 @@ function GridOrdersOverlay({
                 key={o.id}
                 id={`grid:${grid.consoleId}:${o.id}`}
                 price={o.price}
-                label={`${orderSideLabel(isLong ? "buy" : "sell", grid.marketType)} | ${o.qty} #${o.gridIndex ?? idx + 1}${isPreview ? " — draft" : ""}`}
+                label={`${orderSideLabel(isLong ? "buy" : "sell", grid.marketType)} | ${fmtQty(o.qty)} #${o.gridIndex ?? idx + 1}${isPreview ? " — draft" : ""}`}
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
