@@ -1015,9 +1015,21 @@ export function GridConfigTab({
     }, 0)
   }
 
+  // Track the consoleId that was active when prevCfgRef was last set.
+  // When consoleId changes (chart/side switch) we must not fire pendingUpdate —
+  // the cfg difference is just a restore, not a user edit.
+  const prevCfgConsoleIdRef = useRef(consoleId)
+
   // When config changes while placed → mark pending update
   useEffect(() => {
-    if (!isPlaced) { prevCfgRef.current = cfg; return }
+    if (!isPlaced) { prevCfgRef.current = cfg; prevCfgConsoleIdRef.current = consoleId; return }
+    // Ignore the first render after switching to a different chart/side — the cfg
+    // difference is a restore from cfgByChartSideRef, not a user edit.
+    if (prevCfgConsoleIdRef.current !== consoleId) {
+      prevCfgRef.current = cfg
+      prevCfgConsoleIdRef.current = consoleId
+      return
+    }
     if (JSON.stringify(prevCfgRef.current) !== JSON.stringify(cfg)) {
       // markGridPendingUpdate will be called via setGridPreview which checks placed state
       setGridPreview(consoleId, {
@@ -1036,7 +1048,8 @@ export function GridConfigTab({
       })
     }
     prevCfgRef.current = cfg
-  }, [cfg, isPlaced])
+    prevCfgConsoleIdRef.current = consoleId
+  }, [cfg, isPlaced, consoleId])
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
   const baseSymbol = cfg.symbol.split("/")[0] ?? "BTC"
