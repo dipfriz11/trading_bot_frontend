@@ -778,6 +778,64 @@ export function GridConfigTab({
     }
   }, [cfg.tpEnabled, isPlaced])
 
+  // ── SL drag sync: chart drag → update cfg.slPercent ────────────────────
+  const prevChartSlPriceValueRef = useRef<number | null | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevChartSlPriceValueRef.current
+    prevChartSlPriceValueRef.current = chartSlPrice ?? null
+    // Only react to non-null→non-null changes (i.e. drag moved the price)
+    if (prev === undefined || prev === null || chartSlPrice === null || chartSlPrice === undefined) return
+    if (Math.abs(chartSlPrice - prev) < 1e-8) return
+    // Compute the new slPercent from the dragged price
+    setCfg((p) => {
+      const viz = calcGridVisualization(p)
+      const avgEntry = viz.orders.length > 0
+        ? viz.orders.reduce((s, o) => s + o.price, 0) / viz.orders.length
+        : p.entryPrice
+      const basePrice = p.slMode === "avg_entry" ? avgEntry : p.entryPrice
+      if (basePrice === 0) return p
+      const isLong = p.side === "long"
+      const newPct = isLong
+        ? (1 - chartSlPrice / basePrice) * 100
+        : (chartSlPrice / basePrice - 1) * 100
+      return { ...p, slPercent: Math.max(0.01, Math.round(newPct * 100) / 100) }
+    })
+  }, [chartSlPrice])
+
+  // ── TP drag sync: chart drag → update cfg tpPercent / multiTpLevels ─────
+  const prevChartTpLevelsRef = useRef<number[] | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevChartTpLevelsRef.current
+    const cur = chartTpLevels
+    prevChartTpLevelsRef.current = cur ? [...cur] : undefined
+    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
+    // Check if any price changed
+    const changed = cur.some((p, i) => Math.abs(p - prev[i]) > 1e-8)
+    if (!changed) return
+    // Sync cfg tpPercent from first TP, and multiTpLevels from all
+    setCfg((p) => {
+      const isLong = p.side === "long"
+      const viz = calcGridVisualization(p)
+      const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
+      const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
+      if (basePrice === 0) return p
+      const newMultiLevels = cur.map((price, i) => {
+        const pct = isLong
+          ? (price / basePrice - 1) * 100
+          : (1 - price / basePrice) * 100
+        return {
+          tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+          closePercent: p.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
+        }
+      })
+      return {
+        ...p,
+        tpPercent: newMultiLevels[0]?.tpPercent ?? p.tpPercent,
+        multiTpLevels: newMultiLevels,
+      }
+    })
+  }, [chartTpLevels])
+
   // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
   const expectedFirstPriceRef = useRef<number | undefined>(undefined)
   const expectedLastPriceRef = useRef<number | undefined>(undefined)

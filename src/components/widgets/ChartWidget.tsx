@@ -369,6 +369,7 @@ interface ChartProps {
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   gridOrdersList?: ChartGridOrders[]
   onGridOrderDragStart?: GridOrdersOverlayProps["onGridOrderDragStart"]
+  onGridTpSlDragStart?: GridOrdersOverlayProps["onGridTpSlDragStart"]
   onGridClose?: GridOrdersOverlayProps["onGridClose"]
   onGridEntryClose?: GridOrdersOverlayProps["onGridEntryClose"]
   tpSl?: ChartTpSl | null
@@ -430,6 +431,7 @@ interface GridOrdersOverlayProps {
   padding: { left: number; right: number; top: number; bottom: number }
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   onGridOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+  onGridTpSlDragStart?: (consoleId: string, target: "tp" | "sl", tpIndex: number, e: React.MouseEvent, minP: number, maxP: number, chartH: number) => void
   onGridClose?: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   onGridEntryClose?: (consoleId: string, orderId: string) => void
 }
@@ -774,7 +776,7 @@ function TpSlLine({ price, y, label, axisX, badgeX, padLeft, badgeW, labelW, CLO
 }
 
 function GridOrdersOverlay({
-  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart, onGridClose, onGridEntryClose,
+  gridOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose,
 }: GridOrdersOverlayProps) {
   if (!gridOrdersList.length) return null
 
@@ -807,9 +809,6 @@ function GridOrdersOverlay({
             ))}
             {grid.tpLevels.map((tp, idx) => {
               const totalTp = grid.tpLevels.length
-              // For LONG: higher price = closer to top edge = smaller edgeOffset
-              // tpLevels are sorted ascending for long, so last element is highest price
-              // edgeOffset: highest-price TP gets 0, lowest-price TP gets totalTp-1
               const edgeOffset = isLong ? totalTp - 1 - idx : idx
               return (
                 <GridOrderLine
@@ -820,9 +819,10 @@ function GridOrdersOverlay({
                   side={grid.side}
                   toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                   width={width} padding={padding}
-                  isDraft={isPreview}                  clampToEdge edgeOffset={edgeOffset}
+                  isDraft={isPreview} clampToEdge edgeOffset={edgeOffset}
                   {...tpColors}
                   onClose={() => onGridClose?.(grid.consoleId, "tp", idx)}
+                  onDragStart={(e) => onGridTpSlDragStart?.(grid.consoleId, "tp", idx, e, minPrice, maxPrice, chartH)}
                   registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
                 />
               )
@@ -835,9 +835,10 @@ function GridOrdersOverlay({
                 side={grid.side}
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
-                isDraft={isPreview}                clampToEdge
+                isDraft={isPreview} clampToEdge
                 {...slColors}
                 onClose={() => onGridClose?.(grid.consoleId, "sl")}
+                onDragStart={(e) => onGridTpSlDragStart?.(grid.consoleId, "sl", 0, e, minPrice, maxPrice, chartH)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
             )}
@@ -933,7 +934,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose, onGridEntryClose, tpSl, onTpSlDragStart, onTpSlClose }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, tpSl, onTpSlDragStart, onTpSlClose }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -957,6 +958,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           padding={padding}
           dragHandlers={dragHandlers}
           onGridOrderDragStart={onGridOrderDragStart}
+          onGridTpSlDragStart={onGridTpSlDragStart}
           onGridClose={onGridClose}
           onGridEntryClose={onGridEntryClose}
         />
@@ -1052,7 +1054,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridClose, onGridEntryClose, tpSl, onTpSlDragStart, onTpSlClose }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, tpSl, onTpSlDragStart, onTpSlClose }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -1074,6 +1076,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           padding={padding}
           dragHandlers={dragHandlers}
           onGridOrderDragStart={onGridOrderDragStart}
+          onGridTpSlDragStart={onGridTpSlDragStart}
           onGridClose={onGridClose}
           onGridEntryClose={onGridEntryClose}
         />
@@ -1113,7 +1116,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridEntry,
+    gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridEntry, applyGridTpSl,
     tpSlOrders, setTpSl,
   } = useTerminal()
 
@@ -1358,6 +1361,69 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     localDragHandlers.current.set(LOCAL_DRAFT_ID, fn)
   }, [])
 
+  // ---- Grid TP/SL drag handler ----
+  const handleGridTpSlDragStart = useCallback((
+    consoleId: string,
+    target: "tp" | "sl",
+    tpIndex: number,
+    e: React.MouseEvent,
+    minP: number,
+    maxP: number,
+    chartH: number,
+  ) => {
+    e.stopPropagation()
+    e.preventDefault()
+
+    const grid = gridOrders[consoleId]
+    if (!grid) return
+
+    const startPrice = target === "sl"
+      ? (grid.slPrice ?? 0)
+      : (grid.tpLevels[tpIndex] ?? 0)
+    if (!startPrice) return
+
+    const dragKey = target === "sl"
+      ? `grid:${consoleId}:sl`
+      : `grid:${consoleId}:tp${tpIndex === 0 ? "" : tpIndex + 1}`
+
+    const startY = e.clientY
+    const DRAG_THRESHOLD = 4
+    let dragStarted = false
+    const finalPriceRef = { current: startPrice }
+
+    const onMove = (mv: MouseEvent) => {
+      const dy = mv.clientY - startY
+      if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) {
+        dragStarted = true
+        document.body.style.cursor = "grabbing"
+      }
+      if (!dragStarted) return
+      const pricePerPx = (maxP - minP) / chartH
+      const newPrice = Math.max(minP * 0.5, Math.min(maxP * 1.5, startPrice - dy * pricePerPx))
+      finalPriceRef.current = newPrice
+      localDragHandlers.current.get(dragKey)?.(newPrice)
+    }
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+      document.body.style.cursor = ""
+      if (!dragStarted) return
+
+      const finalPrice = finalPriceRef.current
+      if (target === "sl") {
+        applyGridTpSl(consoleId, { slPrice: finalPrice })
+      } else {
+        const newLevels = [...(grid.tpLevels ?? [])]
+        newLevels[tpIndex] = finalPrice
+        applyGridTpSl(consoleId, { tpLevels: newLevels, tpPrice: newLevels[0] ?? null })
+      }
+    }
+
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+  }, [gridOrders, applyGridTpSl])
+
   // ---- TP/SL drag handler ----
   const handleTpSlDragStart = useCallback((
     key: "tp" | "sl",
@@ -1487,6 +1553,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     dragHandlers={localDragHandlers}
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
+                    onGridTpSlDragStart={handleGridTpSlDragStart}
                     onGridClose={(consoleId, target, tpIndex) => removeGridTpSl(consoleId, target, tpIndex)}
                     onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                     tpSl={chartTpSl}
@@ -1503,6 +1570,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     dragHandlers={localDragHandlers}
                     gridOrdersList={gridOrdersList}
                     onGridOrderDragStart={handleGridOrderDragStart}
+                    onGridTpSlDragStart={handleGridTpSlDragStart}
                     onGridClose={(consoleId, target, tpIndex) => removeGridTpSl(consoleId, target, tpIndex)}
                     onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                     tpSl={chartTpSl}
