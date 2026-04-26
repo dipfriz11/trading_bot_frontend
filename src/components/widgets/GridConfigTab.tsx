@@ -524,6 +524,7 @@ export function GridConfigTab({
     setCfg((prev) => ({ ...t.config, symbol: prev.symbol, entryPrice: prev.entryPrice, side: prev.side, leverage: prev.leverage }))
     setActiveTemplateId(t.id)
     setSavedCfgJson(JSON.stringify({ ...t.config, entryPrice: 0, symbol: "" }))
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }
 
   const handleSaveTemplate = (name: string) => {
@@ -548,7 +549,7 @@ export function GridConfigTab({
     const top = ref > 0 ? Math.round(ref * 1.03 * 100) / 100 : 0
     const bottom = ref > 0 ? Math.round(ref * 0.97 * 100) / 100 : 0
     // Mark as init change so pendingUpdate effect doesn't fire for this
-    initSettledRef.current = false
+
     setCfg((p) => ({
       ...p,
       symbol: externalSymbol,
@@ -559,21 +560,17 @@ export function GridConfigTab({
   }, [activeChartId, externalSymbol, externalEntryPrice])
   useEffect(() => {
     if (externalLeverage && externalLeverage > 0) {
-      initSettledRef.current = false
+  
       setCfg((p) => ({ ...p, leverage: externalLeverage }))
     }
   }, [externalLeverage])
   useEffect(() => {
     if (externalFuturesSide) {
-      initSettledRef.current = false
+  
       setCfg((p) => ({ ...p, side: externalFuturesSide }))
     }
   }, [externalFuturesSide])
 
-
-  const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
-    setCfg((p) => ({ ...p, [key]: val }))
-  }, [])
 
   // Pro mode toggle
   const [proMode, setProMode] = useState(false)
@@ -630,12 +627,20 @@ export function GridConfigTab({
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
-  // Ref always pointing at latest cfg — used by effects to avoid stale closures
-  // and by the chart-switch effect to pre-sync prevCfgRef before pendingUpdate fires
+  // Refs so that upd() and drag-sync effects can call markGridPendingUpdate
+  // without capturing stale closures over isPlaced/consoleId
+  const isPlacedRef = useRef(false)
+  const consoleIdRef = useRef("")
+  isPlacedRef.current = isPlaced
+  consoleIdRef.current = consoleId
+
+  const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
+    setCfg((p) => ({ ...p, [key]: val }))
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
+  }, [markGridPendingUpdate])
+
+  // Ref always pointing at latest cfg — used by chart-switch effect to pre-sync before saving
   const prevCfgRef = useRef(cfg)
-  // Tracks whether initialization effects (symbol/price/leverage) have all settled.
-  // pendingUpdate must not fire during the first render cycle.
-  const initSettledRef = useRef(false)
 
   // Per-chart per-side cfg storage: keyed by "chartId:side"
   // Saves full cfg when leaving a chart/side and restores it when returning
@@ -674,7 +679,7 @@ export function GridConfigTab({
     orderIdRefs.current = []
     const saved = cfgByChartSideRef.current[newKey]
     // All setCfg calls during chart-switch are restoration/init, not user edits
-    initSettledRef.current = false
+
     if (saved) {
       setCfg(saved)
       // Sync prevCfgRef so the pendingUpdate effect doesn't fire for the restored cfg
@@ -830,6 +835,7 @@ export function GridConfigTab({
         : (chartSlPrice / basePrice - 1) * 100
       return { ...p, slPercent: Math.max(0.01, Math.round(newPct * 100) / 100) }
     })
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartSlPrice])
 
   // Expected prices that form last pushed to chart — used to distinguish form-driven vs drag-driven changes
@@ -856,7 +862,7 @@ export function GridConfigTab({
     expectedLastPriceRef.current = undefined
     expectedSlPriceRef.current = undefined
     // Reset init flag so pendingUpdate effect skips the first settle cycle on the new chart
-    initSettledRef.current = false
+
   }
 
   useEffect(() => {
@@ -889,6 +895,7 @@ export function GridConfigTab({
         multiTpLevels: newMultiLevels,
       }
     })
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartTpLevels])
 
   // Sync form fields when first or last grid order is dragged on the chart
@@ -947,6 +954,7 @@ export function GridConfigTab({
         return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep }
       }
     })
+    if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartFirstPrice, chartLastPrice])
 
   // Push preview whenever config changes and totalQuote > 0
@@ -1042,45 +1050,6 @@ export function GridConfigTab({
       setTimeout(() => placeGridOrders(consoleId), 0)
     }, 0)
   }
-
-  // Ref that tracks the consoleId baseline — reset whenever we switch chart/side so that
-  // the first cfg change after a switch is not treated as a user edit.
-  const prevCfgConsoleIdRef = useRef(consoleId)
-
-  // When config changes while placed → mark pending update.
-  // Uses markGridPendingUpdate (not setGridPreview) to avoid touching orders/slPrice/tpLevels
-  // and triggering the order-count / drag-sync effects.
-  useEffect(() => {
-    // Always update prevCfgRef so the next run has the correct baseline
-    const prevCfg = prevCfgRef.current
-    prevCfgRef.current = cfg
-
-    if (!isPlaced) {
-      prevCfgConsoleIdRef.current = consoleId
-      initSettledRef.current = true
-      return
-    }
-    // Skip until initialization effects have settled (symbol/price/leverage sync on mount)
-    if (!initSettledRef.current) {
-      prevCfgConsoleIdRef.current = consoleId
-      initSettledRef.current = true
-      return
-    }
-    // Skip when consoleId just changed — cfg difference is a restore, not a user edit
-    if (prevCfgConsoleIdRef.current !== consoleId) {
-      prevCfgConsoleIdRef.current = consoleId
-      return
-    }
-    if (JSON.stringify(prevCfg) !== JSON.stringify(cfg)) {
-      if (import.meta.env.DEV) {
-        const prev = JSON.parse(JSON.stringify(prevCfg)) as Record<string, unknown>
-        const next = JSON.parse(JSON.stringify(cfg)) as Record<string, unknown>
-        const changed = Object.keys(next).filter(k => JSON.stringify(prev?.[k]) !== JSON.stringify(next[k]))
-        console.warn("[GridPendingUpdate] cfg changed while placed:", changed.map(k => `${k}: ${JSON.stringify(prev?.[k])} → ${JSON.stringify(next[k])}`))
-      }
-      markGridPendingUpdate(consoleId)
-    }
-  }, [cfg, isPlaced, consoleId])
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
   const baseSymbol = cfg.symbol.split("/")[0] ?? "BTC"
@@ -1753,7 +1722,7 @@ export function GridConfigTab({
       {/* ── ACTIONS ──────────────────────────────────── */}
       <div className="flex gap-2 sticky bottom-0" style={{ paddingTop: 6, paddingBottom: 2, background: "rgba(13,17,25,0.95)" }}>
         <button
-          onClick={() => setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfg.symbol, side: cfg.side, entryPrice: cfg.entryPrice, leverage: cfg.leverage })}
+          onClick={() => { setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfg.symbol, side: cfg.side, entryPrice: cfg.entryPrice, leverage: cfg.leverage }); if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current) }}
           className="flex items-center justify-center gap-1"
           style={{
             fontSize: 10, fontFamily: "monospace", fontWeight: 600, padding: "6px 10px",
