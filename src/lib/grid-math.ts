@@ -16,6 +16,33 @@ export interface GridVisualization {
   avgEntryEstimate: number  // estimated avg entry price
 }
 
+// Returns the array of order prices for a given config (same logic as calcGridVisualization internals).
+export function calcGridPrices(cfg: GridConfig): number[] {
+  const n = Math.max(1, cfg.ordersCount)
+  const entryPrice = cfg.entryPrice > 0 ? cfg.entryPrice : 67000
+  const isLong = cfg.side === "long"
+  const prices: number[] = []
+  const step = Math.max(0.01, cfg.stepPercent) / 100
+
+  if (cfg.placementMode === "step_percent") {
+    const firstOffset = Math.max(0, cfg.firstOffsetPercent) / 100
+    const firstPrice = isLong
+      ? entryPrice * (1 - firstOffset)
+      : entryPrice * (1 + firstOffset)
+    for (let i = 0; i < n; i++) {
+      prices.push(isLong ? firstPrice * Math.pow(1 - step, i) : firstPrice * Math.pow(1 + step, i))
+    }
+  } else {
+    const top = cfg.topPrice > 0 ? cfg.topPrice : entryPrice * 1.05
+    const bottom = cfg.bottomPrice > 0 ? cfg.bottomPrice : entryPrice * 0.95
+    const rangeStep = (top - bottom) / Math.max(1, n - 1)
+    for (let i = 0; i < n; i++) {
+      prices.push(isLong ? top - rangeStep * i : bottom + rangeStep * i)
+    }
+  }
+  return prices
+}
+
 // Calculates grid order prices from config.
 // Uses step_percent placement mode logic (dominant mode in UI).
 export function calcGridVisualization(cfg: GridConfig): GridVisualization {

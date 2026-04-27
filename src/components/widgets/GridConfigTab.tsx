@@ -6,7 +6,7 @@ import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
 import { useTerminal } from "@/contexts/TerminalContext"
-import { calcGridVisualization } from "@/lib/grid-math"
+import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
 import { nanoid } from "@/lib/nanoid"
 
 // ─── Shared style constants ───────────────────────────────────────────────────
@@ -1202,6 +1202,8 @@ export function GridConfigTab({
 
   // ── Shared TP/SL sync: when !multiPositionMode, propagate TP/SL changes
   // to the FIRST slot (index 0) of the active side — that slot is the sole TP/SL owner.
+  // TP/SL are anchored to the "best" first order across ALL placed slots so that adding
+  // a deeper grid never moves TP/SL in the wrong direction.
   const activeSideSharedTpSlRef = useRef(activeSideSharedTpSl)
   activeSideSharedTpSlRef.current = activeSideSharedTpSl
   useEffect(() => {
@@ -1209,6 +1211,7 @@ export function GridConfigTab({
     if (!activeChartId) return
     const shared = activeSideSharedTpSlRef.current
     const side = activeSideRef.current
+    const isLong = side === "long"
     const allSlots = side === "long" ? longSlots : shortSlots
     // Only slot 0 owns TP/SL; all others get nulled out
     allSlots.forEach((slot, idx) => {
@@ -1222,13 +1225,64 @@ export function GridConfigTab({
         }
         return
       }
-      // Slot 0: recalculate TP/SL prices from its grid geometry + shared settings
+      // Slot 0: build TP/SL using best first order / extreme across ALL placed slots
       const isActiveSlot = (side === "long" ? activeLongIdx : activeShortIdx) === 0
       const slotStoredCfg = isActiveSlot ? cfgRef.current : slotCfgMapRef.current[slot.slotId]
       if (!slotStoredCfg) return
       const mergedCfg: GridConfig = { ...slotStoredCfg, ...shared }
-      const viz = calcGridVisualization(mergedCfg)
-      applyGridTpSl(slotId, { tpPrice: viz.tpPrice, slPrice: viz.slPrice, tpLevels: viz.tpLevels })
+
+      // Collect prices from all slots that have been placed (have an entry in gridOrdersRef)
+      const allSlotPrices: number[][] = allSlots.map((s) => {
+        const sCfg = (isLong ? activeLongIdx : activeShortIdx) === allSlots.indexOf(s)
+          ? cfgRef.current
+          : slotCfgMapRef.current[s.slotId]
+        const sId = `${baseConsoleId}:${activeChartId}:${side}:${s.slotId}`
+        if (!sCfg || !gridOrdersRef.current[sId]) return []
+        return calcGridPrices(sCfg)
+      }).filter((p) => p.length > 0)
+
+      if (allSlotPrices.length === 0) {
+        const viz = calcGridVisualization(mergedCfg)
+        applyGridTpSl(slotId, { tpPrice: viz.tpPrice, slPrice: viz.slPrice, tpLevels: viz.tpLevels })
+        return
+      }
+
+      const firstOrders = allSlotPrices.map((p) => p[0])
+      const bestFirstOrder = isLong ? Math.max(...firstOrders) : Math.min(...firstOrders)
+      const allPrices = allSlotPrices.flat()
+      const extremeForSl = isLong ? Math.min(...allPrices) : Math.max(...allPrices)
+      const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+
+      let tpPrice: number | null = null
+      let tpLevels: number[] = []
+      if (mergedCfg.tpEnabled) {
+        const base = bestFirstOrder
+        if (mergedCfg.multiTpEnabled && mergedCfg.multiTpLevels.length > 0) {
+          tpLevels = mergedCfg.multiTpLevels.slice(0, mergedCfg.multiTpCount).map((lvl) => {
+            const pct = Math.max(0.01, lvl.tpPercent) / 100
+            return isLong ? base * (1 + pct) : base * (1 - pct)
+          })
+          tpPrice = tpLevels[0] ?? null
+        } else {
+          const tpPct = Math.max(0.01, mergedCfg.tpPercent) / 100
+          tpPrice = isLong ? base * (1 + tpPct) : base * (1 - tpPct)
+          tpLevels = tpPrice !== null ? [tpPrice] : []
+        }
+      }
+
+      let slPrice: number | null = null
+      if (mergedCfg.slEnabled) {
+        const slPct = Math.max(0.01, mergedCfg.slPercent) / 100
+        if (mergedCfg.slMode === "extreme_order") {
+          slPrice = isLong ? extremeForSl * (1 - slPct) : extremeForSl * (1 + slPct)
+        } else if (mergedCfg.slMode === "avg_entry") {
+          slPrice = isLong ? avgEntryAll * (1 - slPct) : avgEntryAll * (1 + slPct)
+        } else {
+          slPrice = isLong ? bestFirstOrder * (1 - slPct) : bestFirstOrder * (1 + slPct)
+        }
+      }
+
+      applyGridTpSl(slotId, { tpPrice, slPrice, tpLevels })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots])
@@ -1268,7 +1322,13 @@ export function GridConfigTab({
       marketType,
     }
 
-    // Capture owner TP/SL for non-multipos mode — computed synchronously from just-placed cfg
+    // Capture owner TP/SL for non-multipos mode.
+    // TP/SL must be anchored to the "best" order across ALL placed slots, not just the new one:
+    //   LONG  TP → highest firstOrder (MAX prices[0] across slots)
+    //   SHORT TP → lowest  firstOrder (MIN prices[0] across slots)
+    //   LONG  SL extreme_order → lowest  of ALL prices across slots
+    //   SHORT SL extreme_order → highest of ALL prices across slots
+    //   avg_entry SL → weighted avg of all orders across slots
     let ownerUpdate: { consoleId: string; tpPrice: number | null; slPrice: number | null; tpLevels: number[] } | null = null
     if (!multiPositionModeRef.current) {
       const allSlots = snapshotSide === "long" ? longSlotsRef.current : shortSlotsRef.current
@@ -1276,12 +1336,81 @@ export function GridConfigTab({
       if (ownerSlot) {
         const ownerConsoleId = `${baseConsoleId}:${snapshotChartId}:${snapshotSide}:${ownerSlot.slotId}`
         const mergedCfg: GridConfig = { ...snapshotCfg, ...snapshotShared }
-        const ownerViz = calcGridVisualization(mergedCfg)
-        ownerUpdate = {
-          consoleId: ownerConsoleId,
-          tpPrice: ownerViz.tpPrice,
-          slPrice: ownerViz.slPrice,
-          tpLevels: ownerViz.tpLevels,
+        const isLong = snapshotSide === "long"
+
+        // Collect prices from ALL slots (including the one just placed via snapshotCfg)
+        const allSlotPrices: number[][] = allSlots.map((slot) => {
+          const storedCfg = slot.slotId === activeSlot?.slotId
+            ? snapshotCfg
+            : slotCfgMapRef.current[slot.slotId]
+          if (!storedCfg) return []
+          return calcGridPrices(storedCfg)
+        }).filter((p) => p.length > 0)
+
+        if (allSlotPrices.length === 0) {
+          // No placed slots yet — fall back to current viz
+          const ownerViz = calcGridVisualization(mergedCfg)
+          ownerUpdate = {
+            consoleId: ownerConsoleId,
+            tpPrice: ownerViz.tpPrice,
+            slPrice: ownerViz.slPrice,
+            tpLevels: ownerViz.tpLevels,
+          }
+        } else {
+          // TP: use first order of slot whose first order is closest to TP direction
+          const firstOrders = allSlotPrices.map((p) => p[0])
+          const bestFirstOrder = isLong
+            ? Math.max(...firstOrders)   // LONG: highest first order
+            : Math.min(...firstOrders)   // SHORT: lowest first order
+
+          // SL: use extreme order from all slots combined
+          const allPrices = allSlotPrices.flat()
+          const extremeForSl = isLong
+            ? Math.min(...allPrices)     // LONG: lowest price overall
+            : Math.max(...allPrices)     // SHORT: highest price overall
+
+          // avg entry across all slots (uniform weight per order for estimate)
+          const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+
+          // Build TP price(s) from bestFirstOrder
+          let tpPrice: number | null = null
+          let tpLevels: number[] = []
+          if (mergedCfg.tpEnabled) {
+            const base = bestFirstOrder
+            if (mergedCfg.multiTpEnabled && mergedCfg.multiTpLevels.length > 0) {
+              tpLevels = mergedCfg.multiTpLevels.slice(0, mergedCfg.multiTpCount).map((lvl) => {
+                const pct = Math.max(0.01, lvl.tpPercent) / 100
+                return isLong ? base * (1 + pct) : base * (1 - pct)
+              })
+              tpPrice = tpLevels[0] ?? null
+            } else {
+              const tpPct = Math.max(0.01, mergedCfg.tpPercent) / 100
+              tpPrice = isLong ? base * (1 + tpPct) : base * (1 - tpPct)
+              tpLevels = tpPrice !== null ? [tpPrice] : []
+            }
+          }
+
+          // Build SL price from correct base depending on mode
+          let slPrice: number | null = null
+          if (mergedCfg.slEnabled) {
+            const slPct = Math.max(0.01, mergedCfg.slPercent) / 100
+            if (mergedCfg.slMode === "extreme_order") {
+              slPrice = isLong
+                ? extremeForSl * (1 - slPct)
+                : extremeForSl * (1 + slPct)
+            } else if (mergedCfg.slMode === "avg_entry") {
+              slPrice = isLong
+                ? avgEntryAll * (1 - slPct)
+                : avgEntryAll * (1 + slPct)
+            } else {
+              // first_order mode: same logic as TP — best first order
+              slPrice = isLong
+                ? bestFirstOrder * (1 - slPct)
+                : bestFirstOrder * (1 + slPct)
+            }
+          }
+
+          ownerUpdate = { consoleId: ownerConsoleId, tpPrice, slPrice, tpLevels }
         }
       }
     }
