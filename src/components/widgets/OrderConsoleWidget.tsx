@@ -77,7 +77,7 @@ function _NI({
   const isFocused = useRef(false)
 
   useEffect(() => {
-    if (import.meta.env.DEV) console.log(`[_NI] value changed to`, value, `label=${label}`)
+
     if (!isFocused.current) setLocalVal(String(value))
   }, [value])
 
@@ -842,7 +842,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {
-    console.log(`[TpSl][chart switch] new chartId=${activeChart?.id} symbol=${activeChart?.symbol} current tp="${tp}" sl="${sl}"`)
+
     lastTpPushedRef.current = null
     lastSlPushedRef.current = null
     if (!activeChart?.id) return

@@ -233,9 +233,7 @@ const TerminalContext = createContext<TerminalContextValue | null>(null)
 export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<TerminalState>(loadState)
   const [activeChartId, _setActiveChartId] = useState<string | null>(null)
-  const setActiveChartId: typeof _setActiveChartId = import.meta.env.DEV
-    ? (v) => { console.log(`[setActiveChartId]`, v, new Error().stack?.split("\n")[2]?.trim()); _setActiveChartId(v) }
-    : _setActiveChartId
+  const setActiveChartId = _setActiveChartId
   const [draftOrders, setDraftOrders] = useState<DraftOrderMap>({})
   const [placedOrders, setPlacedOrdersMap] = useState<PlacedOrderMap>({})
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
@@ -268,7 +266,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!activeTab) return
     const charts = activeTab.widgets.filter((w) => w.type === "chart")
-    if (import.meta.env.DEV) console.log(`[autoSelectChart] tabId=${activeTab.id} widgetsLen=${activeTab.widgets.length} activeChartId=${activeChartId} chartIds=${charts.map(c=>c.id).join(",")}`)
+
     if (charts.length === 0) {
       setActiveChartId(null)
       return
