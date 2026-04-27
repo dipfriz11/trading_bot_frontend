@@ -232,7 +232,10 @@ const TerminalContext = createContext<TerminalContextValue | null>(null)
 
 export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<TerminalState>(loadState)
-  const [activeChartId, setActiveChartId] = useState<string | null>(null)
+  const [activeChartId, _setActiveChartId] = useState<string | null>(null)
+  const setActiveChartId: typeof _setActiveChartId = import.meta.env.DEV
+    ? (v) => { console.log(`[setActiveChartId]`, v, new Error().stack?.split("\n")[2]?.trim()); _setActiveChartId(v) }
+    : _setActiveChartId
   const [draftOrders, setDraftOrders] = useState<DraftOrderMap>({})
   const [placedOrders, setPlacedOrdersMap] = useState<PlacedOrderMap>({})
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
