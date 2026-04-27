@@ -626,14 +626,33 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (existing?.state === "preview") {
         const ordersMatch = existing.orders.length === data.orders.length &&
           existing.orders.every((o, i) => o.id === data.orders[i].id && o.price === data.orders[i].price && o.qty === data.orders[i].qty)
+        const tpLevelsMatch = (existing.tpLevels?.length ?? 0) === (data.tpLevels?.length ?? 0) &&
+          (existing.tpLevels ?? []).every((v, i) => v === (data.tpLevels ?? [])[i])
         if (
           ordersMatch &&
+          tpLevelsMatch &&
           existing.chartId === data.chartId &&
           existing.tpPrice === data.tpPrice &&
           existing.slPrice === data.slPrice &&
           existing.symbol === data.symbol &&
-          existing.side === data.side
-        ) return prev
+          existing.side === data.side &&
+          existing.leverage === data.leverage
+        ) {
+          if (import.meta.env.DEV) console.log(`[setGridPreview] STABLE SKIP consoleId=${consoleId}`)
+          return prev
+        }
+        if (import.meta.env.DEV) {
+          const reasons: string[] = []
+          if (!ordersMatch) reasons.push("orders")
+          if (!tpLevelsMatch) reasons.push("tpLevels")
+          if (existing.chartId !== data.chartId) reasons.push(`chartId:${existing.chartId}->${data.chartId}`)
+          if (existing.tpPrice !== data.tpPrice) reasons.push(`tpPrice:${existing.tpPrice}->${data.tpPrice}`)
+          if (existing.slPrice !== data.slPrice) reasons.push(`slPrice:${existing.slPrice}->${data.slPrice}`)
+          if (existing.symbol !== data.symbol) reasons.push(`symbol`)
+          if (existing.side !== data.side) reasons.push(`side`)
+          if (existing.leverage !== data.leverage) reasons.push(`leverage`)
+          console.log(`[setGridPreview] UPDATE consoleId=${consoleId} changed=[${reasons.join(",")}]`)
+        }
       }
       return { ...prev, [consoleId]: { ...data, state: "preview", pendingUpdate: false } }
     })
