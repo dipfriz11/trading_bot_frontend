@@ -501,7 +501,7 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   chart: "Price Chart",
   orderbook: "Order Book",
   trades: "Trades Feed",
-  portfolio: "Portfolio / Positions",
+  portfolio: "Positions",
   screener: "Asset Screener",
   pnl: "P&L Statistics",
   alerts: "Alerts",
