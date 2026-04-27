@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel, GridSharedTpSl } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
-import { useTerminal } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
 import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
 import { nanoid } from "@/lib/nanoid"
 
@@ -489,7 +489,7 @@ interface GridConfigTabProps {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function GridConfigTab({
+export const GridConfigTab = memo(function GridConfigTab({
   symbol: externalSymbol,
   marketType = "futures",
   futuresSide: externalFuturesSide,
@@ -718,11 +718,12 @@ export function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrdersRef, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each console+chart+side+slot combination is its own independent slot
   const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
-  const currentGridState = gridOrders[consoleId]
+  // Subscribe only to this specific consoleId to avoid re-renders from other grids
+  const currentGridState = useGridOrderEntry(consoleId)
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
@@ -1183,7 +1184,7 @@ export function GridConfigTab({
   useEffect(() => {
     if (!isVisible) return
     if (!activeChartId) {
-      if (gridOrders[consoleId]) cancelGridOrders(consoleId)
+      if (gridOrdersRef.current[consoleId]) cancelGridOrders(consoleId)
       return
     }
     if (cfg.totalQuote <= 0) {
@@ -1239,8 +1240,6 @@ export function GridConfigTab({
   }, [consoleId, cancelGridPreview])
 
   // On full unmount, cancel only preview slots (placed grids must survive tab switching)
-  const gridOrdersRef = useRef(gridOrders)
-  gridOrdersRef.current = gridOrders
   useEffect(() => {
     return () => {
       const prefix = `${baseConsoleId}:`
@@ -1614,7 +1613,7 @@ export function GridConfigTab({
               const sideColor = slotSide === "long" ? longColor : shortColor
               return sideSlots.map((slot, idx) => {
                 const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
-                const slotState = gridOrders[slotConsoleId]
+                const slotState = gridOrdersRef.current[slotConsoleId]
                 const slotPlaced = slotState?.state === "placed"
                 const slotPending = slotPlaced && slotState?.pendingUpdate
                 const isActive = isSideActive && idx === sideActiveIdx
@@ -1680,7 +1679,7 @@ export function GridConfigTab({
                         // may differ from the current activeChartId (e.g. after chart switch).
                         const suffix = `:${slotSide}:${slot.slotId}`
                         const prefix = `${baseConsoleId}:`
-                        const matchedId = Object.keys(gridOrders).find(
+                        const matchedId = Object.keys(gridOrdersRef.current).find(
                           (id) => id.startsWith(prefix) && id.endsWith(suffix)
                         )
                         const cancelId = matchedId ?? `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
@@ -2474,4 +2473,4 @@ export function GridConfigTab({
       </div>
     </div>
   )
-}
+})
