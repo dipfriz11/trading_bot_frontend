@@ -250,24 +250,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   positionsRef.current = positions
   balancesRef.current = balances
 
-  // ── DEV render counter ────────────────────────────────────────────────────
-  const _devRenderCount = React.useRef(0)
-  const _devPrevState = React.useRef({ state, activeChartId, draftOrders, placedOrders, isDraggingOrder, editingOrderId, balances, gridOrders })
-  if (import.meta.env.DEV) {
-    _devRenderCount.current++
-    const prev = _devPrevState.current
-    const changed: string[] = []
-    if (prev.state !== state) changed.push("state")
-    if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
-    if (prev.draftOrders !== draftOrders) changed.push("draftOrders")
-    if (prev.placedOrders !== placedOrders) changed.push("placedOrders")
-    if (prev.isDraggingOrder !== isDraggingOrder) changed.push("isDraggingOrder")
-    if (prev.editingOrderId !== editingOrderId) changed.push("editingOrderId")
-    if (prev.balances !== balances) changed.push("balances")
-    if (prev.gridOrders !== gridOrders) changed.push("gridOrders")
-    _devPrevState.current = { state, activeChartId, draftOrders, placedOrders, isDraggingOrder, editingOrderId, balances, gridOrders }
-    console.log(`[TerminalProvider] render #${_devRenderCount.current} changed=[${changed.join(",")}]`)
-  }
   const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
 
   useEffect(() => {
@@ -638,20 +620,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           existing.side === data.side &&
           existing.leverage === data.leverage
         ) {
-          if (import.meta.env.DEV) console.log(`[setGridPreview] STABLE SKIP consoleId=${consoleId}`)
           return prev
-        }
-        if (import.meta.env.DEV) {
-          const reasons: string[] = []
-          if (!ordersMatch) reasons.push("orders")
-          if (!tpLevelsMatch) reasons.push("tpLevels")
-          if (existing.chartId !== data.chartId) reasons.push(`chartId:${existing.chartId}->${data.chartId}`)
-          if (existing.tpPrice !== data.tpPrice) reasons.push(`tpPrice:${existing.tpPrice}->${data.tpPrice}`)
-          if (existing.slPrice !== data.slPrice) reasons.push(`slPrice:${existing.slPrice}->${data.slPrice}`)
-          if (existing.symbol !== data.symbol) reasons.push(`symbol`)
-          if (existing.side !== data.side) reasons.push(`side`)
-          if (existing.leverage !== data.leverage) reasons.push(`leverage`)
-          console.log(`[setGridPreview] UPDATE consoleId=${consoleId} changed=[${reasons.join(",")}]`)
         }
       }
       return { ...prev, [consoleId]: { ...data, state: "preview", pendingUpdate: false } }

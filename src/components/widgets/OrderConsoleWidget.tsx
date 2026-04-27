@@ -594,14 +594,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [activeChart?.id])
 
   // ---- New Order: push TP/SL preview lines to chart via grid infrastructure ----
-  const _noEffectPrevDeps = useRef<Record<string, unknown>>({})
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      const cur: Record<string, unknown> = { tab, effectiveSide, price, qty, orderType, activeChartId: activeChart?.id, noTpSl, symbol, leverage: posSettings.leverage, accountId, exchangeId, marketType }
-      const changed = Object.keys(cur).filter(k => cur[k] !== _noEffectPrevDeps.current[k])
-      _noEffectPrevDeps.current = cur
-      if (changed.length) console.log(`[noPreviewEffect] changed=[${changed.join(",")}]`)
-    }
     if (!activeChart || tab !== "new") {
       cancelGridPreview(noConsoleId)
       return
@@ -653,6 +646,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
 
+    // Guard: mark expected values so drag-sync effects don't echo these writes back
+    noExpectedSlPriceRef.current = viz.slPrice ?? null
+    noExpectedTpLevelsRef.current = viz.tpLevels ? [...viz.tpLevels] : undefined
+
     // When noTpSl grid preview is active, clear the simple tpSlOrders to avoid duplicate lines
     setTpSl(activeChart.id, { tp: null, sl: null })
 
@@ -694,6 +691,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // SL drag: slPrice changed non-null→non-null → recalc slPercent
   const prevNoSlPriceValueRef = useRef<number | null | undefined>(undefined)
   const noExpectedSlPriceRef = useRef<number | null | undefined>(undefined)
+  const noExpectedTpLevelsRef = useRef<number[] | undefined>(undefined)
   useEffect(() => {
     const prev = prevNoSlPriceValueRef.current
     prevNoSlPriceValueRef.current = noChartSlPrice ?? null
@@ -750,6 +748,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
     const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
     if (!changed) return
+    // Skip if these are values we just wrote via noPreviewEffect
+    const exp = noExpectedTpLevelsRef.current
+    if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) return
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
     if (p <= 0) return
     const gSide = effectiveSide === "buy" ? "long" : "short"
@@ -770,7 +771,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (settingTpSlFromContextRef.current) return
     const tpNum = parseFloat(tp)
     const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
-    console.log(`[TpSl][TP push] chartId=${activeChart.id} symbol=${activeChart.symbol} tp="${tp}" newTp=${newTp} settingFromCtx=${settingTpSlFromContextRef.current}`)
     lastTpPushedRef.current = newTp
     setTpSl(activeChart.id, { tp: newTp })
   }, [tp, activeChart?.id])
@@ -781,7 +781,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (settingTpSlFromContextRef.current) return
     const slNum = parseFloat(sl)
     const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
-    console.log(`[TpSl][SL push] chartId=${activeChart.id} symbol=${activeChart.symbol} sl="${sl}" newSl=${newSl} settingFromCtx=${settingTpSlFromContextRef.current}`)
     lastSlPushedRef.current = newSl
     setTpSl(activeChart.id, { sl: newSl })
   }, [sl, activeChart?.id])
