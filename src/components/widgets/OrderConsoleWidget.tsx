@@ -379,6 +379,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const noTog = (k: keyof typeof noOpen) => setNoOpen((p) => ({ ...p, [k]: !p[k] }))
 
   const noUpd = useCallback(<K extends keyof GridSharedTpSl>(key: K, val: GridSharedTpSl[K]) => {
+    if (import.meta.env.DEV) console.log(`[noUpd] key=${String(key)} val=${JSON.stringify(val)}`, new Error().stack?.split("\n").slice(2, 4).join(" | ").trim())
     setNoTpSl((p) => ({ ...p, [key]: val }))
   }, [])
 
