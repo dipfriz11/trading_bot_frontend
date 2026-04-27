@@ -374,7 +374,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const noTog = (k: keyof typeof noOpen) => setNoOpen((p) => ({ ...p, [k]: !p[k] }))
 
   const noUpd = useCallback(<K extends keyof GridSharedTpSl>(key: K, val: GridSharedTpSl[K]) => {
-    if (import.meta.env.DEV) console.log(`[noUpd] key=${String(key)} val=${JSON.stringify(val)}`, new Error().stack?.split("\n").slice(2, 5).join(" | ").trim())
     setNoTpSl((p) => ({ ...p, [key]: val }))
   }, [])
 
@@ -646,6 +645,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Guard: mark expected values so drag-sync effects don't echo these writes back
     noExpectedSlPriceRef.current = viz.slPrice ?? null
     noExpectedTpLevelsRef.current = viz.tpLevels ? [...viz.tpLevels] : undefined
+    noPreviewWroteSlRef.current = true
+    noPreviewWroteTpRef.current = true
 
     // When noTpSl grid preview is active, clear the simple tpSlOrders to avoid duplicate lines
     setTpSl(activeChart.id, { tp: null, sl: null })
@@ -690,12 +691,22 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const noExpectedSlPriceRef = useRef<number | null | undefined>(undefined)
   const noExpectedTpLevelsRef = useRef<number[] | undefined>(undefined)
   const prevNoChartIdRef = useRef<string | undefined>(undefined)
+  // True while noPreviewEffect is the source of the latest slPrice/tpLevels write — prevents echo loop
+  const noPreviewWroteSlRef = useRef(false)
+  const noPreviewWroteTpRef = useRef(false)
   useEffect(() => {
     // Reset history when chart changes so we don't misinterpret the first
     // value from the new chart as a user drag (which was causing infinite loop)
     if (prevNoChartIdRef.current !== activeChart?.id) {
       prevNoChartIdRef.current = activeChart?.id
       prevNoSlPriceValueRef.current = undefined
+      noPreviewWroteSlRef.current = false
+      return
+    }
+    // If noPreviewEffect just wrote this slPrice, skip — it came from form, not user drag
+    if (noPreviewWroteSlRef.current) {
+      noPreviewWroteSlRef.current = false
+      prevNoSlPriceValueRef.current = noChartSlPrice ?? null
       return
     }
     const prev = prevNoSlPriceValueRef.current
@@ -753,6 +764,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
     const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
     if (!changed) return
+    // Skip if noPreviewEffect just wrote these tpLevels — not a user drag
+    if (noPreviewWroteTpRef.current) {
+      noPreviewWroteTpRef.current = false
+      return
+    }
     // Skip if these are values we just wrote via noPreviewEffect
     const exp = noExpectedTpLevelsRef.current
     if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) return
