@@ -212,6 +212,25 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   placedOrdersRef.current = placedOrders
   gridOrdersRef.current = gridOrders
   balancesRef.current = balances
+
+  // ── DEV render counter ────────────────────────────────────────────────────
+  const _devRenderCount = React.useRef(0)
+  const _devPrevState = React.useRef({ state, activeChartId, draftOrders, placedOrders, isDraggingOrder, editingOrderId, balances, gridOrders })
+  if (import.meta.env.DEV) {
+    _devRenderCount.current++
+    const prev = _devPrevState.current
+    const changed: string[] = []
+    if (prev.state !== state) changed.push("state")
+    if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
+    if (prev.draftOrders !== draftOrders) changed.push("draftOrders")
+    if (prev.placedOrders !== placedOrders) changed.push("placedOrders")
+    if (prev.isDraggingOrder !== isDraggingOrder) changed.push("isDraggingOrder")
+    if (prev.editingOrderId !== editingOrderId) changed.push("editingOrderId")
+    if (prev.balances !== balances) changed.push("balances")
+    if (prev.gridOrders !== gridOrders) changed.push("gridOrders")
+    _devPrevState.current = { state, activeChartId, draftOrders, placedOrders, isDraggingOrder, editingOrderId, balances, gridOrders }
+    console.log(`[TerminalProvider] render #${_devRenderCount.current} changed=[${changed.join(",")}]`)
+  }
   const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
 
   useEffect(() => {

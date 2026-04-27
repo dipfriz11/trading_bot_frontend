@@ -504,6 +504,13 @@ export const GridConfigTab = memo(function GridConfigTab({
   exchangeId,
   isVisible = true,
 }: GridConfigTabProps) {
+  // ── DEV render counter ────────────────────────────────────────────────────
+  const _devRc = useRef(0)
+  if (import.meta.env.DEV) {
+    _devRc.current++
+    console.log(`[GridConfigTab] render #${_devRc.current} isVisible=${isVisible} consoleWidgetId=${consoleWidgetId}`)
+  }
+
   // ── Multi-grid slots (separate per side) ─────────────────────────────────
   const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
   const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
@@ -1181,7 +1188,22 @@ export const GridConfigTab = memo(function GridConfigTab({
   }
 
   // Push preview whenever config changes and totalQuote > 0
+  // DEV: track what triggered this effect
+  const prevPreviewDepsRef = useRef({ cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible })
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      const prev = prevPreviewDepsRef.current
+      const changed: string[] = []
+      if (prev.cfg !== cfg) changed.push("cfg")
+      if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
+      if (prev.isPlaced !== isPlaced) changed.push("isPlaced")
+      if (prev.activeLongIdx !== activeLongIdx) changed.push("activeLongIdx")
+      if (prev.activeShortIdx !== activeShortIdx) changed.push("activeShortIdx")
+      if (prev.multiPositionMode !== multiPositionMode) changed.push("multiPositionMode")
+      if (prev.isVisible !== isVisible) changed.push("isVisible")
+      prevPreviewDepsRef.current = { cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible }
+      console.log(`[GridConfigTab previewEffect] consoleId=${consoleId} changed=[${changed.join(",")}]`)
+    }
     if (!isVisible) return
     if (!activeChartId) {
       if (gridOrdersRef.current[consoleId]) cancelGridOrders(consoleId)
