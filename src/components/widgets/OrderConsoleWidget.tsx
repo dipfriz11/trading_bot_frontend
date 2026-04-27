@@ -594,7 +594,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [activeChart?.id])
 
   // ---- New Order: push TP/SL preview lines to chart via grid infrastructure ----
+  const _noEffectPrevDeps = useRef<Record<string, unknown>>({})
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      const cur: Record<string, unknown> = { tab, effectiveSide, price, qty, orderType, activeChartId: activeChart?.id, noTpSl, symbol, leverage: posSettings.leverage, accountId, exchangeId, marketType }
+      const changed = Object.keys(cur).filter(k => cur[k] !== _noEffectPrevDeps.current[k])
+      _noEffectPrevDeps.current = cur
+      if (changed.length) console.log(`[noPreviewEffect] changed=[${changed.join(",")}]`)
+    }
     if (!activeChart || tab !== "new") {
       cancelGridPreview(noConsoleId)
       return
