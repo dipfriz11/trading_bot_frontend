@@ -507,7 +507,7 @@ export function GridConfigTab({
   const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
   const [activeLongIdx, setActiveLongIdx] = useState(0)
   const [activeShortIdx, setActiveShortIdx] = useState(0)
-  // Persisted cfg per slot (keyed by slotId)
+  // Persisted cfg per slot (keyed by "chartId\0slotId" to isolate per chart)
   const slotCfgMapRef = useRef<Record<string, GridConfig>>({})
   // Slot tabs scroll
   const slotScrollRef = useRef<HTMLDivElement>(null)
@@ -745,6 +745,23 @@ export function GridConfigTab({
   longSlotsRef.current = longSlots
   const shortSlotsRef = useRef(shortSlots)
   shortSlotsRef.current = shortSlots
+  // Per-chart slot state storage: keyed by chartId
+  const slotsStateByChartRef = useRef<Record<string, {
+    longSlots: { slotId: string }[]
+    shortSlots: { slotId: string }[]
+    activeLongIdx: number
+    activeShortIdx: number
+  }>>({})
+  // Stable ref for active indices so the chart-switch effect can read current values
+  const activeLongIdxRef = useRef(activeLongIdx)
+  activeLongIdxRef.current = activeLongIdx
+  const activeShortIdxRef = useRef(activeShortIdx)
+  activeShortIdxRef.current = activeShortIdx
+  // Stable ref for activeChartId so callbacks don't form stale closures
+  const activeChartIdRef = useRef(activeChartId)
+  activeChartIdRef.current = activeChartId
+  // Helper: build slotCfgMapRef key scoped to current chart
+  const slotKey = (slotId: string) => `${activeChartIdRef.current ?? ""}:${slotId}`
 
   const TP_SL_KEYS_REF = useRef(TP_SL_KEYS)
   TP_SL_KEYS_REF.current = TP_SL_KEYS
@@ -797,18 +814,47 @@ export function GridConfigTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.side])
 
-  // Track chart switches — save cfg for old chart/side, restore for new chart/side.
+  // Track chart switches — save cfg + slot state for old chart, restore for new chart.
   // Depends only on activeChartId so it never fires on side-only changes.
   useEffect(() => {
     const currentSide = prevSideRef.current
     const newKey = `${activeChartId ?? ""}:${currentSide}`
     const oldKey = prevChartSideKeyRef.current
     if (oldKey === newKey) return
-    // Save cfg for the chart+side we're leaving, with the correct side from the old key
+
+    // Derive old chartId from oldKey (everything before the last ":")
+    const oldChartId = oldKey.split(":").slice(0, -1).join(":")
+
+    // Save cfg for the chart+side we're leaving
     const oldSide = oldKey.split(":").pop() as "long" | "short"
     cfgByChartSideRef.current[oldKey] = { ...cfgRef.current, side: oldSide }
+
+    // Save slot state for the chart we're leaving
+    slotsStateByChartRef.current[oldChartId] = {
+      longSlots: longSlotsRef.current,
+      shortSlots: shortSlotsRef.current,
+      activeLongIdx: activeLongIdxRef.current,
+      activeShortIdx: activeShortIdxRef.current,
+    }
+
     prevChartSideKeyRef.current = newKey
     orderIdRefs.current = []
+
+    // Restore slot state for the new chart (or reset to a single fresh slot per side)
+    const newChartId = activeChartId ?? ""
+    const savedSlots = slotsStateByChartRef.current[newChartId]
+    if (savedSlots) {
+      setLongSlots(savedSlots.longSlots)
+      setShortSlots(savedSlots.shortSlots)
+      setActiveLongIdx(savedSlots.activeLongIdx)
+      setActiveShortIdx(savedSlots.activeShortIdx)
+    } else {
+      setLongSlots([{ slotId: nanoid() }])
+      setShortSlots([{ slotId: nanoid() }])
+      setActiveLongIdx(0)
+      setActiveShortIdx(0)
+    }
+
     const saved = cfgByChartSideRef.current[newKey]
     if (saved) {
       setCfg(saved)
@@ -1227,7 +1273,7 @@ export function GridConfigTab({
       }
       // Slot 0: build TP/SL using best first order / extreme across ALL placed slots
       const isActiveSlot = (side === "long" ? activeLongIdx : activeShortIdx) === 0
-      const slotStoredCfg = isActiveSlot ? cfgRef.current : slotCfgMapRef.current[slot.slotId]
+      const slotStoredCfg = isActiveSlot ? cfgRef.current : slotCfgMapRef.current[slotKey(slot.slotId)]
       if (!slotStoredCfg) return
       const mergedCfg: GridConfig = { ...slotStoredCfg, ...shared }
 
@@ -1235,7 +1281,7 @@ export function GridConfigTab({
       const allSlotPrices: number[][] = allSlots.map((s) => {
         const sCfg = (isLong ? activeLongIdx : activeShortIdx) === allSlots.indexOf(s)
           ? cfgRef.current
-          : slotCfgMapRef.current[s.slotId]
+          : slotCfgMapRef.current[slotKey(s.slotId)]
         const sId = `${baseConsoleId}:${activeChartId}:${side}:${s.slotId}`
         if (!sCfg || !gridOrdersRef.current[sId]) return []
         return calcGridPrices(sCfg)
@@ -1297,7 +1343,7 @@ export function GridConfigTab({
     const snapshotChartId = activeChartId
 
     // Save current slot cfg so shared TP/SL sync can recalculate prices for this slot later
-    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared(snapshotCfg)
+    if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared(snapshotCfg)
     const viz = calcGridVisualization(snapshotCfg)
     while (orderIdRefs.current.length < viz.orders.length) {
       orderIdRefs.current.push(nanoid())
@@ -1342,7 +1388,7 @@ export function GridConfigTab({
         const allSlotPrices: number[][] = allSlots.map((slot) => {
           const storedCfg = slot.slotId === activeSlot?.slotId
             ? snapshotCfg
-            : slotCfgMapRef.current[slot.slotId]
+            : slotCfgMapRef.current[`${snapshotChartId ?? ""}:${slot.slotId}`]
           if (!storedCfg) return []
           return calcGridPrices(storedCfg)
         }).filter((p) => p.length > 0)
@@ -1453,7 +1499,7 @@ export function GridConfigTab({
 
   const handleAddSlot = () => {
     // Save current cfg to current slot before switching
-    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared({ ...cfgRef.current })
+    if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared({ ...cfgRef.current })
     const newSlot = { slotId: nanoid() }
     setGridSlots((prev) => [...prev, newSlot])
     setActiveSlotIndex(gridSlots.length)
@@ -1473,11 +1519,11 @@ export function GridConfigTab({
   const handleSwitchSlot = (idx: number) => {
     if (idx === activeSlotIndex) return
     // Save current cfg to current slot (TP/SL stripped when !multiPositionMode)
-    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared({ ...cfgRef.current })
+    if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared({ ...cfgRef.current })
     setActiveSlotIndex(idx)
     const targetSlot = gridSlots[idx]
     if (targetSlot) {
-      const saved = slotCfgMapRef.current[targetSlot.slotId]
+      const saved = slotCfgMapRef.current[slotKey(targetSlot.slotId)]
       const shared = activeSideRef.current === "long" ? longSharedTpSl : shortSharedTpSl
       const tpSlOverride = multiPositionModeRef.current ? {} : shared
       if (saved) {
@@ -1574,10 +1620,10 @@ export function GridConfigTab({
                     onClick={() => {
                       if (slotScrollCooldownRef.current) return
                       if (!isSideActive) {
-                        if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared({ ...cfgRef.current })
+                        if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared({ ...cfgRef.current })
                         const targetSlots = slotSide === "long" ? longSlots : shortSlots
                         const targetSlot = targetSlots[idx]
-                        const saved = targetSlot ? slotCfgMapRef.current[targetSlot.slotId] : undefined
+                        const saved = targetSlot ? slotCfgMapRef.current[slotKey(targetSlot.slotId)] : undefined
                         const targetShared = slotSide === "long" ? longSharedTpSl : shortSharedTpSl
                         const tpSlOverride = multiPositionModeRef.current ? {} : targetShared
                         const newCfg = saved
@@ -1628,7 +1674,7 @@ export function GridConfigTab({
                         if (slotScrollCooldownRef.current) return
                         const cancelId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
                         cancelGridOrders(cancelId)
-                        delete slotCfgMapRef.current[slot.slotId]
+                        delete slotCfgMapRef.current[slotKey(slot.slotId)]
                         const targetSlots = slotSide === "long" ? longSlots : shortSlots
                         const setSlots = slotSide === "long" ? setLongSlots : setShortSlots
                         const targetActiveIdx = slotSide === "long" ? activeLongIdx : activeShortIdx
@@ -1648,7 +1694,7 @@ export function GridConfigTab({
                         setActiveIdx(newActive)
                         if (isSideActive) {
                           const targetSlot = newSlots[newActive]
-                          const saved = targetSlot ? slotCfgMapRef.current[targetSlot.slotId] : undefined
+                          const saved = targetSlot ? slotCfgMapRef.current[slotKey(targetSlot.slotId)] : undefined
                           setCfg(saved
                             ? { ...saved, ...tpSlOverride, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
                             : { ...DEFAULT_GRID_CONFIG, ...tpSlOverride, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
