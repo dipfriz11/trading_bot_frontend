@@ -1673,7 +1673,14 @@ export function GridConfigTab({
                       onClick={(e) => {
                         e.stopPropagation()
                         if (slotScrollCooldownRef.current) return
-                        const cancelId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
+                        // Find the actual consoleId from gridOrders — the chartId captured at place time
+                        // may differ from the current activeChartId (e.g. after chart switch).
+                        const suffix = `:${slotSide}:${slot.slotId}`
+                        const prefix = `${baseConsoleId}:`
+                        const matchedId = Object.keys(gridOrders).find(
+                          (id) => id.startsWith(prefix) && id.endsWith(suffix)
+                        )
+                        const cancelId = matchedId ?? `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
                         cancelGridOrders(cancelId)
                         delete slotCfgMapRef.current[slotKey(slot.slotId)]
                         const targetSlots = slotSide === "long" ? longSlots : shortSlots
