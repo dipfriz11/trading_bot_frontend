@@ -740,6 +740,11 @@ export function GridConfigTab({
   setLongSharedTpSlRef.current = setLongSharedTpSl
   const setShortSharedTpSlRef = useRef(setShortSharedTpSl)
   setShortSharedTpSlRef.current = setShortSharedTpSl
+  // Slot refs so setTimeout callbacks always see latest slot arrays
+  const longSlotsRef = useRef(longSlots)
+  longSlotsRef.current = longSlots
+  const shortSlotsRef = useRef(shortSlots)
+  shortSlotsRef.current = shortSlots
 
   const TP_SL_KEYS_REF = useRef(TP_SL_KEYS)
   TP_SL_KEYS_REF.current = TP_SL_KEYS
@@ -1230,9 +1235,16 @@ export function GridConfigTab({
 
   const handlePlaceGrid = () => {
     if (!activeChartId) return
+    // Capture everything synchronously before any async work
+    const snapshotCfg = { ...cfgRef.current }
+    const snapshotShared = activeSideSharedTpSlRef.current
+    const snapshotSide = activeSideRef.current
+    const snapshotConsoleId = consoleId
+    const snapshotChartId = activeChartId
+
     // Save current slot cfg so shared TP/SL sync can recalculate prices for this slot later
-    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared({ ...cfgRef.current })
-    const viz = calcGridVisualization(cfg)
+    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared(snapshotCfg)
+    const viz = calcGridVisualization(snapshotCfg)
     while (orderIdRefs.current.length < viz.orders.length) {
       orderIdRefs.current.push(nanoid())
     }
@@ -1242,50 +1254,52 @@ export function GridConfigTab({
     expectedLastPriceRef.current = viz.orders[viz.orders.length - 1]?.price
     expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
     const newData = {
-      chartId: activeChartId,
-      consoleId,
-      side: cfg.side,
+      chartId: snapshotChartId,
+      consoleId: snapshotConsoleId,
+      side: snapshotCfg.side,
       orders: viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty })),
       tpPrice: showTpSl ? viz.tpPrice : null,
       slPrice: showTpSl ? viz.slPrice : null,
       tpLevels: showTpSl ? viz.tpLevels : [],
-      symbol: cfg.symbol,
-      leverage: cfg.leverage,
+      symbol: snapshotCfg.symbol,
+      leverage: snapshotCfg.leverage,
       accountId,
       exchangeId,
       marketType,
     }
+
+    // Capture owner TP/SL for non-multipos mode — computed synchronously from just-placed cfg
+    let ownerUpdate: { consoleId: string; tpPrice: number | null; slPrice: number | null; tpLevels: number[] } | null = null
+    if (!multiPositionModeRef.current) {
+      const allSlots = snapshotSide === "long" ? longSlotsRef.current : shortSlotsRef.current
+      const ownerSlot = allSlots[0]
+      if (ownerSlot) {
+        const ownerConsoleId = `${baseConsoleId}:${snapshotChartId}:${snapshotSide}:${ownerSlot.slotId}`
+        const mergedCfg: GridConfig = { ...snapshotCfg, ...snapshotShared }
+        const ownerViz = calcGridVisualization(mergedCfg)
+        ownerUpdate = {
+          consoleId: ownerConsoleId,
+          tpPrice: ownerViz.tpPrice,
+          slPrice: ownerViz.slPrice,
+          tpLevels: ownerViz.tpLevels,
+        }
+      }
+    }
+
     // Cancel first to reset state from "placed" to allow setGridPreview to write fresh data
-    cancelGridOrders(consoleId)
+    cancelGridOrders(snapshotConsoleId)
     // Then set fresh preview and immediately place
     setTimeout(() => {
-      setGridPreview(consoleId, newData)
+      setGridPreview(snapshotConsoleId, newData)
       setTimeout(() => {
-        placeGridOrders(consoleId)
-        // In non-multipos mode, after placing any non-owner slot, ensure slot 0's TP/SL
-        // stays anchored to slot 0's own grid geometry (not the newly placed grid).
-        // This prevents TP from jumping when Grid #2 is placed at a different price level.
-        if (!multiPositionModeRef.current) {
-          const side = activeSideRef.current
-          const allSlots = side === "long" ? longSlots : shortSlots
-          const ownerSlot = allSlots[0]
-          if (ownerSlot) {
-            const ownerConsoleId = `${baseConsoleId}:${activeChartId}:${side}:${ownerSlot.slotId}`
-            const shared = activeSideSharedTpSlRef.current
-            // Use slot 0's stored cfg as the geometry base — fall back to current cfg only
-            // if slot 0 is the active slot (meaning we are placing Grid #1).
-            const isOwnerActive = (side === "long" ? activeLongIdx : activeShortIdx) === 0
-            const ownerGeoCfg = isOwnerActive
-              ? cfgRef.current
-              : (slotCfgMapRef.current[ownerSlot.slotId] ?? cfgRef.current)
-            const mergedCfg: GridConfig = { ...ownerGeoCfg, ...shared }
-            const ownerViz = calcGridVisualization(mergedCfg)
-            applyGridTpSl(ownerConsoleId, {
-              tpPrice: ownerViz.tpPrice,
-              slPrice: ownerViz.slPrice,
-              tpLevels: ownerViz.tpLevels,
-            })
-          }
+        placeGridOrders(snapshotConsoleId)
+        // In non-multipos mode, re-anchor owner's TP/SL to the just-placed grid's geometry
+        if (ownerUpdate) {
+          applyGridTpSl(ownerUpdate.consoleId, {
+            tpPrice: ownerUpdate.tpPrice,
+            slPrice: ownerUpdate.slPrice,
+            tpLevels: ownerUpdate.tpLevels,
+          })
         }
       }, 0)
     }, 0)
