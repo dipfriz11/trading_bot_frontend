@@ -810,6 +810,7 @@ export function GridConfigTab({
         leverage: p.leverage,
         side: cfg.side,
       }))
+      if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.side])
