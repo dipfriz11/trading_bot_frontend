@@ -4,6 +4,8 @@ import { createPortal } from "react-dom"
 import type { Widget, GridSharedTpSl, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
+import { nanoid } from "@/lib/nanoid"
+import { calcGridVisualization } from "@/lib/grid-math"
 import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
@@ -335,6 +337,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     deductOrderBalance,
     refundOrderBalance,
     tpSlOrders, setTpSl,
+    setGridPreview, cancelGridPreview,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "grid">("new")
@@ -376,6 +379,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const noUpd = useCallback(<K extends keyof GridSharedTpSl>(key: K, val: GridSharedTpSl[K]) => {
     setNoTpSl((p) => ({ ...p, [key]: val }))
   }, [])
+
+  // Stable consoleId for New Order TP/SL grid preview (1-order "grid")
+  const noConsoleId = `${_props.widget.id}:no`
+  // Stable order ID ref so the grid line doesn't flicker on re-render
+  const noOrderIdRef = useRef<string>(nanoid())
 
   // Templates for New Order (shared namespace "grid" with Grid tab)
   const { templates: noTemplates, saveTemplate: noSaveTemplate, deleteTemplate: noDeleteTemplate } = useTemplates<GridSharedTpSl>("grid")
@@ -578,6 +586,78 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
     prevChartIdRef.current = activeChart?.id ?? null
   }, [activeChart?.id])
+
+  // ---- New Order: push TP/SL preview lines to chart via grid infrastructure ----
+  useEffect(() => {
+    if (!activeChart || tab !== "new") {
+      cancelGridPreview(noConsoleId)
+      return
+    }
+
+    const qtyNum = parseFloat(qty)
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(price) || 0)
+    const hasTpOrSl = noTpSl.tpEnabled || noTpSl.slEnabled
+
+    if (!(qtyNum > 0 && p > 0) || !hasTpOrSl) {
+      cancelGridPreview(noConsoleId)
+      return
+    }
+
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+
+    // Minimal 1-order GridConfig to reuse calcGridVisualization TP/SL math
+    const miniCfg = {
+      enabled: true, symbol, side: gSide,
+      ordersCount: 1, entryPrice: p,
+      topPrice: 0, bottomPrice: 0,
+      totalQuote: qtyNum * p, budgetMode: "quote" as const,
+      leverage: posSettings.leverage,
+      gridType: "arithmetic" as const, entryType: "limit" as const,
+      placementMode: "step_percent" as const,
+      firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
+      direction: "down" as const, qtyMode: "quote" as const,
+      multiplier: 1, multiplierEnabled: false, density: 1,
+      gridMode: "standard" as const,
+      tpEnabled: noTpSl.tpEnabled, tpMode: noTpSl.tpMode,
+      tpPercent: noTpSl.tpPercent, tpClosePercent: noTpSl.tpClosePercent,
+      multiTpEnabled: noTpSl.multiTpEnabled, multiTpCount: noTpSl.multiTpCount,
+      multiTpLevels: noTpSl.multiTpLevels,
+      tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
+      slEnabled: noTpSl.slEnabled, slMode: noTpSl.slMode,
+      slPercent: noTpSl.slPercent, slClosePercent: noTpSl.slClosePercent,
+      trailEnabled: false, trailTriggerPercent: 1,
+      trailLimitPriceEnabled: false, trailLimitPrice: 0,
+      autoEnabled: false, stopOnSl: false, stopNew: false,
+      resetTpEnabled: false, resetTpTriggerLevels: [],
+      defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
+      resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+    }
+
+    const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
+
+    // When noTpSl grid preview is active, clear the simple tpSlOrders to avoid duplicate lines
+    setTpSl(activeChart.id, { tp: null, sl: null })
+
+    setGridPreview(noConsoleId, {
+      chartId: activeChart.id,
+      consoleId: noConsoleId,
+      side: gSide,
+      orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
+      tpPrice: viz.tpPrice,
+      slPrice: viz.slPrice,
+      tpLevels: viz.tpLevels,
+      symbol,
+      leverage: posSettings.leverage,
+      accountId,
+      exchangeId,
+      marketType,
+    })
+  }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
+
+  // Cleanup New Order preview on unmount
+  useEffect(() => {
+    return () => { cancelGridPreview(noConsoleId) }
+  }, [noConsoleId])
 
   // ---- Push TP to context when form changes ----
   useEffect(() => {
