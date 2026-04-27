@@ -77,6 +77,7 @@ function _NI({
   const isFocused = useRef(false)
 
   useEffect(() => {
+    if (import.meta.env.DEV) console.log(`[_NI] value changed to`, value, `label=${label}`)
     if (!isFocused.current) setLocalVal(String(value))
   }, [value])
 
