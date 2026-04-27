@@ -504,18 +504,6 @@ export const GridConfigTab = memo(function GridConfigTab({
   exchangeId,
   isVisible = true,
 }: GridConfigTabProps) {
-  // ── DEV render counter ────────────────────────────────────────────────────
-  const _devRc = useRef(0)
-  const _devPrevIsVisible = useRef(isVisible)
-  if (import.meta.env.DEV) {
-    _devRc.current++
-    const changed = _devPrevIsVisible.current !== isVisible ? ` *** CHANGED from ${_devPrevIsVisible.current}` : ""
-    _devPrevIsVisible.current = isVisible
-    if (changed || _devRc.current <= 4) {
-      console.log(`[GridConfigTab] render #${_devRc.current} isVisible=${isVisible}${changed}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
-    }
-  }
-
   // ── Multi-grid slots (separate per side) ─────────────────────────────────
   const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
   const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
@@ -557,18 +545,7 @@ export const GridConfigTab = memo(function GridConfigTab({
     entryPrice: externalEntryPrice ?? DEFAULT_GRID_CONFIG.entryPrice,
     leverage: externalLeverage ?? DEFAULT_GRID_CONFIG.leverage,
   })
-  const setCfg: typeof _setCfg = import.meta.env.DEV
-    ? (updater) => {
-        _setCfg((prev) => {
-          const next = typeof updater === "function" ? (updater as (p: typeof prev) => typeof prev)(prev) : updater
-          if (next !== prev) {
-            const changedKeys = (Object.keys(next) as (keyof typeof next)[]).filter(k => next[k] !== prev[k])
-            console.log(`[GridConfigTab setCfg] changed keys:`, changedKeys, new Error().stack?.split("\n").slice(2, 4).join(" | ").trim())
-          }
-          return next
-        })
-      }
-    : _setCfg
+  const setCfg = _setCfg
   // Always-current cfg ref for use in effects/callbacks without stale closure
   const cfgRef = useRef(cfg)
 
@@ -1240,22 +1217,7 @@ export const GridConfigTab = memo(function GridConfigTab({
   }
 
   // Push preview whenever config changes and totalQuote > 0
-  // DEV: track what triggered this effect
-  const prevPreviewDepsRef = useRef({ cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible })
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      const prev = prevPreviewDepsRef.current
-      const changed: string[] = []
-      if (prev.cfg !== cfg) changed.push("cfg")
-      if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
-      if (prev.isPlaced !== isPlaced) changed.push("isPlaced")
-      if (prev.activeLongIdx !== activeLongIdx) changed.push("activeLongIdx")
-      if (prev.activeShortIdx !== activeShortIdx) changed.push("activeShortIdx")
-      if (prev.multiPositionMode !== multiPositionMode) changed.push("multiPositionMode")
-      if (prev.isVisible !== isVisible) changed.push("isVisible")
-      prevPreviewDepsRef.current = { cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible }
-      console.log(`[GridConfigTab previewEffect] consoleId=${consoleId} changed=[${changed.join(",")}]`)
-    }
     if (!isVisible) {
       if (!isPlaced) cancelGridOrders(consoleId)
       return

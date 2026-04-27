@@ -343,11 +343,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "grid">("new")
-  const _devTabRef = useRef(tab)
-  if (import.meta.env.DEV && _devTabRef.current !== tab) {
-    console.log(`[OrderConsoleWidget] tab changed: ${_devTabRef.current} → ${tab}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
-    _devTabRef.current = tab
-  }
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
@@ -379,7 +374,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const noTog = (k: keyof typeof noOpen) => setNoOpen((p) => ({ ...p, [k]: !p[k] }))
 
   const noUpd = useCallback(<K extends keyof GridSharedTpSl>(key: K, val: GridSharedTpSl[K]) => {
-    if (import.meta.env.DEV) console.log(`[noUpd] key=${String(key)} val=${JSON.stringify(val)}`, new Error().stack?.split("\n").slice(2, 4).join(" | ").trim())
     setNoTpSl((p) => ({ ...p, [key]: val }))
   }, [])
 
@@ -694,7 +688,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const prevNoSlPriceValueRef = useRef<number | null | undefined>(undefined)
   const noExpectedSlPriceRef = useRef<number | null | undefined>(undefined)
   const noExpectedTpLevelsRef = useRef<number[] | undefined>(undefined)
+  const prevNoChartIdRef = useRef<string | undefined>(undefined)
   useEffect(() => {
+    // Reset history when chart changes so we don't misinterpret the first
+    // value from the new chart as a user drag (which was causing infinite loop)
+    if (prevNoChartIdRef.current !== activeChart?.id) {
+      prevNoChartIdRef.current = activeChart?.id
+      prevNoSlPriceValueRef.current = undefined
+      return
+    }
     const prev = prevNoSlPriceValueRef.current
     prevNoSlPriceValueRef.current = noChartSlPrice ?? null
     if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) return
@@ -709,7 +711,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       ? (1 - noChartSlPrice / p) * 100
       : (noChartSlPrice / p - 1) * 100
     noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
-  }, [noChartSlPrice])
+  }, [noChartSlPrice, activeChart?.id])
 
   // TP x-click: tpLevels count decreased
   const noChartTpLevelsKey = noChartTpLevels?.join(",") ?? ""
