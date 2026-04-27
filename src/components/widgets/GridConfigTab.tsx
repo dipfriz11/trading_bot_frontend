@@ -1241,7 +1241,27 @@ export function GridConfigTab({
     // Then set fresh preview and immediately place
     setTimeout(() => {
       setGridPreview(consoleId, newData)
-      setTimeout(() => placeGridOrders(consoleId), 0)
+      setTimeout(() => {
+        placeGridOrders(consoleId)
+        // In non-multipos mode, after placing any slot, recalculate slot 0's TP/SL
+        // using the just-placed grid's geometry so TP/SL lines reflect the latest placement.
+        if (!multiPositionModeRef.current) {
+          const side = activeSideRef.current
+          const allSlots = side === "long" ? longSlots : shortSlots
+          const ownerSlot = allSlots[0]
+          if (ownerSlot) {
+            const ownerConsoleId = `${baseConsoleId}:${activeChartId}:${side}:${ownerSlot.slotId}`
+            const shared = activeSideSharedTpSlRef.current
+            const mergedCfg: GridConfig = { ...cfgRef.current, ...shared }
+            const ownerViz = calcGridVisualization(mergedCfg)
+            applyGridTpSl(ownerConsoleId, {
+              tpPrice: ownerViz.tpPrice,
+              slPrice: ownerViz.slPrice,
+              tpLevels: ownerViz.tpLevels,
+            })
+          }
+        }
+      }, 0)
     }, 0)
   }
 
