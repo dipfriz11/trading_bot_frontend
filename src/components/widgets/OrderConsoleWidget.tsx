@@ -463,6 +463,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- Push draft order to context whenever form changes ----
   useEffect(() => {
     if (!activeChart) return
+    // Don't show New Order draft while Grid tab is active
+    if (tab !== "new") {
+      setDraftOrder(activeChart.id, undefined)
+      return
+    }
     if (suppressDraftRef.current) return
     if (isDraggingOrder) return
     if (settingPriceFromExternalRef.current) return
@@ -479,7 +484,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       lastDraftPricePushedRef.current = 0
       setDraftOrder(activeChart.id, undefined)
     }
-  }, [effectiveSide, price, qty, orderType, activeChart?.id, isDraggingOrder, editingOrderId])
+  }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, isDraggingOrder, editingOrderId])
 
   // ---- Sync form when DRAFT is dragged on the chart ----
   // Only fires when draftOrders[activeChart.id].price changes due to a real chart drag.
