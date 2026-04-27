@@ -268,6 +268,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!activeTab) return
     const charts = activeTab.widgets.filter((w) => w.type === "chart")
+    if (import.meta.env.DEV) console.log(`[autoSelectChart] tabId=${activeTab.id} widgetsLen=${activeTab.widgets.length} activeChartId=${activeChartId} chartIds=${charts.map(c=>c.id).join(",")}`)
     if (charts.length === 0) {
       setActiveChartId(null)
       return
