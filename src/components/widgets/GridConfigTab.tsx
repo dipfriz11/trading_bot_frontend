@@ -1209,7 +1209,10 @@ export const GridConfigTab = memo(function GridConfigTab({
       prevPreviewDepsRef.current = { cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible }
       console.log(`[GridConfigTab previewEffect] consoleId=${consoleId} changed=[${changed.join(",")}]`)
     }
-    if (!isVisible) return
+    if (!isVisible) {
+      if (!isPlaced) cancelGridOrders(consoleId)
+      return
+    }
     if (!activeChartId) {
       if (gridOrdersRef.current[consoleId]) cancelGridOrders(consoleId)
       return
