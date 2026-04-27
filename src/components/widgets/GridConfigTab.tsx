@@ -1681,9 +1681,6 @@ export function GridConfigTab({
                           (id) => id.startsWith(prefix) && id.endsWith(suffix)
                         )
                         const cancelId = matchedId ?? `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
-                        console.log("[GRID X BTN] baseConsoleId=", baseConsoleId, "activeChartId=", activeChartId, "slotSide=", slotSide, "slotId=", slot.slotId)
-                        console.log("[GRID X BTN] gridOrders keys=", Object.keys(gridOrders))
-                        console.log("[GRID X BTN] suffix=", suffix, "matchedId=", matchedId, "→ cancelId=", cancelId)
                         cancelGridOrders(cancelId)
                         delete slotCfgMapRef.current[slotKey(slot.slotId)]
                         const targetSlots = slotSide === "long" ? longSlots : shortSlots

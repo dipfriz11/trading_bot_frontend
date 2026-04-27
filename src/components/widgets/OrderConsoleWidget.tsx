@@ -1444,24 +1444,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             </div>
           ))}
         </div>
-      ) : tab === "grid" ? (
-        /* Grid Config */
-        <div className="flex-1 overflow-auto min-h-0">
-          <GridConfigTab
-            symbol={symbol}
-            marketType={marketType}
-            futuresSide={futuresSide}
-            entryPrice={mockPrice}
-            availableBalance={walletBalance}
-            inOrders={inOrders}
-            leverage={posSettings.leverage}
-            onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
-            consoleWidgetId={_props.widget.id}
-            activeChartId={activeChartId}
-            accountId={accountId}
-            exchangeId={exchangeId}
-          />
-        </div>
       ) : (
         /* DCA */
         <div className="flex-1 overflow-auto min-h-0">
@@ -1475,6 +1457,24 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           />
         </div>
       )}
+
+      {/* Grid tab — always mounted to preserve slot/placed state across tab switches */}
+      <div className="flex-1 overflow-auto min-h-0" style={{ display: tab === "grid" ? undefined : "none" }}>
+        <GridConfigTab
+          symbol={symbol}
+          marketType={marketType}
+          futuresSide={futuresSide}
+          entryPrice={mockPrice}
+          availableBalance={walletBalance}
+          inOrders={inOrders}
+          leverage={posSettings.leverage}
+          onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
+          consoleWidgetId={_props.widget.id}
+          activeChartId={activeChartId}
+          accountId={accountId}
+          exchangeId={exchangeId}
+        />
+      </div>
     </div>
   )
 }

@@ -494,8 +494,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const entry = prev[consoleId]
     if (!entry) return
 
-    console.log("[GRID PLACE] consoleId=", consoleId, "chartId=", entry.chartId, "side=", entry.side, "orders=", entry.orders.length)
-
     const ordersWithIndex = entry.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
     setGridOrdersMap({ ...prev, [consoleId]: { ...entry, orders: ordersWithIndex, state: "placed", pendingUpdate: false } })
 
@@ -552,7 +550,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const cancelGridOrders = useCallback((consoleId: string) => {
     const prev = gridOrdersRef.current
     const entry = prev[consoleId]
-    console.log("[GRID CANCEL] consoleId=", consoleId, "found entry=", !!entry, "state=", entry?.state, "allKeys=", Object.keys(prev))
     const n = { ...prev }
     delete n[consoleId]
     setGridOrdersMap(n)
