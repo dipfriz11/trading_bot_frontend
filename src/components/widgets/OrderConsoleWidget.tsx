@@ -653,7 +653,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
-      consoleId: noConsoleId,
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
       tpPrice: viz.tpPrice,

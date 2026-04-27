@@ -746,7 +746,7 @@ export const GridConfigTab = memo(function GridConfigTab({
   const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
   // Subscribe only to this specific consoleId to avoid re-renders from other grids
   const currentGridState = useGridOrderEntry(consoleId)
-  const isPlaced = currentGridState?.state === "placed"
+  const isPlaced = !!currentGridState
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
   // Refs so that upd() and drag-sync effects can call markGridPendingUpdate
@@ -951,7 +951,7 @@ export const GridConfigTab = memo(function GridConfigTab({
   // Track how many TPs were active at placement so we know when "all" are removed
   const placedTpCountRef = useRef<number>(0)
   useEffect(() => {
-    if (isPlaced && currentGridState?.state === "placed") {
+    if (isPlaced && currentGridState) {
       if (chartTpLevelsLen !== undefined && chartTpLevelsLen > 0) {
         placedTpCountRef.current = chartTpLevelsLen
       }
@@ -1253,7 +1253,6 @@ export const GridConfigTab = memo(function GridConfigTab({
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
-      consoleId,
       side: cfg.side,
       orders: ordersForPreview,
       tpPrice: showTpSl ? viz.tpPrice : null,
@@ -1503,7 +1502,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       }
     }
 
-    // Cancel first to reset state from "placed" to allow setGridPreview to write fresh data
+    // Cancel placed grid first, then set fresh preview and place
     cancelGridOrders(snapshotConsoleId)
     // Then set fresh preview and immediately place
     setTimeout(() => {
@@ -1653,7 +1652,7 @@ export const GridConfigTab = memo(function GridConfigTab({
               return sideSlots.map((slot, idx) => {
                 const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
                 const slotState = gridOrdersRef.current[slotConsoleId]
-                const slotPlaced = slotState?.state === "placed"
+                const slotPlaced = !!slotState
                 const slotPending = slotPlaced && slotState?.pendingUpdate
                 const isActive = isSideActive && idx === sideActiveIdx
                 return (

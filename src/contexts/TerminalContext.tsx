@@ -75,27 +75,41 @@ export function posKey(
 
 // ---- Grid order bridge types ----
 
-export type GridOrderState = "preview" | "placed"
+// Preview: visual-only lines, not yet placed. No balance impact.
+export interface ChartGridPreview {
+  chartId: string
+  consoleId: string
+  side: "long" | "short"
+  orders: Array<{ id: string; price: number; qty: number }>
+  tpPrice: number | null
+  slPrice: number | null
+  tpLevels: number[]
+  symbol: string
+  leverage: number
+  accountId?: string
+  exchangeId?: string
+  marketType?: "spot" | "futures"
+}
 
+// Placed grid: real orders sent to exchange. Balance locked.
 export interface ChartGridOrders {
   chartId: string
-  consoleId: string          // which order-console widget owns this
-  state: GridOrderState
+  consoleId: string
   side: "long" | "short"
-  orders: Array<{ id: string; price: number; qty: number; gridIndex?: number }>
+  orders: Array<{ id: string; price: number; qty: number; gridIndex: number }>
   tpPrice: number | null
   slPrice: number | null
   tpLevels: number[]
   symbol: string
   leverage: number
   pendingUpdate: boolean     // config changed after placement — show "Apply" button
-  // Account context — needed to sync balance and placedOrders on place/cancel
   accountId?: string
   exchangeId?: string
   marketType?: "spot" | "futures"
 }
 
 // keyed by consoleWidgetId
+type PreviewOrderMap = Record<string, ChartGridPreview | undefined>
 type GridOrderMap = Record<string, ChartGridOrders | undefined>
 
 // ---- Order bridge types ----
@@ -203,9 +217,11 @@ interface TerminalContextValue {
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
 
   // Grid orders bridge
+  previewOrders: PreviewOrderMap
+  previewOrdersRef: React.RefObject<PreviewOrderMap>
   gridOrders: GridOrderMap
   gridOrdersRef: React.RefObject<GridOrderMap>
-  setGridPreview: (consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => void
+  setGridPreview: (consoleId: string, data: Omit<ChartGridPreview, "consoleId"> | null) => void
   placeGridOrders: (consoleId: string) => void
   cancelGridOrders: (consoleId: string) => void
   cancelGridPreview: (consoleId: string) => void
@@ -229,14 +245,17 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
+  const [previewOrders, setPreviewOrdersMap] = useState<PreviewOrderMap>({})
   const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
   const [positions, setPositionsMap] = useState<PositionsMap>({})
   // Stable refs for reading latest state in callbacks without triggering re-renders
   const placedOrdersRef = React.useRef<PlacedOrderMap>({})
+  const previewOrdersRef = React.useRef<PreviewOrderMap>({})
   const gridOrdersRef = React.useRef<GridOrderMap>({})
   const positionsRef = React.useRef<PositionsMap>({})
   const balancesRef = React.useRef<BalanceStore>(buildInitialBalances())
   placedOrdersRef.current = placedOrders
+  previewOrdersRef.current = previewOrders
   gridOrdersRef.current = gridOrders
   positionsRef.current = positions
   balancesRef.current = balances
@@ -582,8 +601,21 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => {
-    setGridOrdersMap((prev) => {
+  const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridPreview, "consoleId"> | null) => {
+    // If grid is already placed, just mark it as pending update — don't overwrite preview
+    const placedEntry = gridOrdersRef.current[consoleId]
+    if (placedEntry) {
+      if (!placedEntry.pendingUpdate) {
+        setGridOrdersMap((prev) => {
+          const entry = prev[consoleId]
+          if (!entry || entry.pendingUpdate) return prev
+          return { ...prev, [consoleId]: { ...entry, pendingUpdate: true } }
+        })
+      }
+      // Still update previewOrders so the form reflects new config
+    }
+
+    setPreviewOrdersMap((prev) => {
       if (data === null) {
         if (!prev[consoleId]) return prev
         const n = { ...prev }
@@ -591,13 +623,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         return n
       }
       const existing = prev[consoleId]
-      // If already placed, mark as pending update instead of overwriting
-      if (existing?.state === "placed") {
-        if (existing.pendingUpdate) return prev
-        return { ...prev, [consoleId]: { ...existing, pendingUpdate: true } }
-      }
       // Stable check: avoid re-render if nothing meaningful changed
-      if (existing?.state === "preview") {
+      if (existing) {
         const ordersMatch = existing.orders.length === data.orders.length &&
           existing.orders.every((o, i) => o.id === data.orders[i].id && o.price === data.orders[i].price && o.qty === data.orders[i].qty)
         const tpLevelsMatch = (existing.tpLevels?.length ?? 0) === (data.tpLevels?.length ?? 0) &&
@@ -615,17 +642,28 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           return prev
         }
       }
-      return { ...prev, [consoleId]: { ...data, state: "preview", pendingUpdate: false } }
+      return { ...prev, [consoleId]: { ...data, consoleId } }
     })
   }, [])
 
   const placeGridOrders = useCallback((consoleId: string) => {
-    const prev = gridOrdersRef.current
-    const entry = prev[consoleId]
-    if (!entry) return
+    const preview = previewOrdersRef.current[consoleId]
+    if (!preview) return
 
-    const ordersWithIndex = entry.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
-    setGridOrdersMap({ ...prev, [consoleId]: { ...entry, orders: ordersWithIndex, state: "placed", pendingUpdate: false } })
+    const ordersWithIndex = preview.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
+    // Move from preview → placed grid
+    setGridOrdersMap((prev) => ({
+      ...prev,
+      [consoleId]: { ...preview, orders: ordersWithIndex, pendingUpdate: false },
+    }))
+    // Clear preview now that it's been placed
+    setPreviewOrdersMap((prev) => {
+      const n = { ...prev }
+      delete n[consoleId]
+      return n
+    })
+
+    const entry = preview
 
     if (entry.accountId && entry.exchangeId && entry.marketType) {
       const now = new Date()
@@ -726,7 +764,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     delete n[consoleId]
     setGridOrdersMap(n)
 
-    if (entry && entry.accountId && entry.exchangeId && entry.marketType && entry.state === "placed") {
+    if (entry && entry.accountId && entry.exchangeId && entry.marketType) {
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
       const prevPlaced = placedOrdersRef.current
       const updatedMap: typeof prevPlaced = {}
@@ -753,11 +791,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Cancel only if still in preview state — placed grids survive side switching
   const cancelGridPreview = useCallback((consoleId: string) => {
-    setGridOrdersMap((prev) => {
-      const entry = prev[consoleId]
-      if (!entry || entry.state === "placed") return prev
+    setPreviewOrdersMap((prev) => {
+      if (!prev[consoleId]) return prev
       const n = { ...prev }
       delete n[consoleId]
       return n
@@ -765,9 +801,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const updateGridPreviewPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
-    setGridOrdersMap((prev) => {
+    setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
-      if (!entry || entry.state !== "preview") return prev
+      if (!entry) return prev
       const orders = entry.orders.map((o) => o.id === orderId ? { ...o, price: newPrice } : o)
       return { ...prev, [consoleId]: { ...entry, orders } }
     })
@@ -776,7 +812,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const updateGridPlacedPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
-      if (!entry || entry.state !== "placed") return prev
+      if (!entry) return prev
       const orders = entry.orders.map((o) => o.id === orderId ? { ...o, price: newPrice } : o)
       return { ...prev, [consoleId]: { ...entry, orders } }
     })
@@ -871,7 +907,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     if (import.meta.env.DEV) console.warn("[markGridPendingUpdate]", consoleId, new Error().stack?.split("\n").slice(1, 5).join(" | "))
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
-      if (!entry || entry.state !== "placed") return prev
+      if (!entry || entry.pendingUpdate) return prev
       return { ...prev, [consoleId]: { ...entry, pendingUpdate: true } }
     })
   }, [])
@@ -927,6 +963,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         closePosition,
         partialClosePosition,
         updatePositionMark,
+        previewOrders,
+        previewOrdersRef,
         gridOrders,
         gridOrdersRef,
         setGridPreview,
@@ -953,9 +991,16 @@ export function useTerminal() {
   return ctx
 }
 
-// Subscribe only to a single consoleId entry — avoids re-renders from unrelated grid updates
+// Subscribe to a single grid entry — returns placed grid or undefined
 export function useGridOrderEntry(consoleId: string): ChartGridOrders | undefined {
   const ctx = useContext(TerminalContext)
   if (!ctx) throw new Error("useGridOrderEntry must be used within TerminalProvider")
   return ctx.gridOrders[consoleId]
+}
+
+// Subscribe to a single preview entry — returns preview or undefined
+export function useGridPreviewEntry(consoleId: string): ChartGridPreview | undefined {
+  const ctx = useContext(TerminalContext)
+  if (!ctx) throw new Error("useGridPreviewEntry must be used within TerminalProvider")
+  return ctx.previewOrders[consoleId]
 }
