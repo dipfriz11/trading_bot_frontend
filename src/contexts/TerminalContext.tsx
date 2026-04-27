@@ -59,6 +59,19 @@ function loadState(): TerminalState {
   return getDefaultState()
 }
 
+// ---- Position key — stable identity independent of UI widgets ----
+// key: `${accountId}:${exchangeId}:${marketType}:${symbol}`
+export type PositionKey = string
+
+export function posKey(
+  accountId: string,
+  exchangeId: string,
+  marketType: "spot" | "futures",
+  symbol: string,
+): PositionKey {
+  return `${accountId}:${exchangeId}:${marketType}:${symbol}`
+}
+
 // ---- Grid order bridge types ----
 
 export type GridOrderState = "preview" | "placed"
@@ -119,9 +132,10 @@ export interface ChartPlacedOrder {
   webhookName?: string      // e.g. "TradingView Alert"
 }
 
-// keyed by chartWidgetId
+// draftOrders keyed by chartWidgetId (UI-scoped, intentional)
 type DraftOrderMap = Record<string, ChartDraftOrder | undefined>
-type PlacedOrderMap = Record<string, ChartPlacedOrder[]>
+// placedOrders keyed by PositionKey — survives chart widget close/reopen
+type PlacedOrderMap = Record<PositionKey, ChartPlacedOrder[]>
 
 export interface ChartTpSl {
   tp: number | null
@@ -155,10 +169,10 @@ interface TerminalContextValue {
   draftOrders: DraftOrderMap
   placedOrders: PlacedOrderMap
   setDraftOrder: (chartId: string, draft: ChartDraftOrder | undefined) => void
-  addPlacedOrder: (chartId: string, order: ChartPlacedOrder) => void
-  removePlacedOrder: (chartId: string, orderId: string) => void
-  updatePlacedOrderPrice: (chartId: string, orderId: string, price: number) => void
-  updatePlacedOrder: (chartId: string, orderId: string, updates: Partial<ChartPlacedOrder>) => void
+  addPlacedOrder: (positionKey: PositionKey, order: ChartPlacedOrder) => void
+  removePlacedOrder: (positionKey: PositionKey, orderId: string) => void
+  updatePlacedOrderPrice: (positionKey: PositionKey, orderId: string, price: number) => void
+  updatePlacedOrder: (positionKey: PositionKey, orderId: string, updates: Partial<ChartPlacedOrder>) => void
 
   // True while user is dragging an order line on a chart
   isDraggingOrder: boolean
@@ -347,9 +361,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           : t
       ),
     }))
-    // Clean up order data
+    // Only clean up UI-scoped draft; placed orders are keyed by positionKey and survive widget removal
     setDraftOrders((d) => { const n = { ...d }; delete n[widgetId]; return n })
-    setPlacedOrdersMap((p) => { const n = { ...p }; delete n[widgetId]; return n })
   }, [])
 
   const updateWidget = useCallback((widgetId: string, updates: Partial<Widget>) => {
@@ -420,19 +433,19 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setDraftOrders((prev) => ({ ...prev, [chartId]: draft }))
   }, [])
 
-  const addPlacedOrder = useCallback((chartId: string, order: ChartPlacedOrder) => {
+  const addPlacedOrder = useCallback((positionKey: PositionKey, order: ChartPlacedOrder) => {
     setPlacedOrdersMap((prev) => ({
       ...prev,
-      [chartId]: [...(prev[chartId] ?? []), order],
+      [positionKey]: [...(prev[positionKey] ?? []), order],
     }))
   }, [])
 
-  const removePlacedOrder = useCallback((chartId: string, orderId: string) => {
+  const removePlacedOrder = useCallback((positionKey: PositionKey, orderId: string) => {
     const prev = placedOrdersRef.current
-    const chartOrders = prev[chartId] ?? []
-    const removed = chartOrders.find((o) => o.id === orderId)
+    const keyOrders = prev[positionKey] ?? []
+    const removed = keyOrders.find((o) => o.id === orderId)
 
-    setPlacedOrdersMap({ ...prev, [chartId]: chartOrders.filter((o) => o.id !== orderId) })
+    setPlacedOrdersMap({ ...prev, [positionKey]: keyOrders.filter((o) => o.id !== orderId) })
 
     if (removed?.source === "grid" && removed.gridConsoleId) {
       const consoleId = removed.gridConsoleId
@@ -459,9 +472,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const updatePlacedOrderPrice = useCallback((chartId: string, orderId: string, price: number) => {
+  const updatePlacedOrderPrice = useCallback((positionKey: PositionKey, orderId: string, price: number) => {
     const prev = placedOrdersRef.current
-    const orders = prev[chartId] ?? []
+    const orders = prev[positionKey] ?? []
     const order = orders.find((o) => o.id === orderId)
     if (!order) return
 
@@ -471,7 +484,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       : newNotional
 
     const updatedOrders = orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o)
-    const newMap = { ...prev, [chartId]: updatedOrders }
+    const newMap = { ...prev, [positionKey]: updatedOrders }
     setPlacedOrdersMap(newMap)
 
     if (order.accountId && order.exchangeId && order.marketType) {
@@ -486,10 +499,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const updatePlacedOrder = useCallback((chartId: string, orderId: string, updates: Partial<ChartPlacedOrder>) => {
+  const updatePlacedOrder = useCallback((positionKey: PositionKey, orderId: string, updates: Partial<ChartPlacedOrder>) => {
     setPlacedOrdersMap((prev) => ({
       ...prev,
-      [chartId]: (prev[chartId] ?? []).map((o) => o.id === orderId ? { ...o, ...updates } : o),
+      [positionKey]: (prev[positionKey] ?? []).map((o) => o.id === orderId ? { ...o, ...updates } : o),
     }))
   }, [])
 
@@ -550,11 +563,11 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       })
 
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
-      const chartId = entry.chartId
+      const pk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol)
       const prevPlaced = placedOrdersRef.current
-      const chartOrders = prevPlaced[chartId] ?? []
-      const withoutOld = chartOrders.filter((o) => o.gridConsoleId !== consoleId)
-      const updatedMap = { ...prevPlaced, [chartId]: [...withoutOld, ...newOrders] }
+      const posOrders = prevPlaced[pk] ?? []
+      const withoutOld = posOrders.filter((o) => o.gridConsoleId !== consoleId)
+      const updatedMap = { ...prevPlaced, [pk]: [...withoutOld, ...newOrders] }
       setPlacedOrdersMap(updatedMap)
 
       const totalInOrders = Object.values(updatedMap)
@@ -578,8 +591,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
       const prevPlaced = placedOrdersRef.current
       const updatedMap: typeof prevPlaced = {}
-      for (const [chartId, orders] of Object.entries(prevPlaced)) {
-        updatedMap[chartId] = orders.filter((o) => o.gridConsoleId !== consoleId)
+      for (const [pk, orders] of Object.entries(prevPlaced)) {
+        updatedMap[pk] = orders.filter((o) => o.gridConsoleId !== consoleId)
       }
       setPlacedOrdersMap(updatedMap)
 
@@ -641,7 +654,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       // Also remove from placedOrders and refund balance (mirror of removePlacedOrder for grid orders)
       setPlacedOrdersMap((prevPlaced) => {
         const result: typeof prevPlaced = {}
-        for (const [chartId, orders] of Object.entries(prevPlaced)) {
+        for (const [pk, orders] of Object.entries(prevPlaced)) {
           const removed = orders.find((o) => o.id === orderId && o.source === "grid")
           if (removed?.accountId && removed.exchangeId && removed.marketType && removed.margin != null) {
             const k = balKey(removed.accountId, removed.exchangeId, removed.marketType)
@@ -651,7 +664,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
               return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
             })
           }
-          result[chartId] = orders.filter((o) => o.id !== orderId)
+          result[pk] = orders.filter((o) => o.id !== orderId)
         }
         return result
       })

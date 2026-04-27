@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -425,6 +425,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const futuresSide = activeChart?.futuresSide ?? "long"
   const accountId = activeChart?.accountId ?? "main"
   const exchangeId = activeChart?.exchangeId ?? "binance"
+  // Stable key — matches the key used in placedOrders map
+  const activePositionKey = posKey(accountId, exchangeId, marketType, symbol)
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
   const freeMargin = walletBalance - inOrders
   const { settings: posSettings } = usePositionSettings(symbol)
@@ -529,7 +531,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const trackedPlacedPricesRef = useRef<Record<string, number>>({})
   useEffect(() => {
     if (!activeChart) return
-    const orders = placedOrders[activeChart.id] ?? []
+    const orders = placedOrders[activePositionKey] ?? []
     for (const o of orders) {
       const prev = trackedPlacedPricesRef.current[o.id]
       const placedThreshold = Math.max(o.price * 0.00001, 1e-8)
@@ -542,7 +544,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       }
       trackedPlacedPricesRef.current[o.id] = o.price
     }
-  }, [placedOrders, activeChart?.id])
+  }, [placedOrders, activePositionKey])
 
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
@@ -550,7 +552,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       setFormEditMode(false)
       return
     }
-    const order = (placedOrders[activeChart.id] ?? []).find((o) => o.id === editingOrderId)
+    const order = (placedOrders[activePositionKey] ?? []).find((o) => o.id === editingOrderId)
     if (!order) { setFormEditMode(false); return }
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(order.price))
@@ -871,7 +873,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const newQty = parseFloat(qty)
     if (isNaN(newPrice) || newPrice <= 0) return
 
-    const existingOrder = placedOrders[activeChart.id]?.find((o) => o.id === editingOrderId)
+    const existingOrder = placedOrders[activePositionKey]?.find((o) => o.id === editingOrderId)
     const effectiveQty = newQty > 0 ? newQty : (existingOrder?.qty ?? 0)
     const newNotional = effectiveQty * newPrice
     const newMargin = existingOrder?.marketType === "futures" && existingOrder?.leverage
@@ -883,7 +885,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       deductOrderBalance(existingOrder.accountId, existingOrder.exchangeId, existingOrder.marketType, newMargin)
     }
 
-    updatePlacedOrder(activeChart.id, editingOrderId, {
+    updatePlacedOrder(activePositionKey, editingOrderId, {
       price: newPrice,
       ...(newQty > 0 ? { qty: newQty } : {}),
       margin: newMargin,
@@ -928,7 +930,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const notional = parseFloat(qty) * effectivePrice
       const margin = marketType === "futures" ? notional / posSettings.leverage : notional
 
-      addPlacedOrder(activeChart.id, {
+      addPlacedOrder(activePositionKey, {
         id,
         side: effectiveSide,
         price: effectivePrice,

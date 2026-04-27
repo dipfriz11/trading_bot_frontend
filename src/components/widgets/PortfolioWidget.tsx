@@ -8,7 +8,7 @@ import { X } from "lucide-react"
 const positions = generatePositions()
 
 interface FlatOrder extends ChartPlacedOrder {
-  chartId: string
+  positionKey: string
 }
 
 function fmtPrice(n: number) {
@@ -208,12 +208,12 @@ export function PortfolioWidget(_props: { widget: Widget }) {
 
   const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0)
 
-  // Collect all placed orders (non-draft) across all charts
+  // Collect all placed orders (non-draft) across all positions
   const allOrders: FlatOrder[] = []
-  for (const [chartId, orders] of Object.entries(placedOrders)) {
+  for (const [pk, orders] of Object.entries(placedOrders)) {
     for (const o of orders) {
       if (!o.isDraft) {
-        allOrders.push({ ...o, chartId })
+        allOrders.push({ ...o, positionKey: pk })
       }
     }
   }
@@ -329,7 +329,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
                 <OrderRow
                   key={order.id}
                   order={order}
-                  onCancel={() => removePlacedOrder(order.chartId, order.id)}
+                  onCancel={() => removePlacedOrder(order.positionKey, order.id)}
                 />
               ))}
             </>

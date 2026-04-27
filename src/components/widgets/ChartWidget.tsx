@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react"
 import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
 import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget, Candle } from "@/types/terminal"
-import { useTerminal } from "@/contexts/TerminalContext"
+import { useTerminal, posKey } from "@/contexts/TerminalContext"
 import type { ChartPlacedOrder, ChartDraftOrder, ChartGridOrders, ChartTpSl } from "@/contexts/TerminalContext"
 import { ChevronDown, User, Building2 } from "lucide-react"
 import { PositionBarCompact } from "./PositionBar"
@@ -1136,6 +1136,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const chartType = widget.chartType ?? "candlestick"
   const marketType = widget.marketType ?? "spot"
   const futuresSide = widget.futuresSide ?? "long"
+  const accountId = widget.accountId ?? "main"
+  const exchangeId = widget.exchangeId ?? "binance"
+  // Stable key that identifies which set of placed orders belongs to this chart
+  const positionKey = posKey(accountId, exchangeId, marketType, symbol)
 
   // Whether there is an order-console widget in the current workspace
   const hasOrderConsole = !!(activeTab?.widgets.some((w) => w.type === "order-console"))
@@ -1174,7 +1178,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       : localDraft
   // Always read placed orders from context so PortfolioWidget sees them regardless of mode
   // Exclude grid orders — they are rendered by GridOrdersOverlay (avoid double render)
-  const placedForChart: PlacedOrder[] = (ctxPlacedOrders[widget.id] ?? []).filter(
+  const placedForChart: PlacedOrder[] = (ctxPlacedOrders[positionKey] ?? []).filter(
     (o) => o.source !== "grid"
   )
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
@@ -1190,10 +1194,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (hasOrderConsole) ctxSetDraft(widget.id, undefined)
       else setLocalDraft(undefined)
     } else {
-      ctxRemovePlaced(widget.id, id)
+      ctxRemovePlaced(positionKey, id)
       localDragHandlers.current.delete(id)
     }
-  }, [hasOrderConsole, widget.id, ctxSetDraft, ctxRemovePlaced])
+  }, [hasOrderConsole, widget.id, positionKey, ctxSetDraft, ctxRemovePlaced])
 
   // Tracks whether a drag is currently active (cursor has moved enough to be a drag)
   const isDraggingRef = useRef(false)
@@ -1220,7 +1224,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     if (isDraftOrder) {
       startPrice = draftForChart?.price ?? 0
     } else {
-      startPrice = ctxPlacedOrders[widget.id]?.find((o) => o.id === id)?.price ?? 0
+      startPrice = ctxPlacedOrders[positionKey]?.find((o) => o.id === id)?.price ?? 0
     }
 
     const startY = e.clientY
@@ -1269,7 +1273,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
             setLocalDraft((d) => d ? { ...d, price: finalPrice } : d)
           }
         } else {
-          ctxUpdatePrice(widget.id, id, finalPrice)
+          ctxUpdatePrice(positionKey, id, finalPrice)
         }
         setIsDraggingOrder(false)
         if (isPlacedOrder) setEditingOrderId(null)
@@ -1287,7 +1291,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, draftForChart, draftOrders, ctxPlacedOrders, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
+  }, [hasOrderConsole, widget.id, positionKey, draftForChart, draftOrders, ctxPlacedOrders, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {
@@ -1301,12 +1305,12 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     const now = new Date()
     const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
       .map((n) => n.toString().padStart(2, "0")).join(":")
-    ctxAddPlaced(widget.id, { ...order, id, isDraft: false, time, status: "pending" })
+    ctxAddPlaced(positionKey, { ...order, id, isDraft: false, time, status: "pending" })
     setLocalDraft(undefined)
     const deductAmount = margin ?? order.qty * order.price
-    deductOrderBalance(widget.accountId ?? "main", widget.exchangeId ?? "binance", widget.marketType ?? "spot", deductAmount)
+    deductOrderBalance(accountId, exchangeId, marketType, deductAmount)
     return id
-  }, [widget.id, widget.accountId, widget.exchangeId, widget.marketType, ctxAddPlaced, deductOrderBalance])
+  }, [positionKey, accountId, exchangeId, marketType, ctxAddPlaced, deductOrderBalance])
 
   const registerDragPriceHandler = useCallback((id: string, fn: (p: number) => void) => {
     localDragHandlers.current.set(id, fn)
@@ -1609,9 +1613,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
               onPlaceOrder={handlePlaceOrder}
               registerDragPriceHandler={registerDragPriceHandler}
               registerDraftDragHandler={registerDraftDragHandler}
-              editingOrder={localEditingOrderId ? (ctxPlacedOrders[widget.id] ?? []).find((o) => o.id === localEditingOrderId) : undefined}
+              editingOrder={localEditingOrderId ? (ctxPlacedOrders[positionKey] ?? []).find((o) => o.id === localEditingOrderId) : undefined}
               onUpdateOrder={(id, updates) => {
-                ctxUpdatePlacedOrder(widget.id, id, updates)
+                ctxUpdatePlacedOrder(positionKey, id, updates)
                 setLocalEditingOrderId(null)
               }}
               onCancelEdit={() => setLocalEditingOrderId(null)}
