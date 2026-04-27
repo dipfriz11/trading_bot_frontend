@@ -102,6 +102,28 @@ export interface Position {
   leverage: number
 }
 
+// Live position — created/updated by the position manager in TerminalContext
+export interface LivePosition {
+  // Identity (same key as PositionKey)
+  accountId: string
+  exchangeId: string
+  marketType: "spot" | "futures"
+  symbol: string
+
+  side: "long" | "short"
+  size: number          // base asset qty
+  avgEntry: number      // volume-weighted average entry price
+  leverage: number
+  markPrice: number     // latest mark/last price (updated externally)
+
+  // Computed on the fly, stored for quick access
+  unrealizedPnl: number
+  unrealizedPnlPct: number
+  notional: number      // size * avgEntry
+
+  openedAt: string      // HH:MM:SS when position was first opened
+}
+
 export interface Alert {
   id: string
   symbol: string

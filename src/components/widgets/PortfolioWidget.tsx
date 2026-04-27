@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { generatePositions, formatPrice, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
-import type { Widget, Position } from "@/types/terminal"
-import { useTerminal } from "@/contexts/TerminalContext"
+import type { Widget, LivePosition } from "@/types/terminal"
+import { useTerminal, posKey } from "@/contexts/TerminalContext"
 import type { ChartPlacedOrder, OrderSource } from "@/contexts/TerminalContext"
 import { X, ChevronDown, ChevronRight } from "lucide-react"
 
-const positions = generatePositions()
+const mockPositions = generatePositions()
 
 interface FlatOrder extends ChartPlacedOrder {
   positionKey: string
@@ -23,13 +23,12 @@ function fmtUSDT(n: number) {
 
 // ─── Position row ─────────────────────────────────────────────────────────────
 
-function PositionRow({ pos }: { pos: Position }) {
+function PositionRow({ pos, onClose }: { pos: LivePosition; onClose: (size: number) => void }) {
   const [expanded, setExpanded] = useState(false)
   const isLong = pos.side === "long"
-  const isPnlPos = pos.pnl >= 0
+  const isPnlPos = pos.unrealizedPnl >= 0
   const sideColor = isLong ? "#00e5a0" : "#ff4757"
   const pnlColor = isPnlPos ? "#00e5a0" : "#ff4757"
-  const notional = pos.size * pos.entryPrice
 
   return (
     <>
@@ -66,7 +65,7 @@ function PositionRow({ pos }: { pos: Position }) {
 
         {/* Entry */}
         <div className="text-right" style={{ color: "rgba(200,214,229,0.6)", fontSize: 11 }}>
-          {formatPrice(pos.entryPrice)}
+          {formatPrice(pos.avgEntry)}
         </div>
 
         {/* Mark */}
@@ -77,10 +76,10 @@ function PositionRow({ pos }: { pos: Position }) {
         {/* P&L */}
         <div className="text-right" style={{ color: pnlColor }}>
           <div style={{ fontSize: 11, fontWeight: 600 }}>
-            {isPnlPos ? "+" : ""}${Math.abs(pos.pnl).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            {isPnlPos ? "+" : ""}${Math.abs(pos.unrealizedPnl).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </div>
           <div style={{ fontSize: 9, opacity: 0.75 }}>
-            ({isPnlPos ? "+" : ""}{pos.pnlPct.toFixed(2)}%)
+            ({isPnlPos ? "+" : ""}{pos.unrealizedPnlPct.toFixed(2)}%)
           </div>
         </div>
       </div>
@@ -99,20 +98,21 @@ function PositionRow({ pos }: { pos: Position }) {
           <div className="grid gap-x-4 gap-y-1.5 mt-1.5" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
             <DetailCell label="Side" value={isLong ? "Long" : "Short"} valueColor={sideColor} />
             <DetailCell label="Leverage" value={`×${pos.leverage}`} />
-            <DetailCell label="Notional" value={`$${fmtUSDT(notional)}`} />
-            <DetailCell label="Entry Price" value={formatPrice(pos.entryPrice)} />
+            <DetailCell label="Notional" value={`$${fmtUSDT(pos.notional)}`} />
+            <DetailCell label="Avg Entry" value={formatPrice(pos.avgEntry)} />
             <DetailCell label="Mark Price" value={formatPrice(pos.markPrice)} />
             <DetailCell
               label="Unrealized P&L"
-              value={`${isPnlPos ? "+" : ""}$${Math.abs(pos.pnl).toFixed(2)}`}
+              value={`${isPnlPos ? "+" : ""}$${Math.abs(pos.unrealizedPnl).toFixed(2)}`}
               valueColor={pnlColor}
             />
             <DetailCell
               label="ROE"
-              value={`${isPnlPos ? "+" : ""}${pos.pnlPct.toFixed(2)}%`}
+              value={`${isPnlPos ? "+" : ""}${pos.unrealizedPnlPct.toFixed(2)}%`}
               valueColor={pnlColor}
             />
             <DetailCell label="Size" value={`${pos.size} ${pos.symbol.split("/")[0]}`} />
+            {pos.openedAt && <DetailCell label="Opened" value={pos.openedAt} />}
           </div>
 
           {/* Action buttons */}
@@ -125,6 +125,8 @@ function PositionRow({ pos }: { pos: Position }) {
                 border: "1px solid rgba(255,255,255,0.1)",
                 color: "rgba(200,214,229,0.6)",
               }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onClose(pos.size * 0.25)}
             >
               Close 25%
             </button>
@@ -136,6 +138,8 @@ function PositionRow({ pos }: { pos: Position }) {
                 border: "1px solid rgba(255,255,255,0.1)",
                 color: "rgba(200,214,229,0.6)",
               }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onClose(pos.size * 0.5)}
             >
               Close 50%
             </button>
@@ -147,6 +151,8 @@ function PositionRow({ pos }: { pos: Position }) {
                 border: "1px solid rgba(255,71,87,0.25)",
                 color: "#ff4757",
               }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onClose(pos.size)}
             >
               Close All
             </button>
@@ -340,9 +346,29 @@ function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void 
 
 export function PortfolioWidget(_props: { widget: Widget }) {
   const [tab, setTab] = useState<"positions" | "orders">("positions")
-  const { placedOrders, removePlacedOrder } = useTerminal()
+  const { placedOrders, removePlacedOrder, positions: livePositions, partialClosePosition, closePosition } = useTerminal()
 
-  const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0)
+  // Use live positions if any exist, otherwise fall back to mock for demo
+  const liveList = Object.values(livePositions)
+  const displayPositions: LivePosition[] = liveList.length > 0
+    ? liveList
+    : mockPositions.map((p) => ({
+        accountId: "main",
+        exchangeId: "binance",
+        marketType: "futures" as const,
+        symbol: p.symbol,
+        side: p.side,
+        size: p.size,
+        avgEntry: p.entryPrice,
+        leverage: p.leverage,
+        markPrice: p.markPrice,
+        unrealizedPnl: p.pnl,
+        unrealizedPnlPct: p.pnlPct,
+        notional: p.size * p.entryPrice,
+        openedAt: "",
+      }))
+
+  const totalPnl = displayPositions.reduce((sum, p) => sum + p.unrealizedPnl, 0)
   const isPnlPos = totalPnl >= 0
 
   // Collect all placed orders (non-draft) across all positions
@@ -353,6 +379,12 @@ export function PortfolioWidget(_props: { widget: Widget }) {
     }
   }
   const pendingCount = allOrders.filter((o) => o.status === "pending" || o.status == null).length
+
+  function handleClose(pos: LivePosition, size: number) {
+    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol)
+    if (size >= pos.size) closePosition(pk)
+    else partialClosePosition(pk, size)
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -374,7 +406,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
         <div>
           <div className="font-mono" style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Positions</div>
           <div className="font-mono font-bold" style={{ fontSize: 13, color: "rgba(200,214,229,0.9)" }}>
-            {positions.length}
+            {displayPositions.length}
           </div>
         </div>
 
@@ -429,12 +461,18 @@ export function PortfolioWidget(_props: { widget: Widget }) {
             <span className="text-right" style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>P&L</span>
           </div>
 
-          {positions.length === 0 ? (
+          {displayPositions.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 gap-1.5" style={{ opacity: 0.25 }}>
               <span className="font-mono text-sm">No open positions</span>
             </div>
           ) : (
-            positions.map((pos, i) => <PositionRow key={i} pos={pos} />)
+            displayPositions.map((pos, i) => (
+              <PositionRow
+                key={`${pos.accountId}:${pos.symbol}:${i}`}
+                pos={pos}
+                onClose={(size) => handleClose(pos, size)}
+              />
+            ))
           )}
         </div>
       ) : (

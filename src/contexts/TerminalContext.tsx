@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
-import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg } from "@/types/terminal"
+import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg, LivePosition } from "@/types/terminal"
 import { WIDGET_LABELS, WIDGET_MIN_SIZE } from "@/types/terminal"
 import { nanoid } from "@/lib/nanoid"
 import { ACCOUNTS } from "@/lib/mock-data"
@@ -136,6 +136,8 @@ export interface ChartPlacedOrder {
 type DraftOrderMap = Record<string, ChartDraftOrder | undefined>
 // placedOrders keyed by PositionKey — survives chart widget close/reopen
 type PlacedOrderMap = Record<PositionKey, ChartPlacedOrder[]>
+// livePositions keyed by PositionKey
+type PositionsMap = Record<PositionKey, LivePosition>
 
 export interface ChartTpSl {
   tp: number | null
@@ -192,6 +194,13 @@ interface TerminalContextValue {
   setTpSl: (chartId: string, tpSl: Partial<ChartTpSl>) => void
   clearTpSl: (chartId: string) => void
 
+  // Live positions (position manager)
+  positions: PositionsMap
+  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional">) => void
+  closePosition: (posKey: PositionKey) => void
+  partialClosePosition: (posKey: PositionKey, closeSize: number) => void
+  updatePositionMark: (posKey: PositionKey, markPrice: number) => void
+
   // Grid orders bridge
   gridOrders: GridOrderMap
   gridOrdersRef: React.RefObject<GridOrderMap>
@@ -219,12 +228,15 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
   const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
+  const [positions, setPositionsMap] = useState<PositionsMap>({})
   // Stable refs for reading latest state in callbacks without triggering re-renders
   const placedOrdersRef = React.useRef<PlacedOrderMap>({})
   const gridOrdersRef = React.useRef<GridOrderMap>({})
+  const positionsRef = React.useRef<PositionsMap>({})
   const balancesRef = React.useRef<BalanceStore>(buildInitialBalances())
   placedOrdersRef.current = placedOrders
   gridOrdersRef.current = gridOrders
+  positionsRef.current = positions
   balancesRef.current = balances
 
   // ── DEV render counter ────────────────────────────────────────────────────
@@ -506,6 +518,85 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  // ── Position Manager ─────────────────────────────────────────────────────────
+
+  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional">) => {
+    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol)
+    setPositionsMap((prev) => {
+      const existing = prev[pk]
+      if (existing) {
+        // Merge into existing position (add to size, recalculate avg entry)
+        const totalSize = existing.size + pos.size
+        const newAvgEntry = (existing.avgEntry * existing.size + pos.avgEntry * pos.size) / totalSize
+        const notional = totalSize * newAvgEntry
+        const rawPnl = pos.side === "long"
+          ? (pos.markPrice - newAvgEntry) * totalSize
+          : (newAvgEntry - pos.markPrice) * totalSize
+        const pnlPct = (rawPnl / notional) * pos.leverage * 100
+        return {
+          ...prev,
+          [pk]: {
+            ...existing,
+            size: totalSize,
+            avgEntry: newAvgEntry,
+            notional,
+            unrealizedPnl: rawPnl,
+            unrealizedPnlPct: pnlPct,
+            markPrice: pos.markPrice,
+          },
+        }
+      }
+      const notional = pos.size * pos.avgEntry
+      const rawPnl = pos.side === "long"
+        ? (pos.markPrice - pos.avgEntry) * pos.size
+        : (pos.avgEntry - pos.markPrice) * pos.size
+      const pnlPct = (rawPnl / notional) * pos.leverage * 100
+      return {
+        ...prev,
+        [pk]: { ...pos, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct },
+      }
+    })
+  }, [])
+
+  const closePosition = useCallback((pk: PositionKey) => {
+    setPositionsMap((prev) => {
+      const n = { ...prev }
+      delete n[pk]
+      return n
+    })
+  }, [])
+
+  const partialClosePosition = useCallback((pk: PositionKey, closeSize: number) => {
+    setPositionsMap((prev) => {
+      const pos = prev[pk]
+      if (!pos) return prev
+      const newSize = Math.max(0, pos.size - closeSize)
+      if (newSize === 0) {
+        const n = { ...prev }
+        delete n[pk]
+        return n
+      }
+      const notional = newSize * pos.avgEntry
+      const rawPnl = pos.side === "long"
+        ? (pos.markPrice - pos.avgEntry) * newSize
+        : (pos.avgEntry - pos.markPrice) * newSize
+      const pnlPct = (rawPnl / notional) * pos.leverage * 100
+      return { ...prev, [pk]: { ...pos, size: newSize, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct } }
+    })
+  }, [])
+
+  const updatePositionMark = useCallback((pk: PositionKey, markPrice: number) => {
+    setPositionsMap((prev) => {
+      const pos = prev[pk]
+      if (!pos) return prev
+      const rawPnl = pos.side === "long"
+        ? (markPrice - pos.avgEntry) * pos.size
+        : (pos.avgEntry - markPrice) * pos.size
+      const pnlPct = (rawPnl / pos.notional) * pos.leverage * 100
+      return { ...prev, [pk]: { ...pos, markPrice, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct } }
+    })
+  }, [])
+
   const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => {
     setGridOrdersMap((prev) => {
       if (data === null) {
@@ -775,6 +866,11 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         tpSlOrders,
         setTpSl,
         clearTpSl,
+        positions,
+        openPosition,
+        closePosition,
+        partialClosePosition,
+        updatePositionMark,
         gridOrders,
         gridOrdersRef,
         setGridPreview,

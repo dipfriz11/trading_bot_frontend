@@ -338,6 +338,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     refundOrderBalance,
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview,
+    openPosition,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "grid">("new")
@@ -944,8 +945,26 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         leverage: posSettings.leverage,
         margin,
         time,
-        status: "pending",
+        status: orderType === "market" ? "filled" : "pending",
       })
+
+      // Open / merge into live position for market orders; limit orders stay pending
+      if (orderType === "market") {
+        const posSide = effectiveSide === "buy" ? "long" : "short"
+        openPosition({
+          accountId,
+          exchangeId,
+          marketType,
+          symbol,
+          side: posSide,
+          size: parseFloat(qty),
+          avgEntry: effectivePrice,
+          leverage: posSettings.leverage,
+          markPrice: effectivePrice,
+          openedAt: time,
+        })
+      }
+
       setDraftOrder(activeChart.id, undefined)
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
