@@ -509,6 +509,20 @@ export function GridConfigTab({
   const [activeShortIdx, setActiveShortIdx] = useState(0)
   // Persisted cfg per slot (keyed by slotId)
   const slotCfgMapRef = useRef<Record<string, GridConfig>>({})
+  // Slot tabs scroll
+  const slotScrollRef = useRef<HTMLDivElement>(null)
+  const [slotCanScrollLeft, setSlotCanScrollLeft] = useState(false)
+  const [slotCanScrollRight, setSlotCanScrollRight] = useState(false)
+  const updateSlotScroll = () => {
+    const el = slotScrollRef.current
+    if (!el) return
+    setSlotCanScrollLeft(el.scrollLeft > 2)
+    setSlotCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }
+  useEffect(() => {
+    const id = setTimeout(updateSlotScroll, 30)
+    return () => clearTimeout(id)
+  }, [longSlots.length, shortSlots.length])
 
   const [cfg, setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
@@ -1156,8 +1170,36 @@ export function GridConfigTab({
           </div>
         </div>
 
-        {/* ── Grid slot tabs (both sides visible) ─────── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, justifyContent: "center" }}>
+        {/* ── Grid slot tabs with scroll arrows ────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, minWidth: 0 }}>
+          {/* Left arrow */}
+          {slotCanScrollLeft && (
+            <button
+              onMouseDown={stopProp}
+              onClick={() => { slotScrollRef.current?.scrollBy({ left: -60, behavior: "smooth" }) }}
+              style={{
+                background: "transparent", border: "none", cursor: "pointer", padding: 0, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 12, height: 16, color: "rgba(255,255,255,0.3)",
+              }}
+            >
+              <svg width="5" height="8" viewBox="0 0 5 8" fill="none">
+                <path d="M4 1L1 4L4 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Scrollable slot tabs */}
+          <div
+            ref={slotScrollRef}
+            onScroll={updateSlotScroll}
+            style={{
+              flex: 1, minWidth: 0,
+              display: "flex", alignItems: "center", gap: 2,
+              overflowX: "auto", overflowY: "hidden",
+              scrollbarWidth: "none",
+            }}
+          >
           {(["long", "short"] as const).map((slotSide) => {
             const sideSlots = slotSide === "long" ? longSlots : shortSlots
             const sideActiveIdx = slotSide === "long" ? activeLongIdx : activeShortIdx
@@ -1176,7 +1218,6 @@ export function GridConfigTab({
                   key={slot.slotId}
                   onClick={() => {
                     if (!isSideActive) {
-                      // Switch side first, then slot index
                       if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = { ...cfgRef.current }
                       const targetSlots = slotSide === "long" ? longSlots : shortSlots
                       const targetSlot = targetSlots[idx]
@@ -1195,11 +1236,11 @@ export function GridConfigTab({
                   style={{
                     display: "flex", alignItems: "center", gap: 3,
                     padding: "2px 5px 2px 6px",
-                    borderRadius: 4,
+                    borderRadius: 4, flexShrink: 0,
                     cursor: "pointer",
                     opacity: isSideActive ? 1 : 0.55,
                     border: isActive
-                      ? `1px solid ${slotPending ? "rgba(251,191,36,0.5)" : slotPlaced ? `${sideColor}66` : `${sideColor}55`}`
+                      ? `1px solid ${slotPending ? "rgba(251,191,36,0.5)" : `${sideColor}55`}`
                       : `1px solid ${sideColor}22`,
                     background: isActive
                       ? (slotPending ? "rgba(251,191,36,0.1)" : `${sideColor}18`)
@@ -1226,7 +1267,6 @@ export function GridConfigTab({
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      // Build the correct consoleId for this slot's side
                       const cancelId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
                       cancelGridOrders(cancelId)
                       delete slotCfgMapRef.current[slot.slotId]
@@ -1273,16 +1313,46 @@ export function GridConfigTab({
               )
             })
           })}
-          {/* Add new grid slot for active side */}
+          </div>
+
+          {/* Right arrow */}
+          {slotCanScrollRight && (
+            <button
+              onMouseDown={stopProp}
+              onClick={() => { slotScrollRef.current?.scrollBy({ left: 60, behavior: "smooth" }) }}
+              style={{
+                background: "transparent", border: "none", cursor: "pointer", padding: 0, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 12, height: 16, color: "rgba(255,255,255,0.3)",
+              }}
+            >
+              <svg width="5" height="8" viewBox="0 0 5 8" fill="none">
+                <path d="M1 1L4 4L1 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Add new grid slot */}
           <button
-            onClick={handleAddSlot}
+            onClick={() => {
+              handleAddSlot()
+              // After adding, scroll to end to show new slot
+              setTimeout(() => {
+                const el = slotScrollRef.current
+                if (el) {
+                  el.scrollTo({ left: el.scrollWidth, behavior: "smooth" })
+                  setSlotCanScrollRight(false)
+                  setSlotCanScrollLeft(el.scrollWidth > el.clientWidth)
+                }
+              }, 50)
+            }}
             onMouseDown={stopProp}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              width: 18, height: 18,
+              width: 18, height: 18, flexShrink: 0,
               background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 4, cursor: "pointer", color: "rgba(255,255,255,0.35)",
-              transition: "all 0.15s", flexShrink: 0,
+              transition: "all 0.15s",
             }}
             title={`Add new ${cfg.side} grid`}
           >
