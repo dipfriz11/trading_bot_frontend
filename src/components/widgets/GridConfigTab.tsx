@@ -1160,8 +1160,37 @@ export function GridConfigTab({
     }
   }, [baseConsoleId])
 
+  // ── Shared TP/SL sync: when !multiPositionMode, propagate TP/SL changes
+  // to ALL slots of the active side on the current chart.
+  // Each slot gets its own recalculated tpPrice/slPrice based on its grid geometry.
+  const activeSideSharedTpSlRef = useRef(activeSideSharedTpSl)
+  activeSideSharedTpSlRef.current = activeSideSharedTpSl
+  useEffect(() => {
+    if (multiPositionMode) return
+    if (!activeChartId) return
+    const shared = activeSideSharedTpSlRef.current
+    const side = activeSideRef.current
+    const allSlots = side === "long" ? longSlots : shortSlots
+    allSlots.forEach((slot, idx) => {
+      const slotId = `${baseConsoleId}:${activeChartId}:${side}:${slot.slotId}`
+      const slotEntry = gridOrdersRef.current[slotId]
+      if (!slotEntry) return
+      // Build a minimal cfg for this slot: use stored slotCfgMapRef or current cfg if active slot
+      const isActiveSlot = idx === (side === "long" ? activeLongIdx : activeShortIdx)
+      const slotStoredCfg = isActiveSlot ? cfgRef.current : slotCfgMapRef.current[slot.slotId]
+      if (!slotStoredCfg) return
+      // Merge shared TP/SL into slot cfg and recalculate
+      const mergedCfg: GridConfig = { ...slotStoredCfg, ...shared }
+      const viz = calcGridVisualization(mergedCfg)
+      applyGridTpSl(slotId, { tpPrice: viz.tpPrice, slPrice: viz.slPrice, tpLevels: viz.tpLevels })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSideSharedTpSl, multiPositionMode, activeChartId])
+
   const handlePlaceGrid = () => {
     if (!activeChartId) return
+    // Save current slot cfg so shared TP/SL sync can recalculate prices for this slot later
+    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = stripTpSlIfShared({ ...cfgRef.current })
     const viz = calcGridVisualization(cfg)
     while (orderIdRefs.current.length < viz.orders.length) {
       orderIdRefs.current.push(nanoid())
