@@ -502,13 +502,13 @@ export function GridConfigTab({
   accountId,
   exchangeId,
 }: GridConfigTabProps) {
-  // ── Multi-grid slots ──────────────────────────────────────────────────────
-  // Each slot has a stable slotId used in consoleId. cfg is saved/restored on switch.
-  const [gridSlots, setGridSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
-  const [activeSlotIndex, setActiveSlotIndex] = useState(0)
+  // ── Multi-grid slots (separate per side) ─────────────────────────────────
+  const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
+  const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
+  const [activeLongIdx, setActiveLongIdx] = useState(0)
+  const [activeShortIdx, setActiveShortIdx] = useState(0)
   // Persisted cfg per slot (keyed by slotId)
   const slotCfgMapRef = useRef<Record<string, GridConfig>>({})
-  const activeSlot = gridSlots[activeSlotIndex] ?? gridSlots[0]
 
   const [cfg, setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
@@ -519,6 +519,14 @@ export function GridConfigTab({
   })
   // Always-current cfg ref for use in effects/callbacks without stale closure
   const cfgRef = useRef(cfg)
+
+  // Derived slot helpers — computed after cfg is available
+  const activeSide = cfg.side
+  const gridSlots = activeSide === "long" ? longSlots : shortSlots
+  const activeSlotIndex = activeSide === "long" ? activeLongIdx : activeShortIdx
+  const setGridSlots = activeSide === "long" ? setLongSlots : setShortSlots
+  const setActiveSlotIndex = activeSide === "long" ? setActiveLongIdx : setActiveShortIdx
+  const activeSlot = gridSlots[activeSlotIndex] ?? gridSlots[0]
   cfgRef.current = cfg
 
   const { templates, saveTemplate, deleteTemplate } = useTemplates<GridConfig>("grid")
@@ -1120,35 +1128,7 @@ export function GridConfigTab({
     orderIdRefs.current = []
   }
 
-  const handleRemoveSlot = (idx: number, e: React.MouseEvent) => {
-    e.stopPropagation()
-    const slot = gridSlots[idx]
-    if (!slot) return
-    const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfgRef.current.side}:${slot.slotId}`
-    // Cancel the grid for this slot (both preview and placed)
-    cancelGridOrders(slotConsoleId)
-    delete slotCfgMapRef.current[slot.slotId]
-    if (gridSlots.length === 1) {
-      // Last slot — just reset its cfg instead of removing
-      setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: cfgRef.current.side, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
-      orderIdRefs.current = []
-      return
-    }
-    const newSlots = gridSlots.filter((_, i) => i !== idx)
-    const newActive = Math.min(activeSlotIndex, newSlots.length - 1)
-    setGridSlots(newSlots)
-    setActiveSlotIndex(newActive)
-    const targetSlot = newSlots[newActive]
-    if (targetSlot) {
-      const saved = slotCfgMapRef.current[targetSlot.slotId]
-      if (saved) {
-        setCfg({ ...saved, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
-      } else {
-        setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: cfgRef.current.side, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
-      }
-    }
-    orderIdRefs.current = []
-  }
+
 
   // Side button
   const gap4: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4 }
@@ -1176,68 +1156,124 @@ export function GridConfigTab({
           </div>
         </div>
 
-        {/* ── Grid slot tabs ──────────────────────────── */}
+        {/* ── Grid slot tabs (both sides visible) ─────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, justifyContent: "center" }}>
-          {gridSlots.map((slot, idx) => {
-            const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${slot.slotId}`
-            const slotState = gridOrders[slotConsoleId]
-            const slotPlaced = slotState?.state === "placed"
-            const slotPending = slotPlaced && slotState?.pendingUpdate
-            const isActive = idx === activeSlotIndex
-            return (
-              <div
-                key={slot.slotId}
-                onClick={() => handleSwitchSlot(idx)}
-                onMouseDown={stopProp}
-                style={{
-                  display: "flex", alignItems: "center", gap: 3,
-                  padding: "2px 5px 2px 6px",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  border: isActive
-                    ? `1px solid ${slotPending ? "rgba(251,191,36,0.5)" : slotPlaced ? "rgba(0,229,160,0.4)" : "rgba(30,111,239,0.45)"}`
-                    : "1px solid rgba(255,255,255,0.1)",
-                  background: isActive
-                    ? (slotPending ? "rgba(251,191,36,0.1)" : slotPlaced ? "rgba(0,229,160,0.1)" : "rgba(30,111,239,0.12)")
-                    : "rgba(255,255,255,0.03)",
-                  transition: "all 0.15s",
-                }}
-                title={`Grid ${idx + 1}${slotPlaced ? " (placed)" : ""}`}
-              >
-                <span style={{
-                  fontSize: 9, fontFamily: "monospace", fontWeight: isActive ? 700 : 500, letterSpacing: "0.04em",
-                  color: isActive
-                    ? (slotPending ? "rgba(251,191,36,0.9)" : slotPlaced ? "#00e5a0" : "rgba(120,170,255,0.9)")
-                    : "rgba(255,255,255,0.3)",
-                }}>
-                  {idx + 1}
-                </span>
-                {slotPlaced && (
-                  <div style={{
-                    width: 4, height: 4, borderRadius: "50%", flexShrink: 0,
-                    background: slotPending ? "rgba(251,191,36,0.8)" : "#00e5a0",
-                  }} />
-                )}
-                <button
-                  onClick={(e) => handleRemoveSlot(idx, e)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  style={{
-                    background: "transparent", border: "none", cursor: "pointer", padding: 0,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "rgba(255,255,255,0.25)", lineHeight: 1,
-                    width: 10, height: 10, flexShrink: 0,
+          {(["long", "short"] as const).map((slotSide) => {
+            const sideSlots = slotSide === "long" ? longSlots : shortSlots
+            const sideActiveIdx = slotSide === "long" ? activeLongIdx : activeShortIdx
+            const isSideActive = slotSide === cfg.side
+            const longColor = "#00e5a0"
+            const shortColor = "#f87171"
+            const sideColor = slotSide === "long" ? longColor : shortColor
+            return sideSlots.map((slot, idx) => {
+              const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
+              const slotState = gridOrders[slotConsoleId]
+              const slotPlaced = slotState?.state === "placed"
+              const slotPending = slotPlaced && slotState?.pendingUpdate
+              const isActive = isSideActive && idx === sideActiveIdx
+              return (
+                <div
+                  key={slot.slotId}
+                  onClick={() => {
+                    if (!isSideActive) {
+                      // Switch side first, then slot index
+                      if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = { ...cfgRef.current }
+                      const targetSlots = slotSide === "long" ? longSlots : shortSlots
+                      const targetSlot = targetSlots[idx]
+                      const saved = targetSlot ? slotCfgMapRef.current[targetSlot.slotId] : undefined
+                      const newCfg = saved
+                        ? { ...saved, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                        : { ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                      setCfg(newCfg)
+                      if (slotSide === "long") { setActiveLongIdx(idx) } else { setActiveShortIdx(idx) }
+                      orderIdRefs.current = []
+                    } else {
+                      handleSwitchSlot(idx)
+                    }
                   }}
-                  title={slotPlaced ? "Cancel this grid" : "Remove grid slot"}
+                  onMouseDown={stopProp}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 3,
+                    padding: "2px 5px 2px 6px",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    opacity: isSideActive ? 1 : 0.55,
+                    border: isActive
+                      ? `1px solid ${slotPending ? "rgba(251,191,36,0.5)" : slotPlaced ? `${sideColor}66` : `${sideColor}55`}`
+                      : `1px solid ${sideColor}22`,
+                    background: isActive
+                      ? (slotPending ? "rgba(251,191,36,0.1)" : `${sideColor}18`)
+                      : `${sideColor}08`,
+                    transition: "all 0.15s",
+                  }}
+                  title={`${slotSide === "long" ? "Long" : "Short"} Grid ${idx + 1}${slotPlaced ? " (placed)" : ""}`}
                 >
-                  <svg width="7" height="7" viewBox="0 0 7 7" fill="none">
-                    <line x1="1" y1="1" x2="6" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    <line x1="6" y1="1" x2="1" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
-              </div>
-            )
+                  <span style={{
+                    fontSize: 9, fontFamily: "monospace", fontWeight: isActive ? 700 : 500, letterSpacing: "0.04em",
+                    color: isActive
+                      ? (slotPending ? "rgba(251,191,36,0.9)" : sideColor)
+                      : `${sideColor}66`,
+                  }}>
+                    {idx + 1}
+                  </span>
+                  {slotPlaced && (
+                    <div style={{
+                      width: 4, height: 4, borderRadius: "50%", flexShrink: 0,
+                      background: slotPending ? "rgba(251,191,36,0.8)" : sideColor,
+                      opacity: isSideActive ? 1 : 0.6,
+                    }} />
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      // Build the correct consoleId for this slot's side
+                      const cancelId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
+                      cancelGridOrders(cancelId)
+                      delete slotCfgMapRef.current[slot.slotId]
+                      const targetSlots = slotSide === "long" ? longSlots : shortSlots
+                      const setSlots = slotSide === "long" ? setLongSlots : setShortSlots
+                      const targetActiveIdx = slotSide === "long" ? activeLongIdx : activeShortIdx
+                      const setActiveIdx = slotSide === "long" ? setActiveLongIdx : setActiveShortIdx
+                      if (targetSlots.length === 1) {
+                        if (isSideActive) {
+                          setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+                          orderIdRefs.current = []
+                        }
+                        return
+                      }
+                      const newSlots = targetSlots.filter((_, i) => i !== idx)
+                      const newActive = Math.min(targetActiveIdx, newSlots.length - 1)
+                      setSlots(newSlots)
+                      setActiveIdx(newActive)
+                      if (isSideActive) {
+                        const targetSlot = newSlots[newActive]
+                        const saved = targetSlot ? slotCfgMapRef.current[targetSlot.slotId] : undefined
+                        setCfg(saved
+                          ? { ...saved, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                          : { ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                        )
+                        orderIdRefs.current = []
+                      }
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{
+                      background: "transparent", border: "none", cursor: "pointer", padding: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: `${sideColor}44`, lineHeight: 1,
+                      width: 10, height: 10, flexShrink: 0,
+                    }}
+                    title={slotPlaced ? "Cancel this grid" : "Remove grid slot"}
+                  >
+                    <svg width="7" height="7" viewBox="0 0 7 7" fill="none">
+                      <line x1="1" y1="1" x2="6" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      <line x1="6" y1="1" x2="1" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                </div>
+              )
+            })
           })}
-          {/* Add new grid slot */}
+          {/* Add new grid slot for active side */}
           <button
             onClick={handleAddSlot}
             onMouseDown={stopProp}
@@ -1248,7 +1284,7 @@ export function GridConfigTab({
               borderRadius: 4, cursor: "pointer", color: "rgba(255,255,255,0.35)",
               transition: "all 0.15s", flexShrink: 0,
             }}
-            title="Add new independent grid"
+            title={`Add new ${cfg.side} grid`}
           >
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
               <line x1="4" y1="1" x2="4" y2="7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
