@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react"
-import type { GridConfig, GridMultiTpLevel } from "@/types/terminal"
-import { DEFAULT_GRID_CONFIG } from "@/types/terminal"
+import type { GridConfig, GridMultiTpLevel, GridSharedTpSl } from "@/types/terminal"
+import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
 import { useTerminal } from "@/contexts/TerminalContext"
-import { calcGridVisualization } from "@/lib/grid-math"
+import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
 import { nanoid } from "@/lib/nanoid"
 
 // ─── Shared style constants ───────────────────────────────────────────────────
@@ -502,6 +502,40 @@ export function GridConfigTab({
   accountId,
   exchangeId,
 }: GridConfigTabProps) {
+  // ── Multi-grid slots (separate per side) ─────────────────────────────────
+  const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
+  const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
+  const [activeLongIdx, setActiveLongIdx] = useState(0)
+  const [activeShortIdx, setActiveShortIdx] = useState(0)
+  // Persisted cfg per slot (keyed by "chartId\0slotId" to isolate per chart)
+  const slotCfgMapRef = useRef<Record<string, GridConfig>>({})
+  // Slot tabs scroll
+  const slotScrollRef = useRef<HTMLDivElement>(null)
+  const [slotCanScrollLeft, setSlotCanScrollLeft] = useState(false)
+  const [slotCanScrollRight, setSlotCanScrollRight] = useState(false)
+  // Cooldown after arrow click to prevent accidental tab/close-button clicks
+  const slotScrollCooldownRef = useRef(false)
+  const updateSlotScroll = () => {
+    const el = slotScrollRef.current
+    if (!el) return
+    setSlotCanScrollLeft(el.scrollLeft > 2)
+    setSlotCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }
+  useEffect(() => {
+    // Wait for DOM paint before measuring
+    const id = setTimeout(updateSlotScroll, 80)
+    return () => clearTimeout(id)
+  }, [longSlots.length, shortSlots.length])
+  // Also update when the scroll container resizes (widget resize)
+  useEffect(() => {
+    const el = slotScrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(updateSlotScroll)
+    ro.observe(el)
+    updateSlotScroll()
+    return () => ro.disconnect()
+  }, [])
+
   const [cfg, setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
     symbol: externalSymbol ?? DEFAULT_GRID_CONFIG.symbol,
@@ -511,6 +545,14 @@ export function GridConfigTab({
   })
   // Always-current cfg ref for use in effects/callbacks without stale closure
   const cfgRef = useRef(cfg)
+
+  // Derived slot helpers — computed after cfg is available
+  const activeSide = cfg.side
+  const gridSlots = activeSide === "long" ? longSlots : shortSlots
+  const activeSlotIndex = activeSide === "long" ? activeLongIdx : activeShortIdx
+  const setGridSlots = activeSide === "long" ? setLongSlots : setShortSlots
+  const setActiveSlotIndex = activeSide === "long" ? setActiveLongIdx : setActiveShortIdx
+  const activeSlot = gridSlots[activeSlotIndex] ?? gridSlots[0]
   cfgRef.current = cfg
 
   const { templates, saveTemplate, deleteTemplate } = useTemplates<GridConfig>("grid")
@@ -572,8 +614,63 @@ export function GridConfigTab({
   }, [externalFuturesSide])
 
 
-  // Pro mode toggle
+  // Pro mode toggle + multi-position mode
   const [proMode, setProMode] = useState(false)
+  // When false (default): TP/SL is shared across all grids on the same side.
+  // When true (Pro + multiPos): each slot has independent TP/SL (legacy per-slot behavior).
+  const [multiPositionMode, setMultiPositionMode] = useState(false)
+
+  // Shared TP/SL state per side — used when multiPositionMode is OFF
+  const [longSharedTpSl, setLongSharedTpSl] = useState<GridSharedTpSl>({ ...DEFAULT_GRID_SHARED_TP_SL })
+  const [shortSharedTpSl, setShortSharedTpSl] = useState<GridSharedTpSl>({ ...DEFAULT_GRID_SHARED_TP_SL })
+  const activeSideSharedTpSl = cfg.side === "long" ? longSharedTpSl : shortSharedTpSl
+
+  // Keys that belong to TP/SL config — used to route updates to shared state
+  const TP_SL_KEYS = new Set<keyof GridConfig>([
+    "tpEnabled", "tpMode", "tpPercent", "tpClosePercent",
+    "multiTpEnabled", "multiTpCount", "multiTpLevels",
+    "tpRepositionEnabled", "perLevelTpEnabled", "perLevelTpGroups",
+    "slEnabled", "slMode", "slPercent", "slClosePercent",
+    "resetTpEnabled", "resetTpTriggerLevels", "defaultResetTpPercent",
+    "defaultResetTpClosePercent", "resetTpRebuildTail",
+    "resetTpPerLevelEnabled", "resetTpPerLevelSettings",
+  ])
+
+  // Effective TP/SL values: shared when !multiPositionMode, from cfg otherwise
+  const tpSl: GridSharedTpSl = multiPositionMode
+    ? {
+        tpEnabled: cfg.tpEnabled,
+        tpMode: cfg.tpMode,
+        tpPercent: cfg.tpPercent,
+        tpClosePercent: cfg.tpClosePercent,
+        multiTpEnabled: cfg.multiTpEnabled,
+        multiTpCount: cfg.multiTpCount,
+        multiTpLevels: cfg.multiTpLevels,
+        tpRepositionEnabled: cfg.tpRepositionEnabled,
+        perLevelTpEnabled: cfg.perLevelTpEnabled,
+        perLevelTpGroups: cfg.perLevelTpGroups,
+        slEnabled: cfg.slEnabled,
+        slMode: cfg.slMode,
+        slPercent: cfg.slPercent,
+        slClosePercent: cfg.slClosePercent,
+        resetTpEnabled: cfg.resetTpEnabled,
+        resetTpTriggerLevels: cfg.resetTpTriggerLevels,
+        defaultResetTpPercent: cfg.defaultResetTpPercent,
+        defaultResetTpClosePercent: cfg.defaultResetTpClosePercent,
+        resetTpRebuildTail: cfg.resetTpRebuildTail,
+        resetTpPerLevelEnabled: cfg.resetTpPerLevelEnabled,
+        resetTpPerLevelSettings: cfg.resetTpPerLevelSettings,
+      }
+    : activeSideSharedTpSl
+
+  // Keep cfg TP/SL fields in sync with shared state when !multiPositionMode
+  // so that calcGridVisualization always works correctly from cfg
+  useEffect(() => {
+    if (multiPositionMode) return
+    setCfg((p) => ({ ...p, ...activeSideSharedTpSl }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSideSharedTpSl, multiPositionMode])
+
   const [availTooltip, setAvailTooltip] = useState(false)
   // Collapsed sections
   const [open, setOpen] = useState({
@@ -592,9 +689,9 @@ export function GridConfigTab({
 
   // Auto-sync perLevelTpGroups count with ordersCount when perLevelTpEnabled
   useEffect(() => {
-    if (!cfg.perLevelTpEnabled) return
+    if (!tpSl.perLevelTpEnabled) return
     const n = cfg.ordersCount
-    const cur = cfg.perLevelTpGroups
+    const cur = tpSl.perLevelTpGroups
     if (cur.length === n) return
     if (cur.length < n) {
       const extra = Array.from({ length: n - cur.length }, (_, i) => ({
@@ -603,11 +700,12 @@ export function GridConfigTab({
         levels: [{ tpPercent: 1.0, closePercent: 100 }],
         resetTpEnabled: false,
       }))
-      setCfg((p) => ({ ...p, perLevelTpGroups: [...p.perLevelTpGroups, ...extra] }))
+      upd("perLevelTpGroups", [...cur, ...extra])
     } else {
-      setCfg((p) => ({ ...p, perLevelTpGroups: p.perLevelTpGroups.slice(0, n) }))
+      upd("perLevelTpGroups", cur.slice(0, n))
     }
-  }, [cfg.ordersCount, cfg.perLevelTpEnabled])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg.ordersCount, tpSl.perLevelTpEnabled])
 
   const freeMargin = Math.max(0, availableBalance - inOrders)
   const availableForGrid = marketType === "futures" ? freeMargin * cfg.leverage : freeMargin
@@ -620,9 +718,8 @@ export function GridConfigTab({
   // ── Grid chart integration ────────────────────────────────────────────────
   const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
-  // Each console+chart+side combination is its own independent slot so switching charts
-  // never interferes with placed grids on another chart
-  const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}`
+  // Each console+chart+side+slot combination is its own independent slot
+  const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
   const currentGridState = gridOrders[consoleId]
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
@@ -634,8 +731,51 @@ export function GridConfigTab({
   isPlacedRef.current = isPlaced
   consoleIdRef.current = consoleId
 
+  // Refs for shared TP/SL routing — avoids stale closures in upd()
+  const multiPositionModeRef = useRef(multiPositionMode)
+  multiPositionModeRef.current = multiPositionMode
+  const activeSideRef = useRef(cfg.side)
+  activeSideRef.current = cfg.side
+  const setLongSharedTpSlRef = useRef(setLongSharedTpSl)
+  setLongSharedTpSlRef.current = setLongSharedTpSl
+  const setShortSharedTpSlRef = useRef(setShortSharedTpSl)
+  setShortSharedTpSlRef.current = setShortSharedTpSl
+  // Slot refs so setTimeout callbacks always see latest slot arrays
+  const longSlotsRef = useRef(longSlots)
+  longSlotsRef.current = longSlots
+  const shortSlotsRef = useRef(shortSlots)
+  shortSlotsRef.current = shortSlots
+  // Per-chart slot state storage: keyed by chartId
+  const slotsStateByChartRef = useRef<Record<string, {
+    longSlots: { slotId: string }[]
+    shortSlots: { slotId: string }[]
+    activeLongIdx: number
+    activeShortIdx: number
+  }>>({})
+  // Stable ref for active indices so the chart-switch effect can read current values
+  const activeLongIdxRef = useRef(activeLongIdx)
+  activeLongIdxRef.current = activeLongIdx
+  const activeShortIdxRef = useRef(activeShortIdx)
+  activeShortIdxRef.current = activeShortIdx
+  // Stable ref for activeChartId so callbacks don't form stale closures
+  const activeChartIdRef = useRef(activeChartId)
+  activeChartIdRef.current = activeChartId
+  // Helper: build slotCfgMapRef key scoped to current chart
+  const slotKey = (slotId: string) => `${activeChartIdRef.current ?? ""}:${slotId}`
+
+  const TP_SL_KEYS_REF = useRef(TP_SL_KEYS)
+  TP_SL_KEYS_REF.current = TP_SL_KEYS
+
   const upd = useCallback(<K extends keyof GridConfig>(key: K, val: GridConfig[K]) => {
-    setCfg((p) => ({ ...p, [key]: val }))
+    if (!multiPositionModeRef.current && TP_SL_KEYS_REF.current.has(key)) {
+      // Route to shared TP/SL state for the active side
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, [key]: val }))
+      // Also update cfg so preview recalculates immediately
+      setCfg((p) => ({ ...p, [key]: val }))
+    } else {
+      setCfg((p) => ({ ...p, [key]: val }))
+    }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [markGridPendingUpdate])
 
@@ -674,18 +814,47 @@ export function GridConfigTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.side])
 
-  // Track chart switches — save cfg for old chart/side, restore for new chart/side.
+  // Track chart switches — save cfg + slot state for old chart, restore for new chart.
   // Depends only on activeChartId so it never fires on side-only changes.
   useEffect(() => {
     const currentSide = prevSideRef.current
     const newKey = `${activeChartId ?? ""}:${currentSide}`
     const oldKey = prevChartSideKeyRef.current
     if (oldKey === newKey) return
-    // Save cfg for the chart+side we're leaving, with the correct side from the old key
+
+    // Derive old chartId from oldKey (everything before the last ":")
+    const oldChartId = oldKey.split(":").slice(0, -1).join(":")
+
+    // Save cfg for the chart+side we're leaving
     const oldSide = oldKey.split(":").pop() as "long" | "short"
     cfgByChartSideRef.current[oldKey] = { ...cfgRef.current, side: oldSide }
+
+    // Save slot state for the chart we're leaving
+    slotsStateByChartRef.current[oldChartId] = {
+      longSlots: longSlotsRef.current,
+      shortSlots: shortSlotsRef.current,
+      activeLongIdx: activeLongIdxRef.current,
+      activeShortIdx: activeShortIdxRef.current,
+    }
+
     prevChartSideKeyRef.current = newKey
     orderIdRefs.current = []
+
+    // Restore slot state for the new chart (or reset to a single fresh slot per side)
+    const newChartId = activeChartId ?? ""
+    const savedSlots = slotsStateByChartRef.current[newChartId]
+    if (savedSlots) {
+      setLongSlots(savedSlots.longSlots)
+      setShortSlots(savedSlots.shortSlots)
+      setActiveLongIdx(savedSlots.activeLongIdx)
+      setActiveShortIdx(savedSlots.activeShortIdx)
+    } else {
+      setLongSlots([{ slotId: nanoid() }])
+      setShortSlots([{ slotId: nanoid() }])
+      setActiveLongIdx(0)
+      setActiveShortIdx(0)
+    }
+
     const saved = cfgByChartSideRef.current[newKey]
     if (saved) {
       setCfg(saved)
@@ -731,11 +900,13 @@ export function GridConfigTab({
     const wasEnabled = prevSlEnabledRef.current
     prevSlEnabledRef.current = cfg.slEnabled
     if (!isPlaced || !activeChartId) return
+    if (!isSharedTpSlOwner()) return
     if (!wasEnabled && cfg.slEnabled) {
       const viz = calcGridVisualization(cfg)
       expectedSlPriceRef.current = viz.slPrice
       applyGridTpSl(consoleId, { slPrice: viz.slPrice })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.slEnabled, isPlaced])
 
   // ── TP sync: chart x button on individual TP lines ──────────────────────
@@ -808,11 +979,13 @@ export function GridConfigTab({
     const wasEnabled = prevTpEnabledRef.current
     prevTpEnabledRef.current = cfg.tpEnabled
     if (!isPlaced || !activeChartId) return
+    if (!isSharedTpSlOwner()) return
     if (!wasEnabled && cfg.tpEnabled) {
       const viz = calcGridVisualization(cfg)
       applyGridTpSl(consoleId, { tpPrice: viz.tpPrice, tpLevels: viz.tpLevels })
       placedTpCountRef.current = viz.tpLevels.length
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.tpEnabled, isPlaced])
 
   // ── SL drag sync: chart drag → update cfg.slPercent ────────────────────
@@ -820,7 +993,6 @@ export function GridConfigTab({
   useEffect(() => {
     const prev = prevChartSlPriceValueRef.current
     prevChartSlPriceValueRef.current = chartSlPrice ?? null
-    if (!isPlacedRef.current) return
     // Only react to non-null→non-null changes (i.e. drag moved the price)
     if (prev === undefined || prev === null || chartSlPrice === null || chartSlPrice === undefined) return
     if (Math.abs(chartSlPrice - prev) < 1e-8) return
@@ -828,19 +1000,35 @@ export function GridConfigTab({
     const expSl = expectedSlPriceRef.current
     if (expSl !== undefined && expSl !== null && Math.abs(chartSlPrice - expSl) < 1e-8) return
     // Compute the new slPercent from the dragged price
+    let computedSlPercent: number | null = null
     setCfg((p) => {
       const viz = calcGridVisualization(p)
-      const avgEntry = viz.orders.length > 0
-        ? viz.orders.reduce((s, o) => s + o.price, 0) / viz.orders.length
-        : p.entryPrice
-      const basePrice = p.slMode === "avg_entry" ? avgEntry : p.entryPrice
-      if (basePrice === 0) return p
       const isLong = p.side === "long"
+      let basePrice: number
+      if (p.slMode === "avg_entry") {
+        basePrice = viz.avgEntryEstimate > 0 ? viz.avgEntryEstimate : p.entryPrice
+      } else if (p.slMode === "extreme_order") {
+        const prices = viz.orders.map((o) => o.price)
+        basePrice = prices.length > 0
+          ? (isLong ? Math.min(...prices) : Math.max(...prices))
+          : p.entryPrice
+      } else {
+        // default: first order price
+        basePrice = viz.orders[0]?.price ?? p.entryPrice
+      }
+      if (basePrice === 0) return p
       const newPct = isLong
         ? (1 - chartSlPrice / basePrice) * 100
         : (chartSlPrice / basePrice - 1) * 100
-      return { ...p, slPercent: Math.max(0.01, Math.round(newPct * 100) / 100) }
+      computedSlPercent = Math.max(0.01, Math.round(newPct * 100) / 100)
+      return { ...p, slPercent: computedSlPercent }
     })
+    // In non-multipos mode, drag must also update shared state so the form shows the new value
+    if (!multiPositionModeRef.current && computedSlPercent !== null) {
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      const pct = computedSlPercent
+      setter((p) => ({ ...p, slPercent: pct }))
+    }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartSlPrice])
 
@@ -875,12 +1063,13 @@ export function GridConfigTab({
     const prev = prevChartTpLevelsRef.current
     const cur = chartTpLevels
     prevChartTpLevelsRef.current = cur ? [...cur] : undefined
-    if (!isPlacedRef.current) return
     if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
     // Check if any price changed
     const changed = cur.some((p, i) => Math.abs(p - prev[i]) > 1e-8)
     if (!changed) return
     // Sync cfg tpPercent from first TP, and multiTpLevels from all
+    let computedTpPercent: number | null = null
+    let computedMultiLevels: { tpPercent: number; closePercent: number }[] | null = null
     setCfg((p) => {
       const isLong = p.side === "long"
       const viz = calcGridVisualization(p)
@@ -896,12 +1085,21 @@ export function GridConfigTab({
           closePercent: p.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
         }
       })
+      computedTpPercent = newMultiLevels[0]?.tpPercent ?? p.tpPercent
+      computedMultiLevels = newMultiLevels
       return {
         ...p,
-        tpPercent: newMultiLevels[0]?.tpPercent ?? p.tpPercent,
+        tpPercent: computedTpPercent,
         multiTpLevels: newMultiLevels,
       }
     })
+    // In non-multipos mode, drag must also update shared state so the form shows the new value
+    if (!multiPositionModeRef.current && computedTpPercent !== null && computedMultiLevels !== null) {
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      const tp = computedTpPercent
+      const levels = computedMultiLevels
+      setter((p) => ({ ...p, tpPercent: tp, multiTpLevels: levels }))
+    }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartTpLevels])
 
@@ -914,7 +1112,6 @@ export function GridConfigTab({
   const chartFirstPrice = useMemo(() => rawChartFirstPrice, [rawChartFirstPrice])
   const chartLastPrice = useMemo(() => rawChartLastPrice, [rawChartLastPrice])
   useEffect(() => {
-    if (!isPlacedRef.current) return
     if (chartFirstPrice === undefined || chartLastPrice === undefined) return
 
     // Skip if this matches what the form itself pushed (form-driven update, not a drag)
@@ -958,12 +1155,26 @@ export function GridConfigTab({
           }
         }
 
-        if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005) return p
-        return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep }
+        // Compute lastOffsetPercent from chartLastPrice
+        const rawLastOffset = isLong
+          ? (entryPrice - chartLastPrice) / entryPrice * 100
+          : (chartLastPrice - entryPrice) / entryPrice * 100
+        const newLastOffset = Math.max(0, Math.round(rawLastOffset * 100) / 100)
+
+        if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005 && Math.abs(newLastOffset - p.lastOffsetPercent) < 0.005) return p
+        return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep, lastOffsetPercent: newLastOffset }
       }
     })
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartFirstPrice, chartLastPrice])
+
+  // In non-multipos mode, only the first slot (index 0) of a side owns TP/SL on chart.
+  // Returns whether the current active slot should render TP/SL lines.
+  const isSharedTpSlOwner = (): boolean => {
+    if (multiPositionModeRef.current) return true
+    const side = activeSideRef.current
+    return (side === "long" ? activeLongIdx : activeShortIdx) === 0
+  }
 
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
@@ -987,27 +1198,31 @@ export function GridConfigTab({
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
 
+    // In non-multipos mode only slot 0 of each side shows TP/SL on chart
+    const showTpSl = isSharedTpSlOwner()
+
     // Record expected prices so drag-sync effects can ignore form-driven updates
     const ordersForPreview = viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty }))
     expectedFirstPriceRef.current = ordersForPreview[0]?.price
     expectedLastPriceRef.current = ordersForPreview[ordersForPreview.length - 1]?.price
-    expectedSlPriceRef.current = viz.slPrice
+    expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
       consoleId,
       side: cfg.side,
       orders: ordersForPreview,
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
+      tpPrice: showTpSl ? viz.tpPrice : null,
+      slPrice: showTpSl ? viz.slPrice : null,
+      tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
       accountId,
       exchangeId,
       marketType,
     })
-  }, [cfg, activeChartId, isPlaced])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode])
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
   const prevSideConsoleIdRef = useRef<string | null>(null)
@@ -1031,41 +1246,296 @@ export function GridConfigTab({
     }
   }, [baseConsoleId])
 
+  // ── Shared TP/SL sync: when !multiPositionMode, propagate TP/SL changes
+  // to the FIRST slot (index 0) of the active side — that slot is the sole TP/SL owner.
+  // TP/SL are anchored to the "best" first order across ALL placed slots so that adding
+  // a deeper grid never moves TP/SL in the wrong direction.
+  const activeSideSharedTpSlRef = useRef(activeSideSharedTpSl)
+  activeSideSharedTpSlRef.current = activeSideSharedTpSl
+  useEffect(() => {
+    if (multiPositionMode) return
+    if (!activeChartId) return
+    const shared = activeSideSharedTpSlRef.current
+    const side = activeSideRef.current
+    const isLong = side === "long"
+    const allSlots = side === "long" ? longSlots : shortSlots
+    // Only slot 0 owns TP/SL; all others get nulled out
+    allSlots.forEach((slot, idx) => {
+      const slotId = `${baseConsoleId}:${activeChartId}:${side}:${slot.slotId}`
+      const slotEntry = gridOrdersRef.current[slotId]
+      if (!slotEntry) return
+      if (idx !== 0) {
+        // Ensure non-owner slots have no TP/SL on chart
+        if (slotEntry.tpPrice !== null || slotEntry.slPrice !== null || slotEntry.tpLevels.length > 0) {
+          applyGridTpSl(slotId, { tpPrice: null, slPrice: null, tpLevels: [] })
+        }
+        return
+      }
+      // Slot 0: build TP/SL using best first order / extreme across ALL placed slots
+      const isActiveSlot = (side === "long" ? activeLongIdx : activeShortIdx) === 0
+      const slotStoredCfg = isActiveSlot ? cfgRef.current : slotCfgMapRef.current[slotKey(slot.slotId)]
+      if (!slotStoredCfg) return
+      const mergedCfg: GridConfig = { ...slotStoredCfg, ...shared }
+
+      // Collect prices from all slots that have been placed (have an entry in gridOrdersRef)
+      const allSlotPrices: number[][] = allSlots.map((s) => {
+        const sCfg = (isLong ? activeLongIdx : activeShortIdx) === allSlots.indexOf(s)
+          ? cfgRef.current
+          : slotCfgMapRef.current[slotKey(s.slotId)]
+        const sId = `${baseConsoleId}:${activeChartId}:${side}:${s.slotId}`
+        if (!sCfg || !gridOrdersRef.current[sId]) return []
+        return calcGridPrices(sCfg)
+      }).filter((p) => p.length > 0)
+
+      if (allSlotPrices.length === 0) {
+        const viz = calcGridVisualization(mergedCfg)
+        applyGridTpSl(slotId, { tpPrice: viz.tpPrice, slPrice: viz.slPrice, tpLevels: viz.tpLevels })
+        return
+      }
+
+      const firstOrders = allSlotPrices.map((p) => p[0])
+      const bestFirstOrder = isLong ? Math.max(...firstOrders) : Math.min(...firstOrders)
+      const allPrices = allSlotPrices.flat()
+      const extremeForSl = isLong ? Math.min(...allPrices) : Math.max(...allPrices)
+      const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+
+      let tpPrice: number | null = null
+      let tpLevels: number[] = []
+      if (mergedCfg.tpEnabled) {
+        const base = bestFirstOrder
+        if (mergedCfg.multiTpEnabled && mergedCfg.multiTpLevels.length > 0) {
+          tpLevels = mergedCfg.multiTpLevels.slice(0, mergedCfg.multiTpCount).map((lvl) => {
+            const pct = Math.max(0.01, lvl.tpPercent) / 100
+            return isLong ? base * (1 + pct) : base * (1 - pct)
+          })
+          tpPrice = tpLevels[0] ?? null
+        } else {
+          const tpPct = Math.max(0.01, mergedCfg.tpPercent) / 100
+          tpPrice = isLong ? base * (1 + tpPct) : base * (1 - tpPct)
+          tpLevels = tpPrice !== null ? [tpPrice] : []
+        }
+      }
+
+      let slPrice: number | null = null
+      if (mergedCfg.slEnabled) {
+        const slPct = Math.max(0.01, mergedCfg.slPercent) / 100
+        if (mergedCfg.slMode === "extreme_order") {
+          slPrice = isLong ? extremeForSl * (1 - slPct) : extremeForSl * (1 + slPct)
+        } else if (mergedCfg.slMode === "avg_entry") {
+          slPrice = isLong ? avgEntryAll * (1 - slPct) : avgEntryAll * (1 + slPct)
+        } else {
+          slPrice = isLong ? bestFirstOrder * (1 - slPct) : bestFirstOrder * (1 + slPct)
+        }
+      }
+
+      applyGridTpSl(slotId, { tpPrice, slPrice, tpLevels })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots])
+
   const handlePlaceGrid = () => {
     if (!activeChartId) return
-    const viz = calcGridVisualization(cfg)
+    // Capture everything synchronously before any async work
+    const snapshotCfg = { ...cfgRef.current }
+    const snapshotShared = activeSideSharedTpSlRef.current
+    const snapshotSide = activeSideRef.current
+    const snapshotConsoleId = consoleId
+    const snapshotChartId = activeChartId
+
+    // Save current slot cfg so shared TP/SL sync can recalculate prices for this slot later
+    if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared(snapshotCfg)
+    const viz = calcGridVisualization(snapshotCfg)
     while (orderIdRefs.current.length < viz.orders.length) {
       orderIdRefs.current.push(nanoid())
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
+    const showTpSl = isSharedTpSlOwner()
     expectedFirstPriceRef.current = viz.orders[0]?.price
     expectedLastPriceRef.current = viz.orders[viz.orders.length - 1]?.price
-    expectedSlPriceRef.current = viz.slPrice
+    expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
     const newData = {
-      chartId: activeChartId,
-      consoleId,
-      side: cfg.side,
+      chartId: snapshotChartId,
+      consoleId: snapshotConsoleId,
+      side: snapshotCfg.side,
       orders: viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty })),
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
-      symbol: cfg.symbol,
-      leverage: cfg.leverage,
+      tpPrice: showTpSl ? viz.tpPrice : null,
+      slPrice: showTpSl ? viz.slPrice : null,
+      tpLevels: showTpSl ? viz.tpLevels : [],
+      symbol: snapshotCfg.symbol,
+      leverage: snapshotCfg.leverage,
       accountId,
       exchangeId,
       marketType,
     }
+
+    // Capture owner TP/SL for non-multipos mode.
+    // TP/SL must be anchored to the "best" order across ALL placed slots, not just the new one:
+    //   LONG  TP → highest firstOrder (MAX prices[0] across slots)
+    //   SHORT TP → lowest  firstOrder (MIN prices[0] across slots)
+    //   LONG  SL extreme_order → lowest  of ALL prices across slots
+    //   SHORT SL extreme_order → highest of ALL prices across slots
+    //   avg_entry SL → weighted avg of all orders across slots
+    let ownerUpdate: { consoleId: string; tpPrice: number | null; slPrice: number | null; tpLevels: number[] } | null = null
+    if (!multiPositionModeRef.current) {
+      const allSlots = snapshotSide === "long" ? longSlotsRef.current : shortSlotsRef.current
+      const ownerSlot = allSlots[0]
+      if (ownerSlot) {
+        const ownerConsoleId = `${baseConsoleId}:${snapshotChartId}:${snapshotSide}:${ownerSlot.slotId}`
+        const mergedCfg: GridConfig = { ...snapshotCfg, ...snapshotShared }
+        const isLong = snapshotSide === "long"
+
+        // Collect prices from ALL slots (including the one just placed via snapshotCfg)
+        const allSlotPrices: number[][] = allSlots.map((slot) => {
+          const storedCfg = slot.slotId === activeSlot?.slotId
+            ? snapshotCfg
+            : slotCfgMapRef.current[`${snapshotChartId ?? ""}:${slot.slotId}`]
+          if (!storedCfg) return []
+          return calcGridPrices(storedCfg)
+        }).filter((p) => p.length > 0)
+
+        if (allSlotPrices.length === 0) {
+          // No placed slots yet — fall back to current viz
+          const ownerViz = calcGridVisualization(mergedCfg)
+          ownerUpdate = {
+            consoleId: ownerConsoleId,
+            tpPrice: ownerViz.tpPrice,
+            slPrice: ownerViz.slPrice,
+            tpLevels: ownerViz.tpLevels,
+          }
+        } else {
+          // TP: use first order of slot whose first order is closest to TP direction
+          const firstOrders = allSlotPrices.map((p) => p[0])
+          const bestFirstOrder = isLong
+            ? Math.max(...firstOrders)   // LONG: highest first order
+            : Math.min(...firstOrders)   // SHORT: lowest first order
+
+          // SL: use extreme order from all slots combined
+          const allPrices = allSlotPrices.flat()
+          const extremeForSl = isLong
+            ? Math.min(...allPrices)     // LONG: lowest price overall
+            : Math.max(...allPrices)     // SHORT: highest price overall
+
+          // avg entry across all slots (uniform weight per order for estimate)
+          const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+
+          // Build TP price(s) from bestFirstOrder
+          let tpPrice: number | null = null
+          let tpLevels: number[] = []
+          if (mergedCfg.tpEnabled) {
+            const base = bestFirstOrder
+            if (mergedCfg.multiTpEnabled && mergedCfg.multiTpLevels.length > 0) {
+              tpLevels = mergedCfg.multiTpLevels.slice(0, mergedCfg.multiTpCount).map((lvl) => {
+                const pct = Math.max(0.01, lvl.tpPercent) / 100
+                return isLong ? base * (1 + pct) : base * (1 - pct)
+              })
+              tpPrice = tpLevels[0] ?? null
+            } else {
+              const tpPct = Math.max(0.01, mergedCfg.tpPercent) / 100
+              tpPrice = isLong ? base * (1 + tpPct) : base * (1 - tpPct)
+              tpLevels = tpPrice !== null ? [tpPrice] : []
+            }
+          }
+
+          // Build SL price from correct base depending on mode
+          let slPrice: number | null = null
+          if (mergedCfg.slEnabled) {
+            const slPct = Math.max(0.01, mergedCfg.slPercent) / 100
+            if (mergedCfg.slMode === "extreme_order") {
+              slPrice = isLong
+                ? extremeForSl * (1 - slPct)
+                : extremeForSl * (1 + slPct)
+            } else if (mergedCfg.slMode === "avg_entry") {
+              slPrice = isLong
+                ? avgEntryAll * (1 - slPct)
+                : avgEntryAll * (1 + slPct)
+            } else {
+              // first_order mode: same logic as TP — best first order
+              slPrice = isLong
+                ? bestFirstOrder * (1 - slPct)
+                : bestFirstOrder * (1 + slPct)
+            }
+          }
+
+          ownerUpdate = { consoleId: ownerConsoleId, tpPrice, slPrice, tpLevels }
+        }
+      }
+    }
+
     // Cancel first to reset state from "placed" to allow setGridPreview to write fresh data
-    cancelGridOrders(consoleId)
+    cancelGridOrders(snapshotConsoleId)
     // Then set fresh preview and immediately place
     setTimeout(() => {
-      setGridPreview(consoleId, newData)
-      setTimeout(() => placeGridOrders(consoleId), 0)
+      setGridPreview(snapshotConsoleId, newData)
+      setTimeout(() => {
+        placeGridOrders(snapshotConsoleId)
+        // In non-multipos mode, re-anchor owner's TP/SL to the just-placed grid's geometry
+        if (ownerUpdate) {
+          applyGridTpSl(ownerUpdate.consoleId, {
+            tpPrice: ownerUpdate.tpPrice,
+            slPrice: ownerUpdate.slPrice,
+            tpLevels: ownerUpdate.tpLevels,
+          })
+        }
+      }, 0)
     }, 0)
   }
 
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
   const baseSymbol = cfg.symbol.split("/")[0] ?? "BTC"
+
+  // ── Slot management ───────────────────────────────────────────────────────
+
+  // Strip TP/SL keys from a cfg before storing in slotCfgMapRef when !multiPositionMode
+  // so that switching slots never restores stale per-slot TP/SL over the shared values.
+  const stripTpSlIfShared = (c: GridConfig): GridConfig => {
+    if (multiPositionModeRef.current) return c
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { tpEnabled, tpMode, tpPercent, tpClosePercent, multiTpEnabled, multiTpCount, multiTpLevels,
+      tpRepositionEnabled, perLevelTpEnabled, perLevelTpGroups, slEnabled, slMode, slPercent, slClosePercent,
+      resetTpEnabled, resetTpTriggerLevels, defaultResetTpPercent, defaultResetTpClosePercent,
+      resetTpRebuildTail, resetTpPerLevelEnabled, resetTpPerLevelSettings, ...rest } = c
+    return rest as GridConfig
+  }
+
+  const handleAddSlot = () => {
+    // Save current cfg to current slot before switching
+    if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared({ ...cfgRef.current })
+    const newSlot = { slotId: nanoid() }
+    setGridSlots((prev) => [...prev, newSlot])
+    setActiveSlotIndex(gridSlots.length)
+    // New slot gets fresh config inheriting symbol/side/entry/leverage (+ shared TP/SL when !multiPos)
+    const shared = activeSideRef.current === "long" ? longSharedTpSl : shortSharedTpSl
+    setCfg({
+      ...DEFAULT_GRID_CONFIG,
+      ...(multiPositionModeRef.current ? {} : shared),
+      symbol: cfgRef.current.symbol,
+      side: cfgRef.current.side,
+      entryPrice: cfgRef.current.entryPrice,
+      leverage: cfgRef.current.leverage,
+    })
+    orderIdRefs.current = []
+  }
+
+  const handleSwitchSlot = (idx: number) => {
+    if (idx === activeSlotIndex) return
+    // Save current cfg to current slot (TP/SL stripped when !multiPositionMode)
+    if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared({ ...cfgRef.current })
+    setActiveSlotIndex(idx)
+    const targetSlot = gridSlots[idx]
+    if (targetSlot) {
+      const saved = slotCfgMapRef.current[slotKey(targetSlot.slotId)]
+      const shared = activeSideRef.current === "long" ? longSharedTpSl : shortSharedTpSl
+      const tpSlOverride = multiPositionModeRef.current ? {} : shared
+      if (saved) {
+        setCfg({ ...saved, ...tpSlOverride, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      } else {
+        setCfg({ ...DEFAULT_GRID_CONFIG, ...tpSlOverride, symbol: cfgRef.current.symbol, side: cfgRef.current.side, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      }
+    }
+    orderIdRefs.current = []
+  }
+
+
 
   // Side button
   const gap4: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4 }
@@ -1084,17 +1554,240 @@ export function GridConfigTab({
       />
 
       <div style={{ padding: "8px 10px" }}>
-      {/* ── LEV + PRO row ─────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+      {/* ── LEV + GRID SLOTS + PRO row ───────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>LEV</span>
           <div style={{ width: 52 }}>
             <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} min={1} suffix="×" title="Leverage multiplier" />
           </div>
         </div>
+
+        {/* ── Grid slot tabs with overlay scroll arrows ─── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
+          {/* Viewport: relative container so overlay arrows are positioned inside */}
+          <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+
+            {/* Left fade+arrow overlay — does NOT affect layout */}
+            {slotCanScrollLeft && (
+              <button
+                onMouseDown={stopProp}
+                onClick={() => {
+                  slotScrollRef.current?.scrollBy({ left: -60, behavior: "smooth" })
+                  slotScrollCooldownRef.current = true
+                  setTimeout(() => { slotScrollCooldownRef.current = false }, 400)
+                }}
+                style={{
+                  position: "absolute", left: 0, top: 0, bottom: 0, zIndex: 2,
+                  width: 20, border: "none", cursor: "pointer", padding: 0,
+                  background: "linear-gradient(to right, rgba(18,18,18,1) 30%, transparent 100%)",
+                  display: "flex", alignItems: "center", paddingLeft: 2,
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
+                <svg width="5" height="8" viewBox="0 0 5 8" fill="none">
+                  <path d="M4 1L1 4L4 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+
+            {/* Scrollable slot tabs */}
+            <div
+              ref={slotScrollRef}
+              onScroll={updateSlotScroll}
+              style={{
+                display: "flex", alignItems: "center", gap: 2,
+                overflowX: "auto", overflowY: "hidden",
+                scrollbarWidth: "none",
+              }}
+            >
+            {(["long", "short"] as const).map((slotSide) => {
+              const sideSlots = slotSide === "long" ? longSlots : shortSlots
+              const sideActiveIdx = slotSide === "long" ? activeLongIdx : activeShortIdx
+              const isSideActive = slotSide === cfg.side
+              const longColor = "#00e5a0"
+              const shortColor = "#f87171"
+              const sideColor = slotSide === "long" ? longColor : shortColor
+              return sideSlots.map((slot, idx) => {
+                const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
+                const slotState = gridOrders[slotConsoleId]
+                const slotPlaced = slotState?.state === "placed"
+                const slotPending = slotPlaced && slotState?.pendingUpdate
+                const isActive = isSideActive && idx === sideActiveIdx
+                return (
+                  <div
+                    key={slot.slotId}
+                    onClick={() => {
+                      if (slotScrollCooldownRef.current) return
+                      if (!isSideActive) {
+                        if (activeSlot) slotCfgMapRef.current[slotKey(activeSlot.slotId)] = stripTpSlIfShared({ ...cfgRef.current })
+                        const targetSlots = slotSide === "long" ? longSlots : shortSlots
+                        const targetSlot = targetSlots[idx]
+                        const saved = targetSlot ? slotCfgMapRef.current[slotKey(targetSlot.slotId)] : undefined
+                        const targetShared = slotSide === "long" ? longSharedTpSl : shortSharedTpSl
+                        const tpSlOverride = multiPositionModeRef.current ? {} : targetShared
+                        const newCfg = saved
+                          ? { ...saved, ...tpSlOverride, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                          : { ...DEFAULT_GRID_CONFIG, ...tpSlOverride, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                        setCfg(newCfg)
+                        if (slotSide === "long") { setActiveLongIdx(idx) } else { setActiveShortIdx(idx) }
+                        orderIdRefs.current = []
+                      } else {
+                        handleSwitchSlot(idx)
+                      }
+                    }}
+                    onMouseDown={stopProp}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 3,
+                      padding: "2px 5px 2px 6px",
+                      borderRadius: 4, flexShrink: 0,
+                      cursor: "pointer",
+                      opacity: isSideActive ? 1 : 0.55,
+                      border: isActive
+                        ? `1px solid ${slotPending ? "rgba(251,191,36,0.5)" : `${sideColor}55`}`
+                        : `1px solid ${sideColor}22`,
+                      background: isActive
+                        ? (slotPending ? "rgba(251,191,36,0.1)" : `${sideColor}18`)
+                        : `${sideColor}08`,
+                      transition: "all 0.15s",
+                    }}
+                    title={`${slotSide === "long" ? "Long" : "Short"} Grid ${idx + 1}${slotPlaced ? " (placed)" : ""}`}
+                  >
+                    <span style={{
+                      fontSize: 9, fontFamily: "monospace", fontWeight: isActive ? 700 : 500, letterSpacing: "0.04em",
+                      color: isActive
+                        ? (slotPending ? "rgba(251,191,36,0.9)" : sideColor)
+                        : `${sideColor}66`,
+                    }}>
+                      {idx + 1}
+                    </span>
+                    {slotPlaced && (
+                      <div style={{
+                        width: 4, height: 4, borderRadius: "50%", flexShrink: 0,
+                        background: slotPending ? "rgba(251,191,36,0.8)" : sideColor,
+                        opacity: isSideActive ? 1 : 0.6,
+                      }} />
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (slotScrollCooldownRef.current) return
+                        const cancelId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
+                        cancelGridOrders(cancelId)
+                        delete slotCfgMapRef.current[slotKey(slot.slotId)]
+                        const targetSlots = slotSide === "long" ? longSlots : shortSlots
+                        const setSlots = slotSide === "long" ? setLongSlots : setShortSlots
+                        const targetActiveIdx = slotSide === "long" ? activeLongIdx : activeShortIdx
+                        const setActiveIdx = slotSide === "long" ? setActiveLongIdx : setActiveShortIdx
+                        const slotShared = slotSide === "long" ? longSharedTpSl : shortSharedTpSl
+                        const tpSlOverride = multiPositionModeRef.current ? {} : slotShared
+                        if (targetSlots.length === 1) {
+                          if (isSideActive) {
+                            setCfg({ ...DEFAULT_GRID_CONFIG, ...tpSlOverride, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+                            orderIdRefs.current = []
+                          }
+                          return
+                        }
+                        const newSlots = targetSlots.filter((_, i) => i !== idx)
+                        const newActive = Math.min(targetActiveIdx, newSlots.length - 1)
+                        setSlots(newSlots)
+                        setActiveIdx(newActive)
+                        if (isSideActive) {
+                          const targetSlot = newSlots[newActive]
+                          const saved = targetSlot ? slotCfgMapRef.current[slotKey(targetSlot.slotId)] : undefined
+                          setCfg(saved
+                            ? { ...saved, ...tpSlOverride, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                            : { ...DEFAULT_GRID_CONFIG, ...tpSlOverride, symbol: cfgRef.current.symbol, side: slotSide, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage }
+                          )
+                          orderIdRefs.current = []
+                        }
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      style={{
+                        background: "transparent", border: "none", cursor: "pointer", padding: 0,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: `${sideColor}44`, lineHeight: 1,
+                        width: 10, height: 10, flexShrink: 0,
+                      }}
+                      title={slotPlaced ? "Cancel this grid" : "Remove grid slot"}
+                    >
+                      <svg width="7" height="7" viewBox="0 0 7 7" fill="none">
+                        <line x1="1" y1="1" x2="6" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="6" y1="1" x2="1" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                )
+              })
+            })}
+            </div>
+
+            {/* Right fade+arrow overlay — does NOT affect layout */}
+            {slotCanScrollRight && (
+              <button
+                onMouseDown={stopProp}
+                onClick={() => {
+                  slotScrollRef.current?.scrollBy({ left: 60, behavior: "smooth" })
+                  slotScrollCooldownRef.current = true
+                  setTimeout(() => { slotScrollCooldownRef.current = false }, 400)
+                }}
+                style={{
+                  position: "absolute", right: 0, top: 0, bottom: 0, zIndex: 2,
+                  width: 20, border: "none", cursor: "pointer", padding: 0,
+                  background: "linear-gradient(to left, rgba(18,18,18,1) 30%, transparent 100%)",
+                  display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 2,
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
+                <svg width="5" height="8" viewBox="0 0 5 8" fill="none">
+                  <path d="M1 1L4 4L1 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Add new grid slot — always visible, outside scroll viewport */}
+          <button
+            onClick={() => {
+              handleAddSlot()
+              setTimeout(() => {
+                const el = slotScrollRef.current
+                if (el) {
+                  el.scrollTo({ left: el.scrollWidth, behavior: "smooth" })
+                  updateSlotScroll()
+                }
+              }, 80)
+            }}
+            onMouseDown={stopProp}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 18, height: 18, flexShrink: 0,
+              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 4, cursor: "pointer", color: "rgba(255,255,255,0.35)",
+              transition: "all 0.15s",
+            }}
+            title={`Add new ${cfg.side} grid`}
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+              <line x1="4" y1="1" x2="4" y2="7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="1" y1="4" x2="7" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
-          <MiniToggle checked={proMode} onChange={(v) => { setProMode(v); if (!v) upd("perLevelTpEnabled", false) }} />
+          <MiniToggle checked={proMode} onChange={(v) => { setProMode(v); if (!v) { upd("perLevelTpEnabled", false); setMultiPositionMode(false) } }} />
+          {proMode && (
+            <>
+              <div style={{ width: 1, height: 12, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
+              <span style={{ fontSize: 8, fontFamily: "monospace", opacity: multiPositionMode ? 0.85 : 0.3, textTransform: "uppercase", letterSpacing: "0.05em", color: multiPositionMode ? "rgba(255,170,0,0.9)" : undefined, whiteSpace: "nowrap" }}>M-pos</span>
+              <MiniToggle
+                checked={multiPositionMode}
+                onChange={(v) => setMultiPositionMode(v)}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -1176,18 +1869,19 @@ export function GridConfigTab({
             style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "2px 4px", borderRadius: 3, cursor: "default",
-              background: availTooltip ? "rgba(30,111,239,0.04)" : "transparent",
-              transition: "background 0.15s",
             }}
-            onMouseEnter={() => setAvailTooltip(true)}
-            onMouseLeave={() => setAvailTooltip(false)}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
               <span style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(255,255,255,0.35)" }}>
                 Available
               </span>
               {marketType === "futures" && (
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45, flexShrink: 0 }}>
+                <svg
+                  width="9" height="9" viewBox="0 0 10 10" fill="none"
+                  style={{ opacity: 0.45, flexShrink: 0, cursor: "help" }}
+                  onMouseEnter={() => setAvailTooltip(true)}
+                  onMouseLeave={() => setAvailTooltip(false)}
+                >
                   <circle cx="5" cy="5" r="4.5" stroke="rgba(30,111,239,0.7)" />
                   <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(77,159,255,0.9)" fontFamily="monospace">i</text>
                 </svg>
@@ -1427,7 +2121,13 @@ export function GridConfigTab({
       <Divider />
 
       {/* ── TAKE PROFIT ───────────────────────────── */}
+      {/* When !multiPositionMode: shared across all grids on this side */}
       <div style={{ marginBottom: 6 }}>
+        {!multiPositionMode && (
+          <div style={{ fontSize: 8, fontFamily: "monospace", color: "rgba(200,214,229,0.25)", letterSpacing: "0.05em", marginBottom: 3 }}>
+            shared · {cfg.side}
+          </div>
+        )}
         <SectionHead
           title="TAKE PROFIT"
           expanded={open.tp}
@@ -1440,10 +2140,10 @@ export function GridConfigTab({
                 tooltip="После каждого усреднения TP автоматически смещается к средней цене позиции, сохраняя заданные расстояния и пропорции."
                 color="rgba(200,214,229,0.35)"
               />
-              <MiniToggle checked={cfg.tpRepositionEnabled} onChange={(v) => upd("tpRepositionEnabled", v)} />
+              <MiniToggle checked={tpSl.tpRepositionEnabled} onChange={(v) => upd("tpRepositionEnabled", v)} />
 
               {/* TP count stepper — hidden when per-level groups are active */}
-              {!(proMode && cfg.perLevelTpEnabled) && (
+              {!(proMode && tpSl.perLevelTpEnabled) && (
                 <>
                   <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
                   <div className="flex items-center" style={{ gap: 3 }}>
@@ -1452,8 +2152,8 @@ export function GridConfigTab({
                       <button
                         onMouseDown={stopProp}
                         onClick={() => {
-                          const n = Math.max(1, cfg.multiTpCount - 1)
-                          const lvls = cfg.multiTpLevels.slice(0, n)
+                          const n = Math.max(1, tpSl.multiTpCount - 1)
+                          const lvls = tpSl.multiTpLevels.slice(0, n)
                           const pcts = distributeClose(n)
                           upd("multiTpCount", n)
                           upd("multiTpLevels", lvls.map((l, i) => ({ ...l, closePercent: pcts[i] })))
@@ -1462,13 +2162,13 @@ export function GridConfigTab({
                         style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
                       >−</button>
                       <span style={{ padding: "0 5px", fontSize: 9.5, fontFamily: "monospace", color: "rgba(200,214,229,0.85)", background: "rgba(255,255,255,0.02)", minWidth: 16, textAlign: "center", lineHeight: "16px" }}>
-                        {cfg.multiTpCount}
+                        {tpSl.multiTpCount}
                       </span>
                       <button
                         onMouseDown={stopProp}
                         onClick={() => {
-                          const n = Math.min(10, cfg.multiTpCount + 1)
-                          const lvls = [...cfg.multiTpLevels]
+                          const n = Math.min(10, tpSl.multiTpCount + 1)
+                          const lvls = [...tpSl.multiTpLevels]
                           while (lvls.length < n) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: 0 })
                           const pcts = distributeClose(n)
                           upd("multiTpCount", n)
@@ -1486,30 +2186,30 @@ export function GridConfigTab({
               <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
 
               {/* Enable toggle */}
-              <MiniToggle checked={cfg.tpEnabled} onChange={(v) => upd("tpEnabled", v)} />
+              <MiniToggle checked={tpSl.tpEnabled} onChange={(v) => upd("tpEnabled", v)} />
             </div>
           }
         />
-        {open.tp && cfg.tpEnabled && (
+        {open.tp && tpSl.tpEnabled && (
           <div style={{ ...gap4, marginTop: 4 }}>
             {/* Standard TP table — hidden when per-level groups are active */}
-            {!(proMode && cfg.perLevelTpEnabled) && (
+            {!(proMode && tpSl.perLevelTpEnabled) && (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.35, paddingLeft: 2 }}>
                   <span>#</span>
                   <span>TP %</span>
                   <span>Close %</span>
                 </div>
-                {cfg.multiTpLevels.slice(0, cfg.multiTpCount).map((lvl, i) => (
+                {tpSl.multiTpLevels.slice(0, tpSl.multiTpCount).map((lvl, i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
                     <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.38 }}>{i + 1}</span>
                     <NI value={lvl.tpPercent} onChange={(v) => {
-                      const next = [...cfg.multiTpLevels]
+                      const next = [...tpSl.multiTpLevels]
                       next[i] = { ...next[i], tpPercent: v }
                       upd("multiTpLevels", next)
                     }} suffix="%" step={0.1} min={0} />
                     <NI value={lvl.closePercent} onChange={(v) => {
-                      upd("multiTpLevels", rebalanceClose(cfg.multiTpLevels.slice(0, cfg.multiTpCount), i, v))
+                      upd("multiTpLevels", rebalanceClose(tpSl.multiTpLevels.slice(0, tpSl.multiTpCount), i, v))
                     }} suffix="%" step={1} min={1} />
                   </div>
                 ))}
@@ -1526,7 +2226,7 @@ export function GridConfigTab({
                       tooltip="Разные настройки TP для каждой группы уровней сетки. После заполнения N-го ордера применяются свои TP-уровни."
                       color="rgba(200,214,229,0.4)"
                     />
-                    {cfg.perLevelTpEnabled && (
+                    {tpSl.perLevelTpEnabled && (
                       <button
                         onMouseDown={stopProp}
                         onClick={() => tog("perLevelGroups")}
@@ -1536,25 +2236,20 @@ export function GridConfigTab({
                       </button>
                     )}
                   </div>
-                  <MiniToggle checked={cfg.perLevelTpEnabled} onChange={(v) => upd("perLevelTpEnabled", v)} />
+                  <MiniToggle checked={tpSl.perLevelTpEnabled} onChange={(v) => upd("perLevelTpEnabled", v)} />
                 </div>
-                {cfg.perLevelTpEnabled && open.perLevelGroups && (
+                {tpSl.perLevelTpEnabled && open.perLevelGroups && (
                   <div style={{ ...gap4 }}>
-                    {cfg.perLevelTpGroups.map((grp, gi) => {
+                    {tpSl.perLevelTpGroups.map((grp, gi) => {
                       const grpTpCount = grp.tpCount ?? 1
                       const hasReset = grp.resetTpEnabled ?? false
-                      // When reset enabled, first row = Reset TP, rest = Main TP
-                      // Minimum TP count is 2 when reset is enabled (1 reset + 1 main)
                       return (
                         <div key={gi} style={{ borderLeft: `2px solid ${hasReset ? "rgba(255,171,0,0.35)" : "rgba(30,111,239,0.2)"}`, paddingLeft: 6, ...gap4 }}>
                           {/* Group header */}
                           <div className="flex items-center" style={{ gap: 4 }}>
-                            {/* Level badge */}
                             <span style={{ fontSize: 8, fontFamily: "monospace", color: "rgba(200,214,229,0.35)", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>
                               LVL {gi + 1}
                             </span>
-
-                            {/* Reset TP toggle */}
                             <div className="flex items-center" style={{ gap: 3, marginLeft: 2 }}>
                               <span style={{ fontSize: 8, fontFamily: "monospace", color: hasReset ? "rgba(255,171,0,0.8)" : "rgba(200,214,229,0.3)", whiteSpace: "nowrap", letterSpacing: "0.04em" }}>
                                 Reset TP
@@ -1566,7 +2261,7 @@ export function GridConfigTab({
                               <MiniToggle
                                 checked={hasReset}
                                 onChange={(v) => {
-                                  upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
+                                  upd("perLevelTpGroups", tpSl.perLevelTpGroups.map((g, idx) => {
                                     if (idx !== gi) return g
                                     const minCount = v ? Math.max(2, g.tpCount ?? 1) : g.tpCount ?? 1
                                     const lvls = [...g.levels]
@@ -1577,10 +2272,7 @@ export function GridConfigTab({
                                 }}
                               />
                             </div>
-
                             <div style={{ flex: 1 }} />
-
-                            {/* TP count stepper */}
                             <div className="flex items-center" style={{ gap: 3 }}>
                               <span style={{ fontSize: 8, fontFamily: "monospace", opacity: 0.35, letterSpacing: "0.04em" }}>TP</span>
                               <div className="flex items-center" style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden" }}>
@@ -1591,7 +2283,7 @@ export function GridConfigTab({
                                     const n = Math.max(minAllowed, grpTpCount - 1)
                                     const lvls = grp.levels.slice(0, n)
                                     const pcts = distributeClose(n)
-                                    const next = [...cfg.perLevelTpGroups]
+                                    const next = [...tpSl.perLevelTpGroups]
                                     next[gi] = { ...next[gi], tpCount: n, levels: lvls.map((l, i) => ({ ...l, closePercent: pcts[i] })) }
                                     upd("perLevelTpGroups", next)
                                   }}
@@ -1607,7 +2299,7 @@ export function GridConfigTab({
                                     const lvls = [...grp.levels]
                                     while (lvls.length < n) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: 0 })
                                     const pcts = distributeClose(n)
-                                    const next = [...cfg.perLevelTpGroups]
+                                    const next = [...tpSl.perLevelTpGroups]
                                     next[gi] = { ...next[gi], tpCount: n, levels: lvls.slice(0, n).map((l, i) => ({ ...l, closePercent: pcts[i] })) }
                                     upd("perLevelTpGroups", next)
                                   }}
@@ -1616,33 +2308,27 @@ export function GridConfigTab({
                               </div>
                             </div>
                           </div>
-
-                          {/* TP rows — labels are inline inside each field */}
                           {grp.levels.slice(0, grpTpCount).map((lvl, li) => {
                             const isResetRow = hasReset && li === 0
-                            const tpLabel = hasReset
-                              ? (li === 0 ? "Reset TP %" : "Main TP %")
-                              : "TP %"
+                            const tpLabel = hasReset ? (li === 0 ? "Reset TP %" : "Main TP %") : "TP %"
                             const tpColor = isResetRow ? "rgba(255,171,0,0.55)" : undefined
                             return (
                               <div key={li} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, alignItems: "center" }}>
                                 <NI
                                   value={lvl.tpPercent}
                                   onChange={(v) => {
-                                    upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
+                                    upd("perLevelTpGroups", tpSl.perLevelTpGroups.map((g, idx) => idx !== gi ? g : { ...g, levels: g.levels.map((l, lx) => lx !== li ? l : { ...l, tpPercent: v }) }))
                                   }}
                                   label={tpLabel}
                                   labelColor={tpColor}
                                   step={0.1}
                                   min={0}
-                                  tooltip={isResetRow
-                                    ? "Reset TP: при срабатывании запускается ребилд хвоста сетки — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера"
-                                    : undefined}
+                                  tooltip={isResetRow ? "Reset TP: при срабатывании запускается ребилд хвоста сетки — освободившаяся маржа + неиспользованный хвост пересоздаются в новые ордера" : undefined}
                                 />
                                 <NI
                                   value={lvl.closePercent}
                                   onChange={(v) => {
-                                    upd("perLevelTpGroups", cfg.perLevelTpGroups.map((g, idx) => {
+                                    upd("perLevelTpGroups", tpSl.perLevelTpGroups.map((g, idx) => {
                                       if (idx !== gi) return g
                                       const tpCnt = g.tpCount ?? 1
                                       const rebalanced = rebalanceClose(g.levels.slice(0, tpCnt), li, v)
@@ -1652,9 +2338,7 @@ export function GridConfigTab({
                                   label="Close %"
                                   step={1}
                                   min={1}
-                                  tooltip={isResetRow
-                                    ? "Процент позиции закрытый при Reset TP. Освободившаяся маржа идёт на ребилд хвоста сетки"
-                                    : undefined}
+                                  tooltip={isResetRow ? "Процент позиции закрытый при Reset TP. Освободившаяся маржа идёт на ребилд хвоста сетки" : undefined}
                                 />
                               </div>
                             )
@@ -1668,7 +2352,7 @@ export function GridConfigTab({
             )}
           </div>
         )}
-        {open.tp && !cfg.tpEnabled && (
+        {open.tp && !tpSl.tpEnabled && (
           <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", padding: "4px 0" }}>
             Take profit disabled
           </div>
@@ -1677,14 +2361,15 @@ export function GridConfigTab({
       <Divider />
 
       {/* ── STOP LOSS ─────────────────────────────── */}
+      {/* When !multiPositionMode: shared across all grids on this side */}
       <div style={{ marginBottom: 6 }}>
         <SectionHead
           title="STOP LOSS"
           expanded={open.sl}
           onToggle={() => tog("sl")}
-          rightSlot={<MiniToggle checked={cfg.slEnabled} onChange={(v) => upd("slEnabled", v)} />}
+          rightSlot={<MiniToggle checked={tpSl.slEnabled} onChange={(v) => upd("slEnabled", v)} />}
         />
-        {open.sl && cfg.slEnabled && (
+        {open.sl && tpSl.slEnabled && (
           <div style={{ ...gap4, marginTop: 4 }}>
             <div style={{ display: "flex", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
               {([
@@ -1700,32 +2385,31 @@ export function GridConfigTab({
                 },
               ] as const).map((o, i, arr) => (
                 <div key={o.v} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: cfg.slMode === o.v ? "rgba(30,111,239,0.18)" : "transparent",
+                  background: tpSl.slMode === o.v ? "rgba(30,111,239,0.18)" : "transparent",
                   borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.1)" : undefined,
                 }}>
                   <button
-                    onClick={() => upd("slMode", cfg.slMode === o.v ? null : o.v)}
+                    onClick={() => upd("slMode", tpSl.slMode === o.v ? null : o.v)}
                     onMouseDown={(e) => e.stopPropagation()}
                     style={{
                       flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px",
                       background: "transparent", border: "none", cursor: "pointer",
-                      color: cfg.slMode === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)",
-                      fontWeight: cfg.slMode === o.v ? 700 : 400, letterSpacing: "0.04em",
+                      color: tpSl.slMode === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)",
+                      fontWeight: tpSl.slMode === o.v ? 700 : 400, letterSpacing: "0.04em",
                     }}
                   >{o.label}</button>
-                  <TinyTooltipIcon text={o.tooltip} color={cfg.slMode === o.v ? "rgba(30,111,239,0.7)" : undefined} />
+                  <TinyTooltipIcon text={o.tooltip} color={tpSl.slMode === o.v ? "rgba(30,111,239,0.7)" : undefined} />
                   <div style={{ width: 4 }} />
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-2" style={{ gap: 4 }}>
-              <NI value={cfg.slPercent} onChange={(v) => upd("slPercent", v)} label="SL %" min={0} step={0.1} title="Stop loss percentage" />
-              <NI value={cfg.slClosePercent} onChange={(v) => upd("slClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close at stop loss" />
+              <NI value={tpSl.slPercent} onChange={(v) => upd("slPercent", v)} label="SL %" min={0} step={0.1} title="Stop loss percentage" />
+              <NI value={tpSl.slClosePercent} onChange={(v) => upd("slClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close at stop loss" />
             </div>
-
           </div>
         )}
-        {open.sl && !cfg.slEnabled && (
+        {open.sl && !tpSl.slEnabled && (
           <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", padding: "4px 0" }}>
             Stop loss disabled
           </div>
@@ -1769,10 +2453,10 @@ export function GridConfigTab({
         >
           {cfg.autoEnabled && <Play size={11} />}
           {hasPendingUpdate
-            ? "Apply Changes"
+            ? `Apply Changes #${activeSlotIndex + 1}`
             : isPlaced
-              ? `${cfg.side === "long" ? "Long" : "Short"} / Grid ✓`
-              : cfg.side === "long" ? "Long / Grid" : "Short / Grid"
+              ? `${cfg.side === "long" ? "Long" : "Short"} / Grid #${activeSlotIndex + 1} ✓`
+              : `${cfg.side === "long" ? "Long" : "Short"} / Grid${gridSlots.length > 1 ? ` #${activeSlotIndex + 1}` : ""}`
           }
         </button>
       </div>

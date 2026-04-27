@@ -273,6 +273,35 @@ export interface GridResetTpLevel {
   resetClosePercent: number
 }
 
+// ---- Grid Shared TP/SL (used when multiPosition mode is OFF) ----
+// When Pro mode is active and multiPositionMode is enabled, each slot has its own
+// full GridConfig including TP/SL (current behavior). When multiPositionMode is
+// disabled (default), TP/SL is shared across all grids on the same side.
+
+export interface GridSharedTpSl {
+  tpEnabled: boolean
+  tpMode: GridTpMode
+  tpPercent: number
+  tpClosePercent: number
+  multiTpEnabled: boolean
+  multiTpCount: number
+  multiTpLevels: GridMultiTpLevel[]
+  tpRepositionEnabled: boolean
+  perLevelTpEnabled: boolean
+  perLevelTpGroups: GridPerLevelTp[]
+  slEnabled: boolean
+  slMode: GridSlMode
+  slPercent: number
+  slClosePercent: number
+  resetTpEnabled: boolean
+  resetTpTriggerLevels: number[]
+  defaultResetTpPercent: number
+  defaultResetTpClosePercent: number
+  resetTpRebuildTail: boolean
+  resetTpPerLevelEnabled: boolean
+  resetTpPerLevelSettings: GridResetTpLevel[]
+}
+
 export interface GridLevel {
   index: number
   price: number
@@ -437,6 +466,35 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   resetTpPerLevelSettings: [],
 
   levels: [],
+}
+
+export const DEFAULT_GRID_SHARED_TP_SL: GridSharedTpSl = {
+  tpEnabled: true,
+  tpMode: "avg_entry",
+  tpPercent: 1.2,
+  tpClosePercent: 100,
+  multiTpEnabled: true,
+  multiTpCount: 2,
+  multiTpLevels: [
+    { tpPercent: 0.8, closePercent: 50 },
+    { tpPercent: 1.5, closePercent: 50 },
+  ],
+  tpRepositionEnabled: false,
+  perLevelTpEnabled: false,
+  perLevelTpGroups: [
+    { afterLevel: 1, tpCount: 1, levels: [{ tpPercent: 1.2, closePercent: 100 }], resetTpEnabled: false },
+  ],
+  slEnabled: true,
+  slMode: null,
+  slPercent: 2.5,
+  slClosePercent: 100,
+  resetTpEnabled: false,
+  resetTpTriggerLevels: [3, 4, 5],
+  defaultResetTpPercent: 0.6,
+  defaultResetTpClosePercent: 35,
+  resetTpRebuildTail: true,
+  resetTpPerLevelEnabled: false,
+  resetTpPerLevelSettings: [],
 }
 
 export const WIDGET_LABELS: Record<WidgetType, string> = {
