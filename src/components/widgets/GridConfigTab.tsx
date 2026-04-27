@@ -849,11 +849,13 @@ export function GridConfigTab({
     const wasEnabled = prevSlEnabledRef.current
     prevSlEnabledRef.current = cfg.slEnabled
     if (!isPlaced || !activeChartId) return
+    if (!isSharedTpSlOwner()) return
     if (!wasEnabled && cfg.slEnabled) {
       const viz = calcGridVisualization(cfg)
       expectedSlPriceRef.current = viz.slPrice
       applyGridTpSl(consoleId, { slPrice: viz.slPrice })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.slEnabled, isPlaced])
 
   // ── TP sync: chart x button on individual TP lines ──────────────────────
@@ -926,11 +928,13 @@ export function GridConfigTab({
     const wasEnabled = prevTpEnabledRef.current
     prevTpEnabledRef.current = cfg.tpEnabled
     if (!isPlaced || !activeChartId) return
+    if (!isSharedTpSlOwner()) return
     if (!wasEnabled && cfg.tpEnabled) {
       const viz = calcGridVisualization(cfg)
       applyGridTpSl(consoleId, { tpPrice: viz.tpPrice, tpLevels: viz.tpLevels })
       placedTpCountRef.current = viz.tpLevels.length
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.tpEnabled, isPlaced])
 
   // ── SL drag sync: chart drag → update cfg.slPercent ────────────────────
@@ -1094,6 +1098,14 @@ export function GridConfigTab({
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartFirstPrice, chartLastPrice])
 
+  // In non-multipos mode, only the first slot (index 0) of a side owns TP/SL on chart.
+  // Returns whether the current active slot should render TP/SL lines.
+  const isSharedTpSlOwner = (): boolean => {
+    if (multiPositionModeRef.current) return true
+    const side = activeSideRef.current
+    return (side === "long" ? activeLongIdx : activeShortIdx) === 0
+  }
+
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
     if (!activeChartId) {
@@ -1116,27 +1128,31 @@ export function GridConfigTab({
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
 
+    // In non-multipos mode only slot 0 of each side shows TP/SL on chart
+    const showTpSl = isSharedTpSlOwner()
+
     // Record expected prices so drag-sync effects can ignore form-driven updates
     const ordersForPreview = viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty }))
     expectedFirstPriceRef.current = ordersForPreview[0]?.price
     expectedLastPriceRef.current = ordersForPreview[ordersForPreview.length - 1]?.price
-    expectedSlPriceRef.current = viz.slPrice
+    expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
       consoleId,
       side: cfg.side,
       orders: ordersForPreview,
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
+      tpPrice: showTpSl ? viz.tpPrice : null,
+      slPrice: showTpSl ? viz.slPrice : null,
+      tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
       accountId,
       exchangeId,
       marketType,
     })
-  }, [cfg, activeChartId, isPlaced])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode])
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
   const prevSideConsoleIdRef = useRef<string | null>(null)
@@ -1161,8 +1177,7 @@ export function GridConfigTab({
   }, [baseConsoleId])
 
   // ── Shared TP/SL sync: when !multiPositionMode, propagate TP/SL changes
-  // to ALL slots of the active side on the current chart.
-  // Each slot gets its own recalculated tpPrice/slPrice based on its grid geometry.
+  // to the FIRST slot (index 0) of the active side — that slot is the sole TP/SL owner.
   const activeSideSharedTpSlRef = useRef(activeSideSharedTpSl)
   activeSideSharedTpSlRef.current = activeSideSharedTpSl
   useEffect(() => {
@@ -1171,21 +1186,28 @@ export function GridConfigTab({
     const shared = activeSideSharedTpSlRef.current
     const side = activeSideRef.current
     const allSlots = side === "long" ? longSlots : shortSlots
+    // Only slot 0 owns TP/SL; all others get nulled out
     allSlots.forEach((slot, idx) => {
       const slotId = `${baseConsoleId}:${activeChartId}:${side}:${slot.slotId}`
       const slotEntry = gridOrdersRef.current[slotId]
       if (!slotEntry) return
-      // Build a minimal cfg for this slot: use stored slotCfgMapRef or current cfg if active slot
-      const isActiveSlot = idx === (side === "long" ? activeLongIdx : activeShortIdx)
+      if (idx !== 0) {
+        // Ensure non-owner slots have no TP/SL on chart
+        if (slotEntry.tpPrice !== null || slotEntry.slPrice !== null || slotEntry.tpLevels.length > 0) {
+          applyGridTpSl(slotId, { tpPrice: null, slPrice: null, tpLevels: [] })
+        }
+        return
+      }
+      // Slot 0: recalculate TP/SL prices from its grid geometry + shared settings
+      const isActiveSlot = (side === "long" ? activeLongIdx : activeShortIdx) === 0
       const slotStoredCfg = isActiveSlot ? cfgRef.current : slotCfgMapRef.current[slot.slotId]
       if (!slotStoredCfg) return
-      // Merge shared TP/SL into slot cfg and recalculate
       const mergedCfg: GridConfig = { ...slotStoredCfg, ...shared }
       const viz = calcGridVisualization(mergedCfg)
       applyGridTpSl(slotId, { tpPrice: viz.tpPrice, slPrice: viz.slPrice, tpLevels: viz.tpLevels })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSideSharedTpSl, multiPositionMode, activeChartId])
+  }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots])
 
   const handlePlaceGrid = () => {
     if (!activeChartId) return
@@ -1196,17 +1218,18 @@ export function GridConfigTab({
       orderIdRefs.current.push(nanoid())
     }
     orderIdRefs.current = orderIdRefs.current.slice(0, viz.orders.length)
+    const showTpSl = isSharedTpSlOwner()
     expectedFirstPriceRef.current = viz.orders[0]?.price
     expectedLastPriceRef.current = viz.orders[viz.orders.length - 1]?.price
-    expectedSlPriceRef.current = viz.slPrice
+    expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
     const newData = {
       chartId: activeChartId,
       consoleId,
       side: cfg.side,
       orders: viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty })),
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
+      tpPrice: showTpSl ? viz.tpPrice : null,
+      slPrice: showTpSl ? viz.slPrice : null,
+      tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
       accountId,
