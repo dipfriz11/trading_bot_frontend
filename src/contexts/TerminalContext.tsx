@@ -68,7 +68,18 @@ export function posKey(
   exchangeId: string,
   marketType: "spot" | "futures",
   symbol: string,
+  side: "long" | "short",
 ): PositionKey {
+  return `${accountId}:${exchangeId}:${marketType}:${symbol}:${side}`
+}
+
+// Key for placed orders map (not side-specific — all orders for a symbol)
+export function ordersKey(
+  accountId: string,
+  exchangeId: string,
+  marketType: "spot" | "futures",
+  symbol: string,
+): string {
   return `${accountId}:${exchangeId}:${marketType}:${symbol}`
 }
 
@@ -521,7 +532,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   // ── Position Manager ─────────────────────────────────────────────────────────
 
   const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional">) => {
-    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol)
+    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     setPositionsMap((prev) => {
       const existing = prev[pk]
       if (existing) {
@@ -654,11 +665,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       })
 
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
-      const pk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol)
+      const ok = ordersKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol)
+      const posPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
       const prevPlaced = placedOrdersRef.current
-      const posOrders = prevPlaced[pk] ?? []
+      const posOrders = prevPlaced[ok] ?? []
       const withoutOld = posOrders.filter((o) => o.gridConsoleId !== consoleId)
-      const updatedMap = { ...prevPlaced, [pk]: [...withoutOld, ...newOrders] }
+      const updatedMap = { ...prevPlaced, [ok]: [...withoutOld, ...newOrders] }
       setPlacedOrdersMap(updatedMap)
 
       const totalInOrders = Object.values(updatedMap)
@@ -675,9 +687,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         ? entry.orders.reduce((s, o) => s + o.price * o.qty, 0) / totalQty
         : (entry.orders[0]?.price ?? 0)
       setPositionsMap((prevPos) => {
-        const existing = prevPos[pk]
+        const existing = prevPos[posPk]
         if (existing) {
-          // Re-place: replace old grid contribution with new
           const newSize = totalQty
           const newAvg = weightedAvg
           const notional = newSize * newAvg
@@ -688,14 +699,13 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           const pnlPct = notional > 0 ? (rawPnl / notional) * entry.leverage * 100 : 0
           return {
             ...prevPos,
-            [pk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct },
+            [posPk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct },
           }
         }
         const notional = totalQty * weightedAvg
-        const rawPnl = 0  // mark = avg entry at placement
         return {
           ...prevPos,
-          [pk]: {
+          [posPk]: {
             accountId: entry.accountId!,
             exchangeId: entry.exchangeId!,
             marketType: entry.marketType as "spot" | "futures",
@@ -706,7 +716,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             leverage: entry.leverage,
             markPrice: weightedAvg,
             notional,
-            unrealizedPnl: rawPnl,
+            unrealizedPnl: 0,
             unrealizedPnlPct: 0,
             openedAt: time,
           },
@@ -740,7 +750,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } })
 
       // Remove virtual position when grid is cancelled
-      const cancelPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol)
+      const cancelPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
       setPositionsMap((prev) => {
         const n = { ...prev }
         delete n[cancelPk]

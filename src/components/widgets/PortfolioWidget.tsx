@@ -381,7 +381,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
   const pendingCount = allOrders.filter((o) => o.status === "pending" || o.status == null).length
 
   function handleClose(pos: LivePosition, size: number) {
-    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol)
+    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     if (size >= pos.size) closePosition(pk)
     else partialClosePosition(pk, size)
   }

@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal, useGridOrderEntry, posKey } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, ordersKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -427,7 +427,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const accountId = activeChart?.accountId ?? "main"
   const exchangeId = activeChart?.exchangeId ?? "binance"
   // Stable key — matches the key used in placedOrders map
-  const activePositionKey = posKey(accountId, exchangeId, marketType, symbol)
+  const activePositionKey = ordersKey(accountId, exchangeId, marketType, symbol)
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
   const freeMargin = walletBalance - inOrders
   const { settings: posSettings } = usePositionSettings(symbol)
