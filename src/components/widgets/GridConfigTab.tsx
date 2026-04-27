@@ -559,8 +559,14 @@ export const GridConfigTab = memo(function GridConfigTab({
   })
   const setCfg: typeof _setCfg = import.meta.env.DEV
     ? (updater) => {
-        if (import.meta.env.DEV) console.log(`[GridConfigTab setCfg]`, new Error().stack?.split("\n")[2]?.trim())
-        _setCfg(updater as Parameters<typeof _setCfg>[0])
+        _setCfg((prev) => {
+          const next = typeof updater === "function" ? (updater as (p: typeof prev) => typeof prev)(prev) : updater
+          if (next !== prev) {
+            const changedKeys = (Object.keys(next) as (keyof typeof next)[]).filter(k => next[k] !== prev[k])
+            console.log(`[GridConfigTab setCfg] changed keys:`, changedKeys, new Error().stack?.split("\n").slice(2, 4).join(" | ").trim())
+          }
+          return next
+        })
       }
     : _setCfg
   // Always-current cfg ref for use in effects/callbacks without stale closure
