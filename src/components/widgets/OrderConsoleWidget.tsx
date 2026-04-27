@@ -763,6 +763,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (settingTpSlFromContextRef.current) return
     const tpNum = parseFloat(tp)
     const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
+    console.log(`[TpSl][TP push] chartId=${activeChart.id} symbol=${activeChart.symbol} tp="${tp}" newTp=${newTp} settingFromCtx=${settingTpSlFromContextRef.current}`)
     lastTpPushedRef.current = newTp
     setTpSl(activeChart.id, { tp: newTp })
   }, [tp, activeChart?.id])
@@ -773,6 +774,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (settingTpSlFromContextRef.current) return
     const slNum = parseFloat(sl)
     const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
+    console.log(`[TpSl][SL push] chartId=${activeChart.id} symbol=${activeChart.symbol} sl="${sl}" newSl=${newSl} settingFromCtx=${settingTpSlFromContextRef.current}`)
     lastSlPushedRef.current = newSl
     setTpSl(activeChart.id, { sl: newSl })
   }, [sl, activeChart?.id])
@@ -813,6 +815,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // Reset TP/SL refs on chart switch
   useEffect(() => {
+    console.log(`[TpSl][chart switch] new chartId=${activeChart?.id} symbol=${activeChart?.symbol} current tp="${tp}" sl="${sl}"`)
     lastTpPushedRef.current = null
     lastSlPushedRef.current = null
   }, [activeChart?.id])
