@@ -484,6 +484,7 @@ interface GridConfigTabProps {
   activeChartId?: string | null
   accountId?: string
   exchangeId?: string
+  isVisible?: boolean
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -501,6 +502,7 @@ export function GridConfigTab({
   activeChartId,
   accountId,
   exchangeId,
+  isVisible = true,
 }: GridConfigTabProps) {
   // ── Multi-grid slots (separate per side) ─────────────────────────────────
   const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
@@ -1179,6 +1181,7 @@ export function GridConfigTab({
 
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
+    if (!isVisible) return
     if (!activeChartId) {
       if (gridOrders[consoleId]) cancelGridOrders(consoleId)
       return
@@ -1223,7 +1226,7 @@ export function GridConfigTab({
       marketType,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode])
+  }, [cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible])
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
   const prevSideConsoleIdRef = useRef<string | null>(null)

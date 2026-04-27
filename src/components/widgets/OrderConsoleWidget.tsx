@@ -1382,6 +1382,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           activeChartId={activeChartId}
           accountId={accountId}
           exchangeId={exchangeId}
+          isVisible={tab === "grid"}
         />
       </div>
     </div>
