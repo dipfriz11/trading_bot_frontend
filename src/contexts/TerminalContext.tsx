@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react"
 import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg, LivePosition, ChartPlacedOrder, ChartDraftOrder } from "@/types/terminal"
 import { WIDGET_LABELS, WIDGET_MIN_SIZE } from "@/types/terminal"
 import { nanoid } from "@/lib/nanoid"
 import { ACCOUNTS } from "@/lib/mock-data"
+import { loadPositions, upsertPosition, deletePosition } from "@/lib/persistence"
 
 // ---- Account balance store ----
 // key: `${accountId}:${exchangeId}:${marketType}`
@@ -230,6 +231,38 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     } catch {
     }
   }, [state])
+
+  // Load positions from Supabase on mount
+  useEffect(() => {
+    loadPositions().then((loaded) => {
+      if (Object.keys(loaded).length > 0) {
+        setPositionsMap(loaded)
+      }
+    })
+  }, [])
+
+  // Sync positions to Supabase whenever they change
+  const prevPositionsRef = useRef<PositionsMap>({})
+  useEffect(() => {
+    const prev = prevPositionsRef.current
+    const curr = positions
+
+    // Upsert changed or new positions
+    for (const [pk, pos] of Object.entries(curr)) {
+      if (prev[pk] !== pos) {
+        upsertPosition(pk, pos)
+      }
+    }
+
+    // Delete removed positions
+    for (const pk of Object.keys(prev)) {
+      if (!curr[pk]) {
+        deletePosition(pk)
+      }
+    }
+
+    prevPositionsRef.current = curr
+  }, [positions])
 
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId)
 
