@@ -73,16 +73,6 @@ export function posKey(
   return `${accountId}:${exchangeId}:${marketType}:${symbol}:${side}`
 }
 
-// Key for placed orders map (not side-specific — all orders for a symbol)
-export function ordersKey(
-  accountId: string,
-  exchangeId: string,
-  marketType: "spot" | "futures",
-  symbol: string,
-): string {
-  return `${accountId}:${exchangeId}:${marketType}:${symbol}`
-}
-
 // ---- Grid order bridge types ----
 
 export type GridOrderState = "preview" | "placed"
@@ -670,12 +660,11 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       })
 
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
-      const ok = ordersKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol)
       const posPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
       const prevPlaced = placedOrdersRef.current
-      const posOrders = prevPlaced[ok] ?? []
+      const posOrders = prevPlaced[posPk] ?? []
       const withoutOld = posOrders.filter((o) => o.gridConsoleId !== consoleId)
-      const updatedMap = { ...prevPlaced, [ok]: [...withoutOld, ...newOrders] }
+      const updatedMap = { ...prevPlaced, [posPk]: [...withoutOld, ...newOrders] }
       setPlacedOrdersMap(updatedMap)
 
       const totalInOrders = Object.values(updatedMap)

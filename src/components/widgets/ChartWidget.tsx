@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react"
 import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
 import { SYMBOLS } from "@/lib/mock-data"
 import type { Widget, Candle } from "@/types/terminal"
-import { useTerminal, ordersKey } from "@/contexts/TerminalContext"
+import { useTerminal, posKey } from "@/contexts/TerminalContext"
 import type { ChartPlacedOrder, ChartDraftOrder, ChartGridOrders, ChartTpSl } from "@/contexts/TerminalContext"
 import { ChevronDown, User, Building2 } from "lucide-react"
 import { PositionBarCompact } from "./PositionBar"
@@ -1139,7 +1139,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const accountId = widget.accountId ?? "main"
   const exchangeId = widget.exchangeId ?? "binance"
   // Stable key that identifies which set of placed orders belongs to this chart
-  const positionKey = ordersKey(accountId, exchangeId, marketType, symbol)
+  const positionKey = posKey(accountId, exchangeId, marketType, symbol, futuresSide)
 
   // Whether there is an order-console widget in the current workspace
   const hasOrderConsole = !!(activeTab?.widgets.some((w) => w.type === "order-console"))
