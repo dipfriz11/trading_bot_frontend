@@ -853,11 +853,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                   </button>
                 ))}
               </div>
-              {/* Symbol display (readonly, driven by chart) */}
-              <div className="text-xs font-mono px-2 py-1 rounded"
-                style={{ background: "rgba(255,255,255,0.04)", opacity: 0.8, border: "1px solid rgba(255,255,255,0.07)" }}>
-                {symbol}
-              </div>
             </div>
           ) : (
             /* No chart in workspace — manual symbol picker */
@@ -882,70 +877,71 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             inOrders={inOrders}
           />
 
-          {/* PRO + M-POS toggles */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
-            <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
-            <_MiniToggle
-              checked={noProMode}
-              onChange={(v) => {
-                setNoProMode(v)
-                if (!v) setNoMultiPositionMode(false)
-              }}
-            />
-            {noProMode && (
-              <>
-                <div style={{ width: 1, height: 12, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
-                <span style={{ fontSize: 8, fontFamily: "monospace", opacity: noMultiPositionMode ? 0.85 : 0.3, textTransform: "uppercase", letterSpacing: "0.05em", color: noMultiPositionMode ? "rgba(255,170,0,0.9)" : undefined, whiteSpace: "nowrap" }}>M-pos</span>
-                <_MiniToggle
-                  checked={noMultiPositionMode}
-                  onChange={(v) => setNoMultiPositionMode(v)}
-                />
-              </>
-            )}
-          </div>
+          {/* Side toggle + PRO/M-POS in one row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {/* Side toggle: Spot = Buy/Sell, Futures = Long/Short */}
+            <div className="flex rounded overflow-hidden flex-1" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+              {marketType === "spot" ? (
+                (["buy", "sell"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSide(s)}
+                    className="flex-1 text-xs font-mono py-1.5 transition-colors font-semibold uppercase tracking-wider"
+                    style={{
+                      background: side === s ? (s === "buy" ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
+                      color: side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
+                      fontSize: 10,
+                    }}
+                    onMouseDown={stopProp}
+                  >
+                    {s === "buy" ? "BUY" : "SELL"}
+                  </button>
+                ))
+              ) : (
+                (["long", "short"] as const).map((fs) => (
+                  <button
+                    key={fs}
+                    onClick={() => activeChart && updateWidget(activeChart.id, { futuresSide: fs })}
+                    className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
+                    style={{
+                      background: futuresSide === fs
+                        ? (fs === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
+                        : "transparent",
+                      color: futuresSide === fs
+                        ? (fs === "long" ? "#00e5a0" : "#ff4757")
+                        : "rgba(255,255,255,0.3)",
+                      fontSize: 10,
+                    }}
+                    onMouseDown={stopProp}
+                  >
+                    {fs === "long" ? "LONG" : "SHORT"}
+                  </button>
+                ))
+              )}
+            </div>
 
-          {/* Side toggle: Spot = Buy/Sell, Futures = Long/Short */}
-          {marketType === "spot" ? (
-            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
-              {(["buy", "sell"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSide(s)}
-                  className="flex-1 text-xs font-mono py-1.5 transition-colors font-semibold uppercase tracking-wider"
-                  style={{
-                    background: side === s ? (s === "buy" ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
-                    color: side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
-                    fontSize: 10,
-                  }}
-                  onMouseDown={stopProp}
-                >
-                  {s === "buy" ? "BUY" : "SELL"}
-                </button>
-              ))}
+            {/* PRO + M-POS toggles */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+              <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
+              <_MiniToggle
+                checked={noProMode}
+                onChange={(v) => {
+                  setNoProMode(v)
+                  if (!v) setNoMultiPositionMode(false)
+                }}
+              />
+              {noProMode && (
+                <>
+                  <div style={{ width: 1, height: 12, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 8, fontFamily: "monospace", opacity: noMultiPositionMode ? 0.85 : 0.3, textTransform: "uppercase", letterSpacing: "0.05em", color: noMultiPositionMode ? "rgba(255,170,0,0.9)" : undefined, whiteSpace: "nowrap" }}>M-pos</span>
+                  <_MiniToggle
+                    checked={noMultiPositionMode}
+                    onChange={(v) => setNoMultiPositionMode(v)}
+                  />
+                </>
+              )}
             </div>
-          ) : (
-            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
-              {(["long", "short"] as const).map((fs) => (
-                <button
-                  key={fs}
-                  onClick={() => activeChart && updateWidget(activeChart.id, { futuresSide: fs })}
-                  className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
-                  style={{
-                    background: futuresSide === fs
-                      ? (fs === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
-                      : "transparent",
-                    color: futuresSide === fs
-                      ? (fs === "long" ? "#00e5a0" : "#ff4757")
-                      : "rgba(255,255,255,0.3)",
-                    fontSize: 10,
-                  }}
-                  onMouseDown={stopProp}
-                >
-                  {fs === "long" ? "LONG" : "SHORT"}
-                </button>
-              ))}
-            </div>
-          )}
+          </div>
 
           {/* Order type */}
           <div className="flex gap-1">
