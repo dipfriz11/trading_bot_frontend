@@ -820,7 +820,6 @@ export function GridConfigTab({
   useEffect(() => {
     const prev = prevChartSlPriceValueRef.current
     prevChartSlPriceValueRef.current = chartSlPrice ?? null
-    if (!isPlacedRef.current) return
     // Only react to non-null→non-null changes (i.e. drag moved the price)
     if (prev === undefined || prev === null || chartSlPrice === null || chartSlPrice === undefined) return
     if (Math.abs(chartSlPrice - prev) < 1e-8) return
@@ -875,7 +874,6 @@ export function GridConfigTab({
     const prev = prevChartTpLevelsRef.current
     const cur = chartTpLevels
     prevChartTpLevelsRef.current = cur ? [...cur] : undefined
-    if (!isPlacedRef.current) return
     if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
     // Check if any price changed
     const changed = cur.some((p, i) => Math.abs(p - prev[i]) > 1e-8)
@@ -914,7 +912,6 @@ export function GridConfigTab({
   const chartFirstPrice = useMemo(() => rawChartFirstPrice, [rawChartFirstPrice])
   const chartLastPrice = useMemo(() => rawChartLastPrice, [rawChartLastPrice])
   useEffect(() => {
-    if (!isPlacedRef.current) return
     if (chartFirstPrice === undefined || chartLastPrice === undefined) return
 
     // Skip if this matches what the form itself pushed (form-driven update, not a drag)
