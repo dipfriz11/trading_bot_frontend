@@ -949,6 +949,7 @@ export function GridConfigTab({
     const expSl = expectedSlPriceRef.current
     if (expSl !== undefined && expSl !== null && Math.abs(chartSlPrice - expSl) < 1e-8) return
     // Compute the new slPercent from the dragged price
+    let computedSlPercent: number | null = null
     setCfg((p) => {
       const viz = calcGridVisualization(p)
       const isLong = p.side === "long"
@@ -968,8 +969,15 @@ export function GridConfigTab({
       const newPct = isLong
         ? (1 - chartSlPrice / basePrice) * 100
         : (chartSlPrice / basePrice - 1) * 100
-      return { ...p, slPercent: Math.max(0.01, Math.round(newPct * 100) / 100) }
+      computedSlPercent = Math.max(0.01, Math.round(newPct * 100) / 100)
+      return { ...p, slPercent: computedSlPercent }
     })
+    // In non-multipos mode, drag must also update shared state so the form shows the new value
+    if (!multiPositionModeRef.current && computedSlPercent !== null) {
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      const pct = computedSlPercent
+      setter((p) => ({ ...p, slPercent: pct }))
+    }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartSlPrice])
 
@@ -1009,6 +1017,8 @@ export function GridConfigTab({
     const changed = cur.some((p, i) => Math.abs(p - prev[i]) > 1e-8)
     if (!changed) return
     // Sync cfg tpPercent from first TP, and multiTpLevels from all
+    let computedTpPercent: number | null = null
+    let computedMultiLevels: { tpPercent: number; closePercent: number }[] | null = null
     setCfg((p) => {
       const isLong = p.side === "long"
       const viz = calcGridVisualization(p)
@@ -1024,12 +1034,21 @@ export function GridConfigTab({
           closePercent: p.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
         }
       })
+      computedTpPercent = newMultiLevels[0]?.tpPercent ?? p.tpPercent
+      computedMultiLevels = newMultiLevels
       return {
         ...p,
-        tpPercent: newMultiLevels[0]?.tpPercent ?? p.tpPercent,
+        tpPercent: computedTpPercent,
         multiTpLevels: newMultiLevels,
       }
     })
+    // In non-multipos mode, drag must also update shared state so the form shows the new value
+    if (!multiPositionModeRef.current && computedTpPercent !== null && computedMultiLevels !== null) {
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      const tp = computedTpPercent
+      const levels = computedMultiLevels
+      setter((p) => ({ ...p, tpPercent: tp, multiTpLevels: levels }))
+    }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
   }, [chartTpLevels])
 
@@ -1243,8 +1262,9 @@ export function GridConfigTab({
       setGridPreview(consoleId, newData)
       setTimeout(() => {
         placeGridOrders(consoleId)
-        // In non-multipos mode, after placing any slot, recalculate slot 0's TP/SL
-        // using the just-placed grid's geometry so TP/SL lines reflect the latest placement.
+        // In non-multipos mode, after placing any non-owner slot, ensure slot 0's TP/SL
+        // stays anchored to slot 0's own grid geometry (not the newly placed grid).
+        // This prevents TP from jumping when Grid #2 is placed at a different price level.
         if (!multiPositionModeRef.current) {
           const side = activeSideRef.current
           const allSlots = side === "long" ? longSlots : shortSlots
@@ -1252,7 +1272,13 @@ export function GridConfigTab({
           if (ownerSlot) {
             const ownerConsoleId = `${baseConsoleId}:${activeChartId}:${side}:${ownerSlot.slotId}`
             const shared = activeSideSharedTpSlRef.current
-            const mergedCfg: GridConfig = { ...cfgRef.current, ...shared }
+            // Use slot 0's stored cfg as the geometry base — fall back to current cfg only
+            // if slot 0 is the active slot (meaning we are placing Grid #1).
+            const isOwnerActive = (side === "long" ? activeLongIdx : activeShortIdx) === 0
+            const ownerGeoCfg = isOwnerActive
+              ? cfgRef.current
+              : (slotCfgMapRef.current[ownerSlot.slotId] ?? cfgRef.current)
+            const mergedCfg: GridConfig = { ...ownerGeoCfg, ...shared }
             const ownerViz = calcGridVisualization(mergedCfg)
             applyGridTpSl(ownerConsoleId, {
               tpPrice: ownerViz.tpPrice,
