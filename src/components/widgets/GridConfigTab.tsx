@@ -550,13 +550,19 @@ export const GridConfigTab = memo(function GridConfigTab({
     return () => ro.disconnect()
   }, [])
 
-  const [cfg, setCfg] = useState<GridConfig>({
+  const [cfg, _setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
     symbol: externalSymbol ?? DEFAULT_GRID_CONFIG.symbol,
     side: externalFuturesSide ?? DEFAULT_GRID_CONFIG.side,
     entryPrice: externalEntryPrice ?? DEFAULT_GRID_CONFIG.entryPrice,
     leverage: externalLeverage ?? DEFAULT_GRID_CONFIG.leverage,
   })
+  const setCfg: typeof _setCfg = import.meta.env.DEV
+    ? (updater) => {
+        if (import.meta.env.DEV) console.log(`[GridConfigTab setCfg]`, new Error().stack?.split("\n")[2]?.trim())
+        _setCfg(updater as Parameters<typeof _setCfg>[0])
+      }
+    : _setCfg
   // Always-current cfg ref for use in effects/callbacks without stale closure
   const cfgRef = useRef(cfg)
 
@@ -616,14 +622,12 @@ export const GridConfigTab = memo(function GridConfigTab({
   }, [activeChartId, externalSymbol, externalEntryPrice])
   useEffect(() => {
     if (externalLeverage && externalLeverage > 0) {
-  
-      setCfg((p) => ({ ...p, leverage: externalLeverage }))
+      setCfg((p) => p.leverage === externalLeverage ? p : { ...p, leverage: externalLeverage })
     }
   }, [externalLeverage])
   useEffect(() => {
     if (externalFuturesSide) {
-  
-      setCfg((p) => ({ ...p, side: externalFuturesSide }))
+      setCfg((p) => p.side === externalFuturesSide ? p : { ...p, side: externalFuturesSide })
     }
   }, [externalFuturesSide])
 
@@ -681,7 +685,30 @@ export const GridConfigTab = memo(function GridConfigTab({
   // so that calcGridVisualization always works correctly from cfg
   useEffect(() => {
     if (multiPositionMode) return
-    setCfg((p) => ({ ...p, ...activeSideSharedTpSl }))
+    setCfg((p) => {
+      const s = activeSideSharedTpSl
+      // Bail out (return same reference) if all TP/SL scalar fields match
+      // and array fields are reference-equal (they come from shared state)
+      if (
+        p.tpEnabled === s.tpEnabled && p.tpMode === s.tpMode &&
+        p.tpPercent === s.tpPercent && p.tpClosePercent === s.tpClosePercent &&
+        p.multiTpEnabled === s.multiTpEnabled && p.multiTpCount === s.multiTpCount &&
+        p.multiTpLevels === s.multiTpLevels &&
+        p.tpRepositionEnabled === s.tpRepositionEnabled &&
+        p.perLevelTpEnabled === s.perLevelTpEnabled &&
+        p.perLevelTpGroups === s.perLevelTpGroups &&
+        p.slEnabled === s.slEnabled && p.slMode === s.slMode &&
+        p.slPercent === s.slPercent && p.slClosePercent === s.slClosePercent &&
+        p.resetTpEnabled === s.resetTpEnabled &&
+        p.resetTpTriggerLevels === s.resetTpTriggerLevels &&
+        p.defaultResetTpPercent === s.defaultResetTpPercent &&
+        p.defaultResetTpClosePercent === s.defaultResetTpClosePercent &&
+        p.resetTpRebuildTail === s.resetTpRebuildTail &&
+        p.resetTpPerLevelEnabled === s.resetTpPerLevelEnabled &&
+        p.resetTpPerLevelSettings === s.resetTpPerLevelSettings
+      ) return p
+      return { ...p, ...s }
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSideSharedTpSl, multiPositionMode])
 
