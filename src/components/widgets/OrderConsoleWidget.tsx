@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -406,6 +406,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }, 0)
   }
 
+  // Prevents cancelGridPreview immediately after order submit (keep TP/SL visible)
+  const noJustPlacedRef = useRef(false)
+
   // ── End New Order advanced state ────────────────────────────────────────────
 
   // ---- Resolve active chart info ----
@@ -599,6 +602,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const hasTpOrSl = noTpSl.tpEnabled || noTpSl.slEnabled
 
     if (!(qtyNum > 0 && p > 0) || !hasTpOrSl) {
+      // Don't cancel immediately after place — keep TP/SL visible
+      if (noJustPlacedRef.current) {
+        noJustPlacedRef.current = false
+        return
+      }
       cancelGridPreview(noConsoleId)
       return
     }
@@ -658,6 +666,93 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   useEffect(() => {
     return () => { cancelGridPreview(noConsoleId) }
   }, [noConsoleId])
+
+  // ---- Sync noTpSl from chart drag/x-click (New Order grid preview) ----
+  const noGridState = useGridOrderEntry(noConsoleId)
+  const noChartSlPrice = noGridState?.slPrice
+  const noChartTpLevels = noGridState?.tpLevels
+
+  // SL x-click: slPrice → null → deactivate slEnabled
+  const prevNoSlPriceRef = useRef<number | null | undefined>(undefined)
+  useEffect(() => {
+    if (prevNoSlPriceRef.current !== undefined && prevNoSlPriceRef.current !== null && noChartSlPrice === null) {
+      noUpd("slEnabled", false)
+    }
+    prevNoSlPriceRef.current = noChartSlPrice ?? null
+  }, [noChartSlPrice])
+
+  // SL drag: slPrice changed non-null→non-null → recalc slPercent
+  const prevNoSlPriceValueRef = useRef<number | null | undefined>(undefined)
+  const noExpectedSlPriceRef = useRef<number | null | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevNoSlPriceValueRef.current
+    prevNoSlPriceValueRef.current = noChartSlPrice ?? null
+    if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) return
+    if (Math.abs(noChartSlPrice - prev) < 1e-8) return
+    const exp = noExpectedSlPriceRef.current
+    if (exp !== undefined && exp !== null && Math.abs(noChartSlPrice - exp) < 1e-8) return
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    if (p <= 0) return
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+    const isLong = gSide === "long"
+    const newPct = isLong
+      ? (1 - noChartSlPrice / p) * 100
+      : (noChartSlPrice / p - 1) * 100
+    noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
+  }, [noChartSlPrice])
+
+  // TP x-click: tpLevels count decreased
+  const noChartTpLevelsKey = noChartTpLevels?.join(",") ?? ""
+  const prevNoTpLevelsKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevNoTpLevelsKeyRef.current
+    prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
+    if (prev === undefined) return
+    const prevLen = prev ? prev.split(",").length : 0
+    const curLen = noChartTpLevels?.length ?? 0
+    if (curLen >= prevLen) return
+    if (curLen === 0) {
+      noUpd("tpEnabled", false)
+      return
+    }
+    // Partial removal: sync multiTpLevels
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    if (p <= 0) return
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+    const isLong = gSide === "long"
+    const remaining = noChartTpLevels ?? []
+    const n = remaining.length
+    const base = Math.floor(100 / n)
+    const remainder = 100 - base * n
+    const newLevels = remaining.map((price, i) => {
+      const pct = isLong ? (price / p - 1) * 100 : (1 - price / p) * 100
+      return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent: i === n - 1 ? base + remainder : base }
+    })
+    setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpCount: n, multiTpLevels: newLevels, multiTpEnabled: n > 1 }))
+  }, [noChartTpLevelsKey])
+
+  // TP drag: tpLevels values changed (count same) → recalc tpPercent
+  const prevNoTpLevelsValuesRef = useRef<number[] | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevNoTpLevelsValuesRef.current
+    const cur = noChartTpLevels
+    prevNoTpLevelsValuesRef.current = cur ? [...cur] : undefined
+    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
+    const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
+    if (!changed) return
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    if (p <= 0) return
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+    const isLong = gSide === "long"
+    const newLevels = cur.map((price, i) => {
+      const pct = isLong ? (price / p - 1) * 100 : (1 - price / p) * 100
+      return {
+        tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+        closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
+      }
+    })
+    setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpLevels: newLevels }))
+  }, [noChartTpLevelsKey])
 
   // ---- Push TP to context when form changes ----
   useEffect(() => {
@@ -855,6 +950,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
+    // Keep TP/SL lines visible after order is placed
+    if (noTpSl.tpEnabled || noTpSl.slEnabled) {
+      noJustPlacedRef.current = true
+    }
     resetFormToNew()
 
     setTimeout(() => {

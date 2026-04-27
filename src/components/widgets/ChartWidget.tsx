@@ -1163,9 +1163,15 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // ---- Compose orders to render ----
   // Managed mode: read from context
   // Standalone mode: use local state
-  const draftForChart: PlacedOrder | undefined = hasOrderConsole
-    ? (draftOrders[widget.id] ? { ...draftOrders[widget.id]!, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
-    : localDraft
+  // Suppress draftOrder when New Order grid preview is active (avoids duplicate lines)
+  const hasNewOrderPreview = Object.values(gridOrders).some(
+    (g) => g?.chartId === widget.id && g.state === "preview" && g.consoleId.startsWith("no:")
+  )
+  const draftForChart: PlacedOrder | undefined = hasNewOrderPreview
+    ? undefined
+    : hasOrderConsole
+      ? (draftOrders[widget.id] ? { ...draftOrders[widget.id]!, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
+      : localDraft
   // Always read placed orders from context so PortfolioWidget sees them regardless of mode
   // Exclude grid orders — they are rendered by GridOrdersOverlay (avoid double render)
   const placedForChart: PlacedOrder[] = (ctxPlacedOrders[widget.id] ?? []).filter(
