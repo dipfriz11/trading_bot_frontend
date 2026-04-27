@@ -813,11 +813,20 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
   }, [tpSlOrders, activeChart?.id])
 
-  // Reset TP/SL refs on chart switch
+  // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {
     console.log(`[TpSl][chart switch] new chartId=${activeChart?.id} symbol=${activeChart?.symbol} current tp="${tp}" sl="${sl}"`)
     lastTpPushedRef.current = null
     lastSlPushedRef.current = null
+    if (!activeChart?.id) return
+    // Immediately push current form values to the new chart to override any stale tpSl stored there
+    const tpNum = parseFloat(tp)
+    const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
+    const slNum = parseFloat(sl)
+    const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
+    lastTpPushedRef.current = newTp
+    lastSlPushedRef.current = newSl
+    setTpSl(activeChart.id, { tp: newTp, sl: newSl })
   }, [activeChart?.id])
 
   const handlePriceChange = (v: string) => {

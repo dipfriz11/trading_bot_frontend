@@ -611,6 +611,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => {
     setGridOrdersMap((prev) => {
       if (data === null) {
+        if (!prev[consoleId]) return prev
         const n = { ...prev }
         delete n[consoleId]
         return n
@@ -618,7 +619,21 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const existing = prev[consoleId]
       // If already placed, mark as pending update instead of overwriting
       if (existing?.state === "placed") {
+        if (existing.pendingUpdate) return prev
         return { ...prev, [consoleId]: { ...existing, pendingUpdate: true } }
+      }
+      // Stable check: avoid re-render if nothing meaningful changed
+      if (existing?.state === "preview") {
+        const ordersMatch = existing.orders.length === data.orders.length &&
+          existing.orders.every((o, i) => o.id === data.orders[i].id && o.price === data.orders[i].price && o.qty === data.orders[i].qty)
+        if (
+          ordersMatch &&
+          existing.chartId === data.chartId &&
+          existing.tpPrice === data.tpPrice &&
+          existing.slPrice === data.slPrice &&
+          existing.symbol === data.symbol &&
+          existing.side === data.side
+        ) return prev
       }
       return { ...prev, [consoleId]: { ...data, state: "preview", pendingUpdate: false } }
     })
