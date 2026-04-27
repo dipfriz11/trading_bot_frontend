@@ -180,6 +180,7 @@ interface TerminalContextValue {
 
   // Grid orders bridge
   gridOrders: GridOrderMap
+  gridOrdersRef: React.RefObject<GridOrderMap>
   setGridPreview: (consoleId: string, data: Omit<ChartGridOrders, "state" | "pendingUpdate"> | null) => void
   placeGridOrders: (consoleId: string) => void
   cancelGridOrders: (consoleId: string) => void
@@ -211,6 +212,25 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   placedOrdersRef.current = placedOrders
   gridOrdersRef.current = gridOrders
   balancesRef.current = balances
+
+  // ── DEV render counter ────────────────────────────────────────────────────
+  const _devRenderCount = React.useRef(0)
+  const _devPrevState = React.useRef({ state, activeChartId, draftOrders, placedOrders, isDraggingOrder, editingOrderId, balances, gridOrders })
+  if (import.meta.env.DEV) {
+    _devRenderCount.current++
+    const prev = _devPrevState.current
+    const changed: string[] = []
+    if (prev.state !== state) changed.push("state")
+    if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
+    if (prev.draftOrders !== draftOrders) changed.push("draftOrders")
+    if (prev.placedOrders !== placedOrders) changed.push("placedOrders")
+    if (prev.isDraggingOrder !== isDraggingOrder) changed.push("isDraggingOrder")
+    if (prev.editingOrderId !== editingOrderId) changed.push("editingOrderId")
+    if (prev.balances !== balances) changed.push("balances")
+    if (prev.gridOrders !== gridOrders) changed.push("gridOrders")
+    _devPrevState.current = { state, activeChartId, draftOrders, placedOrders, isDraggingOrder, editingOrderId, balances, gridOrders }
+    console.log(`[TerminalProvider] render #${_devRenderCount.current} changed=[${changed.join(",")}]`)
+  }
   const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
 
   useEffect(() => {
@@ -743,6 +763,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         setTpSl,
         clearTpSl,
         gridOrders,
+        gridOrdersRef,
         setGridPreview,
         placeGridOrders,
         cancelGridOrders,
@@ -765,4 +786,11 @@ export function useTerminal() {
   const ctx = useContext(TerminalContext)
   if (!ctx) throw new Error("useTerminal must be used within TerminalProvider")
   return ctx
+}
+
+// Subscribe only to a single consoleId entry — avoids re-renders from unrelated grid updates
+export function useGridOrderEntry(consoleId: string): ChartGridOrders | undefined {
+  const ctx = useContext(TerminalContext)
+  if (!ctx) throw new Error("useGridOrderEntry must be used within TerminalProvider")
+  return ctx.gridOrders[consoleId]
 }

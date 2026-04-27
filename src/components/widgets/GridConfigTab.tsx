@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp, Play, RotateCcw } from "lucide-react"
 import type { GridConfig, GridMultiTpLevel, GridSharedTpSl } from "@/types/terminal"
 import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
-import { useTerminal } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
 import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
 import { nanoid } from "@/lib/nanoid"
 
@@ -484,11 +484,12 @@ interface GridConfigTabProps {
   activeChartId?: string | null
   accountId?: string
   exchangeId?: string
+  isVisible?: boolean
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function GridConfigTab({
+export const GridConfigTab = memo(function GridConfigTab({
   symbol: externalSymbol,
   marketType = "futures",
   futuresSide: externalFuturesSide,
@@ -501,7 +502,20 @@ export function GridConfigTab({
   activeChartId,
   accountId,
   exchangeId,
+  isVisible = true,
 }: GridConfigTabProps) {
+  // ── DEV render counter ────────────────────────────────────────────────────
+  const _devRc = useRef(0)
+  const _devPrevIsVisible = useRef(isVisible)
+  if (import.meta.env.DEV) {
+    _devRc.current++
+    const changed = _devPrevIsVisible.current !== isVisible ? ` *** CHANGED from ${_devPrevIsVisible.current}` : ""
+    _devPrevIsVisible.current = isVisible
+    if (changed || _devRc.current <= 4) {
+      console.log(`[GridConfigTab] render #${_devRc.current} isVisible=${isVisible}${changed}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
+    }
+  }
+
   // ── Multi-grid slots (separate per side) ─────────────────────────────────
   const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
   const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
@@ -716,11 +730,12 @@ export function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrdersRef, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each console+chart+side+slot combination is its own independent slot
   const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
-  const currentGridState = gridOrders[consoleId]
+  // Subscribe only to this specific consoleId to avoid re-renders from other grids
+  const currentGridState = useGridOrderEntry(consoleId)
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
@@ -810,6 +825,7 @@ export function GridConfigTab({
         leverage: p.leverage,
         side: cfg.side,
       }))
+      if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.side])
@@ -890,6 +906,9 @@ export function GridConfigTab({
     // React whenever slPrice transitions from non-null to null (user clicked x on chart)
     if (prevChartSlPriceRef.current !== undefined && prevChartSlPriceRef.current !== null && chartSlPrice === null) {
       setCfg((p) => ({ ...p, slEnabled: false }))
+      // Also update shared state so the shared→cfg sync effect doesn't overwrite this
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, slEnabled: false }))
     }
     prevChartSlPriceRef.current = chartSlPrice
   }, [chartSlPrice])
@@ -938,21 +957,23 @@ export function GridConfigTab({
     if (chartTpLevelsLen >= prev) return
 
     if (chartTpLevelsLen === 0) {
-      // All TPs removed → deactivate block
+      // All TPs removed → deactivate block; also update shared state to prevent overwrite
       setCfg((p) => ({ ...p, tpEnabled: false }))
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, tpEnabled: false }))
       return
     }
 
     // Partial removal — user removed one TP on the chart
-    // Same logic for both preview and placed: sync form to match remaining chart TPs
     const remaining = chartTpLevels ?? []
+    let newTpPercent: number | null = null
+    let newMultiLevels: { tpPercent: number; closePercent: number }[] | null = null
     setCfg((p) => {
       const isLong = p.side === "long"
       const viz = calcGridVisualization(p)
       const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
       const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
       const n = remaining.length
-      // Redistribute closePercent evenly: floor for all, add remainder to last
       const base = Math.floor(100 / n)
       const remainder = 100 - base * n
       const newLevels = remaining.map((price, i) => {
@@ -962,7 +983,8 @@ export function GridConfigTab({
         const closePercent = i === n - 1 ? base + remainder : base
         return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent }
       })
-      const newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
+      newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
+      newMultiLevels = newLevels
       return {
         ...p,
         tpPercent: newTpPercent,
@@ -971,6 +993,14 @@ export function GridConfigTab({
         multiTpEnabled: n > 1,
       }
     })
+    // Also sync shared state to prevent shared→cfg effect from overwriting
+    if (newTpPercent !== null && newMultiLevels !== null) {
+      const tp = newTpPercent
+      const levels = newMultiLevels as { tpPercent: number; closePercent: number }[]
+      const n = levels.length
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, tpPercent: tp, multiTpCount: n, multiTpLevels: levels, multiTpEnabled: n > 1 }))
+    }
   }, [chartTpLevelsLen, isPlaced])
 
   // When tpEnabled is turned ON while placed → immediately apply TP to chart from config
@@ -1177,9 +1207,28 @@ export function GridConfigTab({
   }
 
   // Push preview whenever config changes and totalQuote > 0
+  // DEV: track what triggered this effect
+  const prevPreviewDepsRef = useRef({ cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible })
   useEffect(() => {
+    if (import.meta.env.DEV) {
+      const prev = prevPreviewDepsRef.current
+      const changed: string[] = []
+      if (prev.cfg !== cfg) changed.push("cfg")
+      if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
+      if (prev.isPlaced !== isPlaced) changed.push("isPlaced")
+      if (prev.activeLongIdx !== activeLongIdx) changed.push("activeLongIdx")
+      if (prev.activeShortIdx !== activeShortIdx) changed.push("activeShortIdx")
+      if (prev.multiPositionMode !== multiPositionMode) changed.push("multiPositionMode")
+      if (prev.isVisible !== isVisible) changed.push("isVisible")
+      prevPreviewDepsRef.current = { cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible }
+      console.log(`[GridConfigTab previewEffect] consoleId=${consoleId} changed=[${changed.join(",")}]`)
+    }
+    if (!isVisible) {
+      if (!isPlaced) cancelGridOrders(consoleId)
+      return
+    }
     if (!activeChartId) {
-      if (gridOrders[consoleId]) cancelGridOrders(consoleId)
+      if (gridOrdersRef.current[consoleId]) cancelGridOrders(consoleId)
       return
     }
     if (cfg.totalQuote <= 0) {
@@ -1222,7 +1271,7 @@ export function GridConfigTab({
       marketType,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode])
+  }, [cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible])
 
   // When side switches, cancel preview for the OLD consoleId but leave placed grids intact
   const prevSideConsoleIdRef = useRef<string | null>(null)
@@ -1235,8 +1284,6 @@ export function GridConfigTab({
   }, [consoleId, cancelGridPreview])
 
   // On full unmount, cancel only preview slots (placed grids must survive tab switching)
-  const gridOrdersRef = useRef(gridOrders)
-  gridOrdersRef.current = gridOrders
   useEffect(() => {
     return () => {
       const prefix = `${baseConsoleId}:`
@@ -1610,7 +1657,7 @@ export function GridConfigTab({
               const sideColor = slotSide === "long" ? longColor : shortColor
               return sideSlots.map((slot, idx) => {
                 const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
-                const slotState = gridOrders[slotConsoleId]
+                const slotState = gridOrdersRef.current[slotConsoleId]
                 const slotPlaced = slotState?.state === "placed"
                 const slotPending = slotPlaced && slotState?.pendingUpdate
                 const isActive = isSideActive && idx === sideActiveIdx
@@ -1672,7 +1719,14 @@ export function GridConfigTab({
                       onClick={(e) => {
                         e.stopPropagation()
                         if (slotScrollCooldownRef.current) return
-                        const cancelId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
+                        // Find the actual consoleId from gridOrders — the chartId captured at place time
+                        // may differ from the current activeChartId (e.g. after chart switch).
+                        const suffix = `:${slotSide}:${slot.slotId}`
+                        const prefix = `${baseConsoleId}:`
+                        const matchedId = Object.keys(gridOrdersRef.current).find(
+                          (id) => id.startsWith(prefix) && id.endsWith(suffix)
+                        )
+                        const cancelId = matchedId ?? `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
                         cancelGridOrders(cancelId)
                         delete slotCfgMapRef.current[slotKey(slot.slotId)]
                         const targetSlots = slotSide === "long" ? longSlots : shortSlots
@@ -2463,4 +2517,4 @@ export function GridConfigTab({
       </div>
     </div>
   )
-}
+})

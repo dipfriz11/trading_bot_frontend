@@ -1,12 +1,312 @@
-import { useState, useEffect, useRef } from "react"
-import { CircleCheck as CheckCircle, Circle as XCircle, Clock } from "lucide-react"
-import type { Widget } from "@/types/terminal"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { ChevronDown, ChevronUp } from "lucide-react"
+import { createPortal } from "react-dom"
+import type { Widget, GridSharedTpSl, GridMultiTpLevel } from "@/types/terminal"
+import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
-import { useTerminal } from "@/contexts/TerminalContext"
+import { nanoid } from "@/lib/nanoid"
+import { calcGridVisualization } from "@/lib/grid-math"
+import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
-import { DcaTab } from "./DcaTab"
+import { TemplateBar } from "@/components/terminal/TemplateBar"
+import { useTemplates } from "@/hooks/useTemplates"
+
+// ─── Shared style constants (mirrors GridConfigTab) ──────────────────────────
+
+const _inputBase: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 4,
+  color: "rgba(200,214,229,0.9)",
+  padding: "3px 7px",
+  fontSize: 11,
+  fontFamily: "monospace",
+  width: "100%",
+  outline: "none",
+}
+
+// ─── UI helpers shared with Grid blocks ──────────────────────────────────────
+
+function _TinyTooltipIcon({ text, color }: { text: string; color?: string }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const openTooltip = () => {
+    const r = anchorRef.current?.getBoundingClientRect()
+    if (r) setPos({ x: r.left + r.width / 2, y: r.top })
+  }
+  return (
+    <span
+      ref={anchorRef}
+      onMouseEnter={openTooltip}
+      onMouseLeave={() => setPos(null)}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{ display: "inline-flex", alignItems: "center", cursor: "help", padding: "2px", pointerEvents: "auto" }}
+    >
+      <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: color ? 0.7 : 0.45, display: "block" }}>
+        <circle cx="5" cy="5" r="4.5" stroke={color ?? "rgba(200,214,229,0.6)"} />
+        <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill={color ?? "rgba(200,214,229,0.8)"} fontFamily="monospace">?</text>
+      </svg>
+      {pos && createPortal(
+        <div style={{
+          position: "fixed",
+          left: Math.max(8, Math.min(pos.x - 110, window.innerWidth - 248)),
+          top: pos.y - 8,
+          transform: "translateY(-100%)",
+          zIndex: 99999, width: 220,
+          background: "rgba(13,20,35,0.98)", border: `1px solid ${color ? "rgba(255,171,0,0.3)" : "rgba(30,111,239,0.25)"}`,
+          borderRadius: 5, padding: "7px 9px",
+          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none", whiteSpace: "normal",
+        }}>{text}</div>,
+        document.body
+      )}
+    </span>
+  )
+}
+
+function _NI({
+  value, onChange, placeholder, title, min, suffix, label, labelColor, tooltip, step,
+}: {
+  value: number | string; onChange: (v: number) => void
+  placeholder?: string; title?: string; min?: number; step?: number; suffix?: string; label?: string; labelColor?: string; tooltip?: string
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [localVal, setLocalVal] = useState(String(value))
+  const isFocused = useRef(false)
+
+  useEffect(() => {
+    if (!isFocused.current) setLocalVal(String(value))
+  }, [value])
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const s = step ?? 1
+    const handler = (e: WheelEvent) => {
+      e.preventDefault(); e.stopPropagation()
+      const delta = e.deltaY < 0 ? s : -s
+      const current = parseFloat(String(value)) || 0
+      const next = current + delta
+      const result = min !== undefined ? Math.max(min, next) : next
+      onChange(result); setLocalVal(String(result))
+    }
+    el.addEventListener("wheel", handler, { passive: false })
+    return () => el.removeEventListener("wheel", handler)
+  }, [onChange, min, value, step])
+
+  const tag = suffix ?? label
+  const tagW = tag ? tag.length * 5.5 + 8 : 0
+  const tooltipExtraW = tooltip ? 12 : 0
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        ref={ref}
+        type="text" inputMode="decimal" value={localVal}
+        onChange={(e) => setLocalVal(e.target.value.replace(/[^0-9.-]/g, ""))}
+        onFocus={() => { isFocused.current = true }}
+        onBlur={() => {
+          isFocused.current = false
+          const parsed = parseFloat(localVal)
+          if (!isNaN(parsed)) {
+            const result = min !== undefined ? Math.max(min, parsed) : parsed
+            onChange(result); setLocalVal(String(result))
+          } else { setLocalVal(String(value)) }
+        }}
+        placeholder={placeholder ?? "0"} title={tooltip ? undefined : (title ?? placeholder)}
+        style={{ ..._inputBase, paddingRight: tag ? tagW + tooltipExtraW + 2 : undefined }}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+      {tag && (
+        <span style={{ position: "absolute", right: tooltip ? 16 : 5, top: "50%", transform: "translateY(-50%)", fontSize: 7.5, opacity: labelColor ? 1 : 0.32, fontFamily: "monospace", pointerEvents: "none", whiteSpace: "nowrap", letterSpacing: "0.03em", color: labelColor }}>
+          {tag}
+        </span>
+      )}
+      {tooltip && (
+        <span style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center" }}>
+          <_TinyTooltipIcon text={tooltip} color={labelColor} />
+        </span>
+      )}
+    </div>
+  )
+}
+
+function _NITooltip({
+  value, onChange, label, min, title, tooltip,
+}: {
+  value: number; onChange: (v: number) => void
+  label?: string; min?: number; title?: string; tooltip: string
+}) {
+  const [show, setShow] = useState(false)
+  const [localVal, setLocalVal] = useState(String(value))
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setLocalVal(String(value))
+  }, [value])
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        ref={inputRef}
+        type="text" inputMode="decimal" value={localVal}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/[^0-9.]/g, "")
+          setLocalVal(raw)
+          const parsed = parseFloat(raw)
+          if (!isNaN(parsed)) onChange(min !== undefined ? Math.max(min, parsed) : parsed)
+        }}
+        onBlur={() => {
+          const parsed = parseFloat(localVal)
+          if (isNaN(parsed) || localVal === "") setLocalVal(String(value))
+        }}
+        placeholder="0" title={title ?? label}
+        style={{ ..._inputBase, paddingRight: 60 }}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+      <div style={{ position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 3, pointerEvents: "none" }}>
+        <button
+          onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
+          onClick={() => setShow((s) => !s)}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", pointerEvents: "auto" }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.5 }}>
+            <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
+            <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.8)" fontFamily="monospace">?</text>
+          </svg>
+        </button>
+        <span style={{ fontSize: 7.5, opacity: 0.32, fontFamily: "monospace", whiteSpace: "nowrap", letterSpacing: "0.03em" }}>{label}</span>
+      </div>
+      {show && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 999,
+          background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
+          borderRadius: 5, padding: "7px 9px",
+          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none",
+        }}>{tooltip}</div>
+      )}
+    </div>
+  )
+}
+
+function _LabelTooltip({ label, tooltip, color, align = "left" }: { label: string; tooltip: string; color?: string; align?: "left" | "right" }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 3 }}>
+      <span style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase", color: color ?? "rgba(200,214,229,0.55)", fontWeight: 600 }}>
+        {label}
+      </span>
+      <button
+        onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", lineHeight: 1 }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.45 }}>
+          <circle cx="5" cy="5" r="4.5" stroke="rgba(200,214,229,0.6)" />
+          <text x="5" y="7.5" textAnchor="middle" fontSize="6.5" fill="rgba(200,214,229,0.8)" fontFamily="monospace">?</text>
+        </svg>
+      </button>
+      {show && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)",
+          ...(align === "right" ? { right: 0 } : { left: 0 }),
+          zIndex: 999, minWidth: 160, maxWidth: 220,
+          background: "rgba(13,20,35,0.98)", border: "1px solid rgba(30,111,239,0.25)",
+          borderRadius: 5, padding: "7px 9px",
+          fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.75)", lineHeight: 1.6,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.5)", pointerEvents: "none", whiteSpace: "normal",
+        }}>{tooltip}</div>
+      )}
+    </div>
+  )
+}
+
+function _MiniToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      onClick={() => onChange(!checked)}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        width: 32, height: 16, borderRadius: 8, flexShrink: 0, cursor: "pointer",
+        background: checked ? "rgba(0,229,160,0.35)" : "rgba(255,255,255,0.1)",
+        border: `1px solid ${checked ? "rgba(0,229,160,0.5)" : "rgba(255,255,255,0.15)"}`,
+        position: "relative", transition: "background 0.15s",
+      }}
+    >
+      <div style={{
+        position: "absolute", top: 2, left: checked ? 16 : 2,
+        width: 10, height: 10, borderRadius: "50%",
+        background: checked ? "#00e5a0" : "rgba(255,255,255,0.4)",
+        transition: "left 0.15s",
+      }} />
+    </div>
+  )
+}
+
+function _SectionHead({
+  title, expanded, onToggle, rightSlot,
+}: {
+  title: string; expanded: boolean; onToggle: () => void; rightSlot?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between w-full" style={{ padding: "5px 0" }}>
+      <button
+        className="flex items-center gap-1.5"
+        style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, flex: 1, textAlign: "left" }}
+        onClick={onToggle}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <span style={{ fontSize: 10, fontFamily: "monospace", color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+          {title}
+        </span>
+      </button>
+      <div className="flex items-center gap-1.5">
+        {rightSlot && (
+          <div
+            className="flex items-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {rightSlot}
+          </div>
+        )}
+        <button
+          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
+          onClick={onToggle}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {expanded ? <ChevronUp size={9} style={{ opacity: 0.4 }} /> : <ChevronDown size={9} style={{ opacity: 0.4 }} />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function _Divider() {
+  return <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginBottom: 6 }} />
+}
+
+function _distributeClose(count: number): number[] {
+  const base = Math.floor(100 / count)
+  const remainder = 100 - base * count
+  return Array.from({ length: count }, (_, i) => i === count - 1 ? base + remainder : base)
+}
+
+function _rebalanceClose(levels: GridMultiTpLevel[], changedIndex: number, newValue: number): GridMultiTpLevel[] {
+  if (levels.length <= 1) return [{ ...levels[0], closePercent: 100 }]
+  const clamped = Math.min(100, Math.max(1, newValue))
+  const lastIdx = levels.length - 1
+  const updated = levels.map((l, i) => i === changedIndex ? { ...l, closePercent: clamped } : l)
+  if (changedIndex !== lastIdx) {
+    const sumOthers = updated.slice(0, lastIdx).reduce((s, l) => s + l.closePercent, 0)
+    updated[lastIdx] = { ...updated[lastIdx], closePercent: Math.max(1, 100 - sumOthers) }
+  }
+  return updated
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function priceToString(price: number): string {
   if (price >= 1000) return price.toFixed(2)
@@ -17,26 +317,8 @@ function priceToString(price: number): string {
 
 type OrderSide = "buy" | "sell"
 type OrderType = "market" | "limit" | "stop"
-type OrderStatus = "filled" | "cancelled" | "pending"
 type AnchorField = "qty" | "amount"
 
-type Order = {
-  id: string
-  side: OrderSide
-  type: OrderType
-  symbol: string
-  qty: string
-  price?: string
-  status: OrderStatus
-  time: string
-}
-
-const MOCK_ORDERS: Order[] = [
-  { id: "o1", side: "buy",  type: "limit",  symbol: "BTC/USDT", qty: "0.1",  price: "67200",  status: "filled",    time: "14:22:01" },
-  { id: "o2", side: "sell", type: "market", symbol: "ETH/USDT", qty: "1.5",  price: undefined, status: "filled",    time: "14:18:45" },
-  { id: "o3", side: "buy",  type: "stop",   symbol: "SOL/USDT", qty: "10",   price: "148.00", status: "cancelled", time: "13:55:10" },
-  { id: "o4", side: "sell", type: "limit",  symbol: "BTC/USDT", qty: "0.05", price: "68000",  status: "pending",   time: "now" },
-]
 
 const MOCK_PRICES: Record<string, number> = {
   "BTC/USDT": 67500, "ETH/USDT": 3450, "BNB/USDT": 590, "SOL/USDT": 185,
@@ -55,9 +337,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     deductOrderBalance,
     refundOrderBalance,
     tpSlOrders, setTpSl,
+    setGridPreview, cancelGridPreview,
   } = useTerminal()
 
-  const [tab, setTab] = useState<"new" | "history" | "grid" | "dca">("new")
+  const [tab, setTab] = useState<"new" | "grid">("new")
+  const _devTabRef = useRef(tab)
+  if (import.meta.env.DEV && _devTabRef.current !== tab) {
+    console.log(`[OrderConsoleWidget] tab changed: ${_devTabRef.current} → ${tab}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
+    _devTabRef.current = tab
+  }
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
@@ -67,13 +355,61 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const [qty, setQty] = useState("")
   const [amount, setAmount] = useState("")
   const [anchor, setAnchor] = useState<AnchorField>("qty")
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS)
   const [lastResult, setLastResult] = useState<{ success: boolean; msg: string } | null>(null)
   // True when user has manually edited the form while a placed order is selected (editingOrderId set)
   const [formEditMode, setFormEditMode] = useState(false)
   // Suppresses draft re-creation immediately after submit
   const suppressDraftRef = useRef(false)
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
+
+  // ── New Order advanced state ────────────────────────────────────────────────
+  const [noProMode, setNoProMode] = useState(false)
+  const [noMultiPositionMode, setNoMultiPositionMode] = useState(false)
+  const [noTpSl, setNoTpSl] = useState<GridSharedTpSl>({ ...DEFAULT_GRID_SHARED_TP_SL })
+  const [noTrailEnabled, setNoTrailEnabled] = useState(false)
+  const [noTrailTriggerPercent, setNoTrailTriggerPercent] = useState(1.0)
+  const [noTrailLimitPriceEnabled, setNoTrailLimitPriceEnabled] = useState(false)
+  const [noTrailLimitPrice, setNoTrailLimitPrice] = useState(0)
+  const [noAutoEnabled, setNoAutoEnabled] = useState(false)
+  const [noStopOnSl, setNoStopOnSl] = useState(false)
+  const [noStopNew, setNoStopNew] = useState(false)
+  const [noOpen, setNoOpen] = useState({ trail: true, tp: true, sl: true })
+  const noTog = (k: keyof typeof noOpen) => setNoOpen((p) => ({ ...p, [k]: !p[k] }))
+
+  const noUpd = useCallback(<K extends keyof GridSharedTpSl>(key: K, val: GridSharedTpSl[K]) => {
+    setNoTpSl((p) => ({ ...p, [key]: val }))
+  }, [])
+
+  // Stable consoleId for New Order TP/SL grid preview (1-order "grid")
+  const noConsoleId = `${_props.widget.id}:no`
+  // Stable order ID ref so the grid line doesn't flicker on re-render
+  const noOrderIdRef = useRef<string>(nanoid())
+
+  // Templates for New Order (shared namespace "grid" with Grid tab)
+  const { templates: noTemplates, saveTemplate: noSaveTemplate, deleteTemplate: noDeleteTemplate } = useTemplates<GridSharedTpSl>("grid")
+  const [noActiveTemplateId, setNoActiveTemplateId] = useState<string | null>(null)
+  const [noSavedCfgJson, setNoSavedCfgJson] = useState<string | null>(null)
+  const noIsDirty = noActiveTemplateId !== null && noSavedCfgJson !== JSON.stringify(noTpSl)
+
+  const handleNoSelectTemplate = (t: { id: string; config: GridSharedTpSl }) => {
+    setNoTpSl(t.config)
+    setNoActiveTemplateId(t.id)
+    setNoSavedCfgJson(JSON.stringify(t.config))
+  }
+
+  const handleNoSaveTemplate = (name: string) => {
+    noSaveTemplate(name, noTpSl)
+    setTimeout(() => {
+      const all = JSON.parse(localStorage.getItem("crypterm:templates:grid") ?? "[]") as Array<{ id: string; name: string }>
+      const found = all.find((t) => t.name === name)
+      if (found) { setNoActiveTemplateId(found.id); setNoSavedCfgJson(JSON.stringify(noTpSl)) }
+    }, 0)
+  }
+
+  // Prevents cancelGridPreview immediately after order submit (keep TP/SL visible)
+  const noJustPlacedRef = useRef(false)
+
+  // ── End New Order advanced state ────────────────────────────────────────────
 
   // ---- Resolve active chart info ----
   const chartWidgets = activeTab?.widgets.filter((w) => w.type === "chart") ?? []
@@ -138,6 +474,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- Push draft order to context whenever form changes ----
   useEffect(() => {
     if (!activeChart) return
+    // Don't show New Order draft while Grid tab is active
+    if (tab !== "new") {
+      setDraftOrder(activeChart.id, undefined)
+      return
+    }
     if (suppressDraftRef.current) return
     if (isDraggingOrder) return
     if (settingPriceFromExternalRef.current) return
@@ -154,7 +495,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       lastDraftPricePushedRef.current = 0
       setDraftOrder(activeChart.id, undefined)
     }
-  }, [effectiveSide, price, qty, orderType, activeChart?.id, isDraggingOrder, editingOrderId])
+  }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, isDraggingOrder, editingOrderId])
 
   // ---- Sync form when DRAFT is dragged on the chart ----
   // Only fires when draftOrders[activeChart.id].price changes due to a real chart drag.
@@ -248,6 +589,170 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
     prevChartIdRef.current = activeChart?.id ?? null
   }, [activeChart?.id])
+
+  // ---- New Order: push TP/SL preview lines to chart via grid infrastructure ----
+  useEffect(() => {
+    if (!activeChart || tab !== "new") {
+      cancelGridPreview(noConsoleId)
+      return
+    }
+
+    const qtyNum = parseFloat(qty)
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(price) || 0)
+    const hasTpOrSl = noTpSl.tpEnabled || noTpSl.slEnabled
+
+    if (!(qtyNum > 0 && p > 0) || !hasTpOrSl) {
+      // Don't cancel immediately after place — keep TP/SL visible
+      if (noJustPlacedRef.current) {
+        noJustPlacedRef.current = false
+        return
+      }
+      cancelGridPreview(noConsoleId)
+      return
+    }
+
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+
+    // Minimal 1-order GridConfig to reuse calcGridVisualization TP/SL math
+    const miniCfg = {
+      enabled: true, symbol, side: gSide,
+      ordersCount: 1, entryPrice: p,
+      topPrice: 0, bottomPrice: 0,
+      totalQuote: qtyNum * p, budgetMode: "quote" as const,
+      leverage: posSettings.leverage,
+      gridType: "arithmetic" as const, entryType: "limit" as const,
+      placementMode: "step_percent" as const,
+      firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
+      direction: "down" as const, qtyMode: "quote" as const,
+      multiplier: 1, multiplierEnabled: false, density: 1,
+      gridMode: "standard" as const,
+      tpEnabled: noTpSl.tpEnabled, tpMode: noTpSl.tpMode,
+      tpPercent: noTpSl.tpPercent, tpClosePercent: noTpSl.tpClosePercent,
+      multiTpEnabled: noTpSl.multiTpEnabled, multiTpCount: noTpSl.multiTpCount,
+      multiTpLevels: noTpSl.multiTpLevels,
+      tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
+      slEnabled: noTpSl.slEnabled, slMode: noTpSl.slMode,
+      slPercent: noTpSl.slPercent, slClosePercent: noTpSl.slClosePercent,
+      trailEnabled: false, trailTriggerPercent: 1,
+      trailLimitPriceEnabled: false, trailLimitPrice: 0,
+      autoEnabled: false, stopOnSl: false, stopNew: false,
+      resetTpEnabled: false, resetTpTriggerLevels: [],
+      defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
+      resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+    }
+
+    const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
+
+    // When noTpSl grid preview is active, clear the simple tpSlOrders to avoid duplicate lines
+    setTpSl(activeChart.id, { tp: null, sl: null })
+
+    setGridPreview(noConsoleId, {
+      chartId: activeChart.id,
+      consoleId: noConsoleId,
+      side: gSide,
+      orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
+      tpPrice: viz.tpPrice,
+      slPrice: viz.slPrice,
+      tpLevels: viz.tpLevels,
+      symbol,
+      leverage: posSettings.leverage,
+      accountId,
+      exchangeId,
+      marketType,
+    })
+  }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
+
+  // Cleanup New Order preview on unmount
+  useEffect(() => {
+    return () => { cancelGridPreview(noConsoleId) }
+  }, [noConsoleId])
+
+  // ---- Sync noTpSl from chart drag/x-click (New Order grid preview) ----
+  const noGridState = useGridOrderEntry(noConsoleId)
+  const noChartSlPrice = noGridState?.slPrice
+  const noChartTpLevels = noGridState?.tpLevels
+
+  // SL x-click: slPrice → null → deactivate slEnabled
+  const prevNoSlPriceRef = useRef<number | null | undefined>(undefined)
+  useEffect(() => {
+    if (prevNoSlPriceRef.current !== undefined && prevNoSlPriceRef.current !== null && noChartSlPrice === null) {
+      noUpd("slEnabled", false)
+    }
+    prevNoSlPriceRef.current = noChartSlPrice ?? null
+  }, [noChartSlPrice])
+
+  // SL drag: slPrice changed non-null→non-null → recalc slPercent
+  const prevNoSlPriceValueRef = useRef<number | null | undefined>(undefined)
+  const noExpectedSlPriceRef = useRef<number | null | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevNoSlPriceValueRef.current
+    prevNoSlPriceValueRef.current = noChartSlPrice ?? null
+    if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) return
+    if (Math.abs(noChartSlPrice - prev) < 1e-8) return
+    const exp = noExpectedSlPriceRef.current
+    if (exp !== undefined && exp !== null && Math.abs(noChartSlPrice - exp) < 1e-8) return
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    if (p <= 0) return
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+    const isLong = gSide === "long"
+    const newPct = isLong
+      ? (1 - noChartSlPrice / p) * 100
+      : (noChartSlPrice / p - 1) * 100
+    noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
+  }, [noChartSlPrice])
+
+  // TP x-click: tpLevels count decreased
+  const noChartTpLevelsKey = noChartTpLevels?.join(",") ?? ""
+  const prevNoTpLevelsKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevNoTpLevelsKeyRef.current
+    prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
+    if (prev === undefined) return
+    const prevLen = prev ? prev.split(",").length : 0
+    const curLen = noChartTpLevels?.length ?? 0
+    if (curLen >= prevLen) return
+    if (curLen === 0) {
+      noUpd("tpEnabled", false)
+      return
+    }
+    // Partial removal: sync multiTpLevels
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    if (p <= 0) return
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+    const isLong = gSide === "long"
+    const remaining = noChartTpLevels ?? []
+    const n = remaining.length
+    const base = Math.floor(100 / n)
+    const remainder = 100 - base * n
+    const newLevels = remaining.map((price, i) => {
+      const pct = isLong ? (price / p - 1) * 100 : (1 - price / p) * 100
+      return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent: i === n - 1 ? base + remainder : base }
+    })
+    setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpCount: n, multiTpLevels: newLevels, multiTpEnabled: n > 1 }))
+  }, [noChartTpLevelsKey])
+
+  // TP drag: tpLevels values changed (count same) → recalc tpPercent
+  const prevNoTpLevelsValuesRef = useRef<number[] | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevNoTpLevelsValuesRef.current
+    const cur = noChartTpLevels
+    prevNoTpLevelsValuesRef.current = cur ? [...cur] : undefined
+    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
+    const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
+    if (!changed) return
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    if (p <= 0) return
+    const gSide = effectiveSide === "buy" ? "long" : "short"
+    const isLong = gSide === "long"
+    const newLevels = cur.map((price, i) => {
+      const pct = isLong ? (price / p - 1) * 100 : (1 - price / p) * 100
+      return {
+        tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+        closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
+      }
+    })
+    setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpLevels: newLevels }))
+  }, [noChartTpLevelsKey])
 
   // ---- Push TP to context when form changes ----
   useEffect(() => {
@@ -409,14 +914,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     })
   }
 
-  const handleTpChange = (v: string) => {
-    setTp(v)
-  }
-
-  const handleSlChange = (v: string) => {
-    setSl(v)
-  }
-
   const handleSubmit = () => {
     if (!qty || parseFloat(qty) <= 0) return
     if (orderType !== "market" && !price) return
@@ -451,33 +948,19 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
 
-    const newOrder: Order = {
-      id, side: effectiveSide, type: orderType, symbol, qty,
-      price: orderType !== "market" ? price : undefined,
-      status: "pending",
-      time,
-    }
-
-    setOrders((prev) => [newOrder, ...prev])
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
+    // Keep TP/SL lines visible after order is placed
+    if (noTpSl.tpEnabled || noTpSl.slEnabled) {
+      noJustPlacedRef.current = true
+    }
     resetFormToNew()
 
     setTimeout(() => {
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "filled" } : o)))
       setLastResult(null)
     }, 1500)
   }
 
-  const handleCancel = (id: string) => {
-    setOrders((prev) => prev.map((o) => (o.id === id && o.status === "pending" ? { ...o, status: "cancelled" } : o)))
-  }
-
-  const statusIcon = (status: OrderStatus) => {
-    if (status === "filled")    return <CheckCircle size={10} style={{ color: "#00e5a0" }} />
-    if (status === "cancelled") return <XCircle     size={10} style={{ color: "#ff4757" }} />
-    return <Clock size={10} style={{ color: "#ffd32a" }} />
-  }
 
   const qtyBorder = anchor === "qty"    ? `1px solid ${effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
   const amtBorder = anchor === "amount" ? `1px solid ${effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
@@ -493,7 +976,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tab toggle */}
       <div className="flex-shrink-0 flex" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        {(["new", "history", "grid", "dca"] as const).map((t) => (
+        {(["new", "grid"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -506,14 +989,26 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             }}
             onMouseDown={stopProp}
           >
-            {t === "new" ? "New Order" : t === "history" ? "History" : t === "grid" ? "Grid" : "DCA"}
+            {t === "new" ? "New Order" : "Grid"}
           </button>
         ))}
       </div>
 
 
-      {tab === "new" ? (
-        <div className="flex-1 overflow-auto min-h-0 px-3 py-2 flex flex-col gap-2">
+      {tab === "new" && (
+        <div className="flex-1 overflow-auto min-h-0 flex flex-col">
+
+          {/* Template bar */}
+          <TemplateBar
+            templates={noTemplates}
+            activeId={noActiveTemplateId}
+            onSelect={handleNoSelectTemplate}
+            onSave={handleNoSaveTemplate}
+            onDelete={(id) => { noDeleteTemplate(id); if (id === noActiveTemplateId) setNoActiveTemplateId(null) }}
+            isDirty={noIsDirty}
+          />
+
+          <div className="flex-1 px-3 py-2 flex flex-col gap-2 overflow-auto min-h-0">
 
           {/* Chart selector / symbol display */}
           {chartWidgets.length > 0 ? (
@@ -536,11 +1031,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                     {activeChartId === cw.id ? "● " : "○ "}{cw.symbol ?? "—"}
                   </button>
                 ))}
-              </div>
-              {/* Symbol display (readonly, driven by chart) */}
-              <div className="text-xs font-mono px-2 py-1 rounded"
-                style={{ background: "rgba(255,255,255,0.04)", opacity: 0.8, border: "1px solid rgba(255,255,255,0.07)" }}>
-                {symbol}
               </div>
             </div>
           ) : (
@@ -566,48 +1056,71 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             inOrders={inOrders}
           />
 
-          {/* Side toggle: Spot = Buy/Sell, Futures = Long/Short */}
-          {marketType === "spot" ? (
-            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
-              {(["buy", "sell"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSide(s)}
-                  className="flex-1 text-xs font-mono py-1.5 transition-colors font-semibold uppercase tracking-wider"
-                  style={{
-                    background: side === s ? (s === "buy" ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
-                    color: side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
-                    fontSize: 10,
-                  }}
-                  onMouseDown={stopProp}
-                >
-                  {s === "buy" ? "BUY" : "SELL"}
-                </button>
-              ))}
+          {/* Side toggle + PRO/M-POS in one row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {/* Side toggle: Spot = Buy/Sell, Futures = Long/Short */}
+            <div className="flex rounded overflow-hidden flex-1" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+              {marketType === "spot" ? (
+                (["buy", "sell"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSide(s)}
+                    className="flex-1 text-xs font-mono py-1.5 transition-colors font-semibold uppercase tracking-wider"
+                    style={{
+                      background: side === s ? (s === "buy" ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)") : "transparent",
+                      color: side === s ? (s === "buy" ? "#00e5a0" : "#ff4757") : "rgba(255,255,255,0.3)",
+                      fontSize: 10,
+                    }}
+                    onMouseDown={stopProp}
+                  >
+                    {s === "buy" ? "BUY" : "SELL"}
+                  </button>
+                ))
+              ) : (
+                (["long", "short"] as const).map((fs) => (
+                  <button
+                    key={fs}
+                    onClick={() => activeChart && updateWidget(activeChart.id, { futuresSide: fs })}
+                    className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
+                    style={{
+                      background: futuresSide === fs
+                        ? (fs === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
+                        : "transparent",
+                      color: futuresSide === fs
+                        ? (fs === "long" ? "#00e5a0" : "#ff4757")
+                        : "rgba(255,255,255,0.3)",
+                      fontSize: 10,
+                    }}
+                    onMouseDown={stopProp}
+                  >
+                    {fs === "long" ? "LONG" : "SHORT"}
+                  </button>
+                ))
+              )}
             </div>
-          ) : (
-            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
-              {(["long", "short"] as const).map((fs) => (
-                <button
-                  key={fs}
-                  onClick={() => activeChart && updateWidget(activeChart.id, { futuresSide: fs })}
-                  className="flex-1 text-xs font-mono py-1.5 transition-colors font-bold uppercase tracking-wider"
-                  style={{
-                    background: futuresSide === fs
-                      ? (fs === "long" ? "rgba(0,229,160,0.18)" : "rgba(255,71,87,0.18)")
-                      : "transparent",
-                    color: futuresSide === fs
-                      ? (fs === "long" ? "#00e5a0" : "#ff4757")
-                      : "rgba(255,255,255,0.3)",
-                    fontSize: 10,
-                  }}
-                  onMouseDown={stopProp}
-                >
-                  {fs === "long" ? "LONG" : "SHORT"}
-                </button>
-              ))}
+
+            {/* PRO + M-POS toggles */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+              <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
+              <_MiniToggle
+                checked={noProMode}
+                onChange={(v) => {
+                  setNoProMode(v)
+                  if (!v) setNoMultiPositionMode(false)
+                }}
+              />
+              {noProMode && (
+                <>
+                  <div style={{ width: 1, height: 12, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 8, fontFamily: "monospace", opacity: noMultiPositionMode ? 0.85 : 0.3, textTransform: "uppercase", letterSpacing: "0.05em", color: noMultiPositionMode ? "rgba(255,170,0,0.9)" : undefined, whiteSpace: "nowrap" }}>M-pos</span>
+                  <_MiniToggle
+                    checked={noMultiPositionMode}
+                    onChange={(v) => setNoMultiPositionMode(v)}
+                  />
+                </>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Order type */}
           <div className="flex gap-1">
@@ -733,33 +1246,231 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             ))}
           </div>
 
-          {/* TP / SL */}
-          <div className="grid grid-cols-2 gap-1">
-            <div className="flex flex-col gap-0.5">
-              <label className="text-xs font-mono" style={{ opacity: 0.4, fontSize: 10, color: "#00e5a0" }}>Take Profit</label>
-              <input
-                type="number"
-                value={tp}
-                onChange={(e) => handleTpChange(e.target.value)}
-                placeholder="0.00"
-                className="text-xs font-mono outline-none px-2 py-1 w-full"
-                style={{ border: tp ? "1px solid rgba(0,229,160,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: tp ? "#00e5a0" : "rgba(200,214,229,0.9)", background: "rgba(0,229,160,0.04)" }}
-                onMouseDown={stopProp}
+          {/* ── Trail + Auto ─────────────────────────────────── */}
+          <_Divider />
+          <div style={{ marginBottom: 2 }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <_LabelTooltip
+                label="Trail"
+                tooltip="Трейлинг — ордер автоматически перемещается за ценой, когда цена уходит за край на заданный процент."
               />
+              <div style={{ marginLeft: 5 }}>
+                <_MiniToggle
+                  checked={noTrailEnabled}
+                  onChange={(v) => {
+                    setNoTrailEnabled(v)
+                    if (v) setNoOpen((p) => ({ ...p, trail: true }))
+                  }}
+                />
+              </div>
+              {noTrailEnabled && (
+                <button
+                  onClick={() => noTog("trail")}
+                  style={{ marginLeft: 4, background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", opacity: 0.45, transition: "opacity 0.15s" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d={noOpen.trail ? "M2 3.5 L5 6.5 L8 3.5" : "M2 6.5 L5 3.5 L8 6.5"} stroke="rgba(200,214,229,0.8)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              {/* Auto */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                <_LabelTooltip
+                  label="Auto"
+                  color={noAutoEnabled ? "rgba(52,211,153,0.8)" : undefined}
+                  tooltip="Авто-цикл: после срабатывания TP новый ордер автоматически размещается по текущей рыночной цене."
+                />
+                <_MiniToggle
+                  checked={noAutoEnabled}
+                  onChange={(v) => {
+                    setNoAutoEnabled(v)
+                    if (!v) { setNoStopOnSl(false); setNoStopNew(false) }
+                  }}
+                />
+                {noAutoEnabled && (
+                  <>
+                    <_LabelTooltip
+                      label="SL"
+                      color={noStopOnSl ? "rgba(248,113,113,0.45)" : "rgba(248,113,113,0.75)"}
+                      tooltip={noStopOnSl
+                        ? "После срабатывания SL новый цикл НЕ запускается — цикл останавливается."
+                        : "После срабатывания SL новый ордер создаётся автоматически. Включите чтобы остановить цикл после SL."}
+                    />
+                    <_MiniToggle checked={noStopOnSl} onChange={(v) => setNoStopOnSl(v)} />
+                    <_LabelTooltip
+                      label="Stop New"
+                      color={noStopNew ? "rgba(251,191,36,0.8)" : undefined}
+                      tooltip="Остановить цикл после следующего срабатывания TP/SL."
+                      align="right"
+                    />
+                    <_MiniToggle checked={noStopNew} onChange={(v) => setNoStopNew(v)} />
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-xs font-mono" style={{ opacity: 0.4, fontSize: 10, color: "#ffaa44" }}>Stop Loss</label>
-              <input
-                type="number"
-                value={sl}
-                onChange={(e) => handleSlChange(e.target.value)}
-                placeholder="0.00"
-                className="text-xs font-mono outline-none px-2 py-1 w-full"
-                style={{ border: sl ? "1px solid rgba(255,170,68,0.4)" : "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: sl ? "#ffaa44" : "rgba(200,214,229,0.9)", background: "rgba(255,170,68,0.04)" }}
-                onMouseDown={stopProp}
-              />
-            </div>
+            {noTrailEnabled && noOpen.trail && (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 5 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <_NITooltip
+                    value={noTrailTriggerPercent}
+                    onChange={(v) => setNoTrailTriggerPercent(v)}
+                    label="Trigger %"
+                    title="Trail trigger %"
+                    tooltip="Процент выхода цены, при котором запускается трейлинг."
+                  />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                  <_LabelTooltip
+                    label="Lim"
+                    tooltip="Предельная цена трейлинга. Трейлинг останавливается при достижении этого уровня."
+                    color="rgba(200,214,229,0.4)"
+                  />
+                  <_MiniToggle checked={noTrailLimitPriceEnabled} onChange={(v) => setNoTrailLimitPriceEnabled(v)} />
+                </div>
+                {noTrailLimitPriceEnabled && (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <_NITooltip
+                      value={noTrailLimitPrice}
+                      onChange={(v) => setNoTrailLimitPrice(v)}
+                      label="Lim price"
+                      title="Trail limit price"
+                      tooltip="Предельная цена трейлинга."
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+          <_Divider />
+
+          {/* ── TAKE PROFIT ──────────────────────────────────── */}
+          <div style={{ marginBottom: 4 }}>
+            <_SectionHead
+              title="TAKE PROFIT"
+              expanded={noOpen.tp}
+              onToggle={() => noTog("tp")}
+              rightSlot={
+                <div className="flex items-center" style={{ gap: 6 }} onMouseDown={stopProp}>
+                  <_LabelTooltip
+                    label="Reposition"
+                    tooltip="После каждого усреднения TP автоматически смещается к средней цене позиции."
+                    color="rgba(200,214,229,0.35)"
+                  />
+                  <_MiniToggle checked={noTpSl.tpRepositionEnabled} onChange={(v) => noUpd("tpRepositionEnabled", v)} />
+                  {!(noProMode && noTpSl.perLevelTpEnabled) && (
+                    <>
+                      <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
+                      <div className="flex items-center" style={{ gap: 3 }}>
+                        <span style={{ fontSize: 8.5, fontFamily: "monospace", opacity: 0.4, letterSpacing: "0.04em" }}>TP</span>
+                        <div className="flex items-center" style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, overflow: "hidden" }}>
+                          <button
+                            onMouseDown={stopProp}
+                            onClick={() => {
+                              const n = Math.max(1, noTpSl.multiTpCount - 1)
+                              const lvls = noTpSl.multiTpLevels.slice(0, n)
+                              const pcts = _distributeClose(n)
+                              noUpd("multiTpCount", n)
+                              noUpd("multiTpLevels", lvls.map((l, i) => ({ ...l, closePercent: pcts[i] })))
+                              if (n === 1) noUpd("multiTpEnabled", false)
+                            }}
+                            style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
+                          >−</button>
+                          <span style={{ padding: "0 5px", fontSize: 9.5, fontFamily: "monospace", color: "rgba(200,214,229,0.85)", background: "rgba(255,255,255,0.02)", minWidth: 16, textAlign: "center", lineHeight: "16px" }}>
+                            {noTpSl.multiTpCount}
+                          </span>
+                          <button
+                            onMouseDown={stopProp}
+                            onClick={() => {
+                              const n = Math.min(10, noTpSl.multiTpCount + 1)
+                              const lvls = [...noTpSl.multiTpLevels]
+                              while (lvls.length < n) lvls.push({ tpPercent: parseFloat(((lvls[lvls.length - 1]?.tpPercent ?? 0) + 0.5).toFixed(2)), closePercent: 0 })
+                              const pcts = _distributeClose(n)
+                              noUpd("multiTpCount", n)
+                              noUpd("multiTpLevels", lvls.slice(0, n).map((l, i) => ({ ...l, closePercent: pcts[i] })))
+                              if (n > 1) noUpd("multiTpEnabled", true)
+                            }}
+                            style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
+                          >+</button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  <div style={{ width: 1, height: 10, background: "rgba(255,255,255,0.1)" }} />
+                  <_MiniToggle checked={noTpSl.tpEnabled} onChange={(v) => noUpd("tpEnabled", v)} />
+                </div>
+              }
+            />
+            {noOpen.tp && noTpSl.tpEnabled && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, fontSize: 9, fontFamily: "monospace", opacity: 0.35, paddingLeft: 2 }}>
+                  <span>#</span><span>TP %</span><span>Close %</span>
+                </div>
+                {noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount).map((lvl, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "18px 1fr 1fr", gap: 2, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.38 }}>{i + 1}</span>
+                    <_NI value={lvl.tpPercent} onChange={(v) => {
+                      const next = [...noTpSl.multiTpLevels]
+                      next[i] = { ...next[i], tpPercent: v }
+                      noUpd("multiTpLevels", next)
+                    }} suffix="%" step={0.1} min={0} />
+                    <_NI value={lvl.closePercent} onChange={(v) => {
+                      noUpd("multiTpLevels", _rebalanceClose(noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount), i, v))
+                    }} suffix="%" step={1} min={1} />
+                  </div>
+                ))}
+              </div>
+            )}
+            {noOpen.tp && !noTpSl.tpEnabled && (
+              <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", padding: "4px 0" }}>
+                Take profit disabled
+              </div>
+            )}
+          </div>
+          <_Divider />
+
+          {/* ── STOP LOSS ────────────────────────────────────── */}
+          <div style={{ marginBottom: 4 }}>
+            <_SectionHead
+              title="STOP LOSS"
+              expanded={noOpen.sl}
+              onToggle={() => noTog("sl")}
+              rightSlot={<_MiniToggle checked={noTpSl.slEnabled} onChange={(v) => noUpd("slEnabled", v)} />}
+            />
+            {noOpen.sl && noTpSl.slEnabled && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
+                  {([
+                    { v: "extreme_order" as const, label: "Extreme Order", tooltip: "SL размещается на заданном расстоянии (%) от крайнего ордера.\n\nПодходит для одиночного входа — стоп всегда зафиксирован относительно первого уровня." },
+                    { v: "avg_entry" as const, label: "Avg Entry", tooltip: "SL рассчитывается от средней цены входа.\n\nСтоп автоматически перемещается после каждого усреднения." },
+                  ] as const).map((o, i, arr) => (
+                    <div key={o.v} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: noTpSl.slMode === o.v ? "rgba(30,111,239,0.18)" : "transparent", borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.1)" : undefined }}>
+                      <button
+                        onClick={() => noUpd("slMode", noTpSl.slMode === o.v ? null : o.v)}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{ flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px", background: "transparent", border: "none", cursor: "pointer", color: noTpSl.slMode === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)", fontWeight: noTpSl.slMode === o.v ? 700 : 400, letterSpacing: "0.04em" }}
+                      >{o.label}</button>
+                      <_TinyTooltipIcon text={o.tooltip} color={noTpSl.slMode === o.v ? "rgba(30,111,239,0.7)" : undefined} />
+                      <div style={{ width: 4 }} />
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2" style={{ gap: 4 }}>
+                  <_NI value={noTpSl.slPercent} onChange={(v) => noUpd("slPercent", v)} label="SL %" min={0} step={0.1} title="Stop loss percentage" />
+                  <_NI value={noTpSl.slClosePercent} onChange={(v) => noUpd("slClosePercent", Math.min(100, Math.max(1, v)))} label="Close %" min={1} title="Percentage of position to close at stop loss" />
+                </div>
+              </div>
+            )}
+            {noOpen.sl && !noTpSl.slEnabled && (
+              <div style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(200,214,229,0.3)", padding: "4px 0" }}>
+                Stop loss disabled
+              </div>
+            )}
+          </div>
+          <_Divider />
 
           {/* Edit mode banner */}
           {editingOrderId && (
@@ -836,79 +1547,29 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
               {lastResult.success ? "✓ " : "✗ "}{lastResult.msg}
             </div>
           )}
-        </div>
-      ) : tab === "history" ? (
-        /* History */
-        <div className="flex-1 overflow-auto min-h-0">
-          <div className="flex gap-1 px-2 py-0.5 text-xs font-mono"
-            style={{ opacity: 0.35, borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: 10 }}>
-            <span style={{ width: 14 }} />
-            <span style={{ width: 52 }}>Symbol</span>
-            <span style={{ width: 26 }}>Side</span>
-            <span style={{ flex: 1 }}>Qty</span>
-            <span className="text-right" style={{ width: 55 }}>Price</span>
-            <span style={{ width: 20 }} />
-          </div>
-          {orders.map((o) => (
-            <div
-              key={o.id}
-              className="flex items-center gap-1 px-2 text-xs font-mono"
-              style={{ height: 28, borderBottom: "1px solid rgba(255,255,255,0.025)" }}
-            >
-              <span style={{ width: 14, flexShrink: 0 }}>{statusIcon(o.status)}</span>
-              <span style={{ width: 52, opacity: 0.7 }}>{o.symbol}</span>
-              <span style={{ width: 26, color: o.side === "buy" ? "#00e5a0" : "#ff4757", fontWeight: 600, fontSize: 10 }}>
-                {o.side.toUpperCase()}
-              </span>
-              <span style={{ flex: 1, opacity: 0.6 }}>{o.qty}</span>
-              <span className="text-right" style={{ width: 55, opacity: 0.7 }}>
-                {o.price ? o.price : "MKT"}
-              </span>
-              {o.status === "pending" && (
-                <button
-                  onClick={() => handleCancel(o.id)}
-                  className="opacity-30 hover:opacity-100 transition-opacity"
-                  style={{ width: 20 }}
-                  onMouseDown={stopProp}
-                >
-                  <XCircle size={10} />
-                </button>
-              )}
-              {o.status !== "pending" && <span style={{ width: 20 }} />}
-            </div>
-          ))}
-        </div>
-      ) : tab === "grid" ? (
-        /* Grid Config */
-        <div className="flex-1 overflow-auto min-h-0">
-          <GridConfigTab
-            symbol={symbol}
-            marketType={marketType}
-            futuresSide={futuresSide}
-            entryPrice={mockPrice}
-            availableBalance={walletBalance}
-            inOrders={inOrders}
-            leverage={posSettings.leverage}
-            onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
-            consoleWidgetId={_props.widget.id}
-            activeChartId={activeChartId}
-            accountId={accountId}
-            exchangeId={exchangeId}
-          />
-        </div>
-      ) : (
-        /* DCA */
-        <div className="flex-1 overflow-auto min-h-0">
-          <DcaTab
-            symbol={symbol}
-            futuresSide={futuresSide}
-            entryPrice={mockPrice}
-            availableBalance={freeMargin}
-            leverage={posSettings.leverage}
-            onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
-          />
+
+          </div>{/* end inner px-3 py-2 flex flex-col */}
         </div>
       )}
+
+      {/* Grid tab — always mounted to preserve slot/placed state across tab switches */}
+      <div className="flex-1 overflow-auto min-h-0" style={{ display: tab === "grid" ? undefined : "none" }}>
+        <GridConfigTab
+          symbol={symbol}
+          marketType={marketType}
+          futuresSide={futuresSide}
+          entryPrice={mockPrice}
+          availableBalance={walletBalance}
+          inOrders={inOrders}
+          leverage={posSettings.leverage}
+          onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
+          consoleWidgetId={_props.widget.id}
+          activeChartId={activeChartId}
+          accountId={accountId}
+          exchangeId={exchangeId}
+          isVisible={tab === "grid"}
+        />
+      </div>
     </div>
   )
 }
