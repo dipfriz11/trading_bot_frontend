@@ -948,22 +948,20 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         status: orderType === "market" ? "filled" : "pending",
       })
 
-      // Open / merge into live position for market orders; limit orders stay pending
-      if (orderType === "market") {
-        const posSide = effectiveSide === "buy" ? "long" : "short"
-        openPosition({
-          accountId,
-          exchangeId,
-          marketType,
-          symbol,
-          side: posSide,
-          size: parseFloat(qty),
-          avgEntry: effectivePrice,
-          leverage: posSettings.leverage,
-          markPrice: effectivePrice,
-          openedAt: time,
-        })
-      }
+      // Open / merge into live position immediately — virtual position exists as soon as orders are placed
+      const posSide = effectiveSide === "buy" ? "long" : "short"
+      openPosition({
+        accountId,
+        exchangeId,
+        marketType,
+        symbol,
+        side: posSide,
+        size: parseFloat(qty),
+        avgEntry: effectivePrice,
+        leverage: posSettings.leverage,
+        markPrice: effectivePrice,
+        openedAt: time,
+      })
 
       setDraftOrder(activeChart.id, undefined)
       deductOrderBalance(accountId, exchangeId, marketType, margin)

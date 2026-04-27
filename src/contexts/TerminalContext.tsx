@@ -668,6 +668,50 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const b = balancesRef.current
       const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
       setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
+
+      // Virtual position — exists as soon as grid orders are placed, before any fill
+      const totalQty = entry.orders.reduce((s, o) => s + o.qty, 0)
+      const weightedAvg = totalQty > 0
+        ? entry.orders.reduce((s, o) => s + o.price * o.qty, 0) / totalQty
+        : (entry.orders[0]?.price ?? 0)
+      setPositionsMap((prevPos) => {
+        const existing = prevPos[pk]
+        if (existing) {
+          // Re-place: replace old grid contribution with new
+          const newSize = totalQty
+          const newAvg = weightedAvg
+          const notional = newSize * newAvg
+          const markPx = existing.markPrice
+          const rawPnl = entry.side === "long"
+            ? (markPx - newAvg) * newSize
+            : (newAvg - markPx) * newSize
+          const pnlPct = notional > 0 ? (rawPnl / notional) * entry.leverage * 100 : 0
+          return {
+            ...prevPos,
+            [pk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct },
+          }
+        }
+        const notional = totalQty * weightedAvg
+        const rawPnl = 0  // mark = avg entry at placement
+        return {
+          ...prevPos,
+          [pk]: {
+            accountId: entry.accountId!,
+            exchangeId: entry.exchangeId!,
+            marketType: entry.marketType as "spot" | "futures",
+            symbol: entry.symbol,
+            side: entry.side,
+            size: totalQty,
+            avgEntry: weightedAvg,
+            leverage: entry.leverage,
+            markPrice: weightedAvg,
+            notional,
+            unrealizedPnl: rawPnl,
+            unrealizedPnlPct: 0,
+            openedAt: time,
+          },
+        }
+      })
     }
   }, [])
 
@@ -694,6 +738,14 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const b = balancesRef.current
       const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
       setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } })
+
+      // Remove virtual position when grid is cancelled
+      const cancelPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol)
+      setPositionsMap((prev) => {
+        const n = { ...prev }
+        delete n[cancelPk]
+        return n
+      })
     }
   }, [])
 
