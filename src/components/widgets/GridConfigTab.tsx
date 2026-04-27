@@ -502,6 +502,14 @@ export function GridConfigTab({
   accountId,
   exchangeId,
 }: GridConfigTabProps) {
+  // ── Multi-grid slots ──────────────────────────────────────────────────────
+  // Each slot has a stable slotId used in consoleId. cfg is saved/restored on switch.
+  const [gridSlots, setGridSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
+  const [activeSlotIndex, setActiveSlotIndex] = useState(0)
+  // Persisted cfg per slot (keyed by slotId)
+  const slotCfgMapRef = useRef<Record<string, GridConfig>>({})
+  const activeSlot = gridSlots[activeSlotIndex] ?? gridSlots[0]
+
   const [cfg, setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
     symbol: externalSymbol ?? DEFAULT_GRID_CONFIG.symbol,
@@ -620,9 +628,8 @@ export function GridConfigTab({
   // ── Grid chart integration ────────────────────────────────────────────────
   const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrders, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
-  // Each console+chart+side combination is its own independent slot so switching charts
-  // never interferes with placed grids on another chart
-  const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}`
+  // Each console+chart+side+slot combination is its own independent slot
+  const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
   const currentGridState = gridOrders[consoleId]
   const isPlaced = currentGridState?.state === "placed"
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
@@ -1078,6 +1085,71 @@ export function GridConfigTab({
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
   const baseSymbol = cfg.symbol.split("/")[0] ?? "BTC"
 
+  // ── Slot management ───────────────────────────────────────────────────────
+  const handleAddSlot = () => {
+    // Save current cfg to current slot before switching
+    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = { ...cfgRef.current }
+    const newSlot = { slotId: nanoid() }
+    setGridSlots((prev) => [...prev, newSlot])
+    setActiveSlotIndex(gridSlots.length)
+    // New slot gets fresh config inheriting symbol/side/entry/leverage
+    setCfg({
+      ...DEFAULT_GRID_CONFIG,
+      symbol: cfgRef.current.symbol,
+      side: cfgRef.current.side,
+      entryPrice: cfgRef.current.entryPrice,
+      leverage: cfgRef.current.leverage,
+    })
+    orderIdRefs.current = []
+  }
+
+  const handleSwitchSlot = (idx: number) => {
+    if (idx === activeSlotIndex) return
+    // Save current cfg to current slot
+    if (activeSlot) slotCfgMapRef.current[activeSlot.slotId] = { ...cfgRef.current }
+    setActiveSlotIndex(idx)
+    const targetSlot = gridSlots[idx]
+    if (targetSlot) {
+      const saved = slotCfgMapRef.current[targetSlot.slotId]
+      if (saved) {
+        setCfg({ ...saved, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      } else {
+        setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: cfgRef.current.side, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      }
+    }
+    orderIdRefs.current = []
+  }
+
+  const handleRemoveSlot = (idx: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const slot = gridSlots[idx]
+    if (!slot) return
+    const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfgRef.current.side}:${slot.slotId}`
+    // Cancel the grid for this slot (both preview and placed)
+    cancelGridOrders(slotConsoleId)
+    delete slotCfgMapRef.current[slot.slotId]
+    if (gridSlots.length === 1) {
+      // Last slot — just reset its cfg instead of removing
+      setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: cfgRef.current.side, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      orderIdRefs.current = []
+      return
+    }
+    const newSlots = gridSlots.filter((_, i) => i !== idx)
+    const newActive = Math.min(activeSlotIndex, newSlots.length - 1)
+    setGridSlots(newSlots)
+    setActiveSlotIndex(newActive)
+    const targetSlot = newSlots[newActive]
+    if (targetSlot) {
+      const saved = slotCfgMapRef.current[targetSlot.slotId]
+      if (saved) {
+        setCfg({ ...saved, symbol: cfgRef.current.symbol, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      } else {
+        setCfg({ ...DEFAULT_GRID_CONFIG, symbol: cfgRef.current.symbol, side: cfgRef.current.side, entryPrice: cfgRef.current.entryPrice, leverage: cfgRef.current.leverage })
+      }
+    }
+    orderIdRefs.current = []
+  }
+
   // Side button
   const gap4: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4 }
 
@@ -1095,14 +1167,96 @@ export function GridConfigTab({
       />
 
       <div style={{ padding: "8px 10px" }}>
-      {/* ── LEV + PRO row ─────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+      {/* ── LEV + GRID SLOTS + PRO row ───────────────── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35 }}>LEV</span>
           <div style={{ width: 52 }}>
             <NI value={cfg.leverage} onChange={(v) => upd("leverage", Math.max(1, v))} min={1} suffix="×" title="Leverage multiplier" />
           </div>
         </div>
+
+        {/* ── Grid slot tabs ──────────────────────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, justifyContent: "center" }}>
+          {gridSlots.map((slot, idx) => {
+            const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${slot.slotId}`
+            const slotState = gridOrders[slotConsoleId]
+            const slotPlaced = slotState?.state === "placed"
+            const slotPending = slotPlaced && slotState?.pendingUpdate
+            const isActive = idx === activeSlotIndex
+            return (
+              <div
+                key={slot.slotId}
+                onClick={() => handleSwitchSlot(idx)}
+                onMouseDown={stopProp}
+                style={{
+                  display: "flex", alignItems: "center", gap: 3,
+                  padding: "2px 5px 2px 6px",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  border: isActive
+                    ? `1px solid ${slotPending ? "rgba(251,191,36,0.5)" : slotPlaced ? "rgba(0,229,160,0.4)" : "rgba(30,111,239,0.45)"}`
+                    : "1px solid rgba(255,255,255,0.1)",
+                  background: isActive
+                    ? (slotPending ? "rgba(251,191,36,0.1)" : slotPlaced ? "rgba(0,229,160,0.1)" : "rgba(30,111,239,0.12)")
+                    : "rgba(255,255,255,0.03)",
+                  transition: "all 0.15s",
+                }}
+                title={`Grid ${idx + 1}${slotPlaced ? " (placed)" : ""}`}
+              >
+                <span style={{
+                  fontSize: 9, fontFamily: "monospace", fontWeight: isActive ? 700 : 500, letterSpacing: "0.04em",
+                  color: isActive
+                    ? (slotPending ? "rgba(251,191,36,0.9)" : slotPlaced ? "#00e5a0" : "rgba(120,170,255,0.9)")
+                    : "rgba(255,255,255,0.3)",
+                }}>
+                  {idx + 1}
+                </span>
+                {slotPlaced && (
+                  <div style={{
+                    width: 4, height: 4, borderRadius: "50%", flexShrink: 0,
+                    background: slotPending ? "rgba(251,191,36,0.8)" : "#00e5a0",
+                  }} />
+                )}
+                <button
+                  onClick={(e) => handleRemoveSlot(idx, e)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  style={{
+                    background: "transparent", border: "none", cursor: "pointer", padding: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "rgba(255,255,255,0.25)", lineHeight: 1,
+                    width: 10, height: 10, flexShrink: 0,
+                  }}
+                  title={slotPlaced ? "Cancel this grid" : "Remove grid slot"}
+                >
+                  <svg width="7" height="7" viewBox="0 0 7 7" fill="none">
+                    <line x1="1" y1="1" x2="6" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="6" y1="1" x2="1" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            )
+          })}
+          {/* Add new grid slot */}
+          <button
+            onClick={handleAddSlot}
+            onMouseDown={stopProp}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 18, height: 18,
+              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 4, cursor: "pointer", color: "rgba(255,255,255,0.35)",
+              transition: "all 0.15s", flexShrink: 0,
+            }}
+            title="Add new independent grid"
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+              <line x1="4" y1="1" x2="4" y2="7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="1" y1="4" x2="7" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 9, fontFamily: "monospace", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pro</span>
           <MiniToggle checked={proMode} onChange={(v) => { setProMode(v); if (!v) upd("perLevelTpEnabled", false) }} />
@@ -1781,10 +1935,10 @@ export function GridConfigTab({
         >
           {cfg.autoEnabled && <Play size={11} />}
           {hasPendingUpdate
-            ? "Apply Changes"
+            ? `Apply Changes #${activeSlotIndex + 1}`
             : isPlaced
-              ? `${cfg.side === "long" ? "Long" : "Short"} / Grid ✓`
-              : cfg.side === "long" ? "Long / Grid" : "Short / Grid"
+              ? `${cfg.side === "long" ? "Long" : "Short"} / Grid #${activeSlotIndex + 1} ✓`
+              : `${cfg.side === "long" ? "Long" : "Short"} / Grid${gridSlots.length > 1 ? ` #${activeSlotIndex + 1}` : ""}`
           }
         </button>
       </div>
