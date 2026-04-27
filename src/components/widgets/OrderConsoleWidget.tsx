@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { CircleCheck as CheckCircle, Circle as XCircle, Clock, ChevronDown, ChevronUp } from "lucide-react"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { createPortal } from "react-dom"
 import type { Widget, GridSharedTpSl, GridMultiTpLevel } from "@/types/terminal"
 import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
@@ -8,7 +8,6 @@ import { useTerminal } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
-import { DcaTab } from "./DcaTab"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
 
@@ -316,26 +315,8 @@ function priceToString(price: number): string {
 
 type OrderSide = "buy" | "sell"
 type OrderType = "market" | "limit" | "stop"
-type OrderStatus = "filled" | "cancelled" | "pending"
 type AnchorField = "qty" | "amount"
 
-type Order = {
-  id: string
-  side: OrderSide
-  type: OrderType
-  symbol: string
-  qty: string
-  price?: string
-  status: OrderStatus
-  time: string
-}
-
-const MOCK_ORDERS: Order[] = [
-  { id: "o1", side: "buy",  type: "limit",  symbol: "BTC/USDT", qty: "0.1",  price: "67200",  status: "filled",    time: "14:22:01" },
-  { id: "o2", side: "sell", type: "market", symbol: "ETH/USDT", qty: "1.5",  price: undefined, status: "filled",    time: "14:18:45" },
-  { id: "o3", side: "buy",  type: "stop",   symbol: "SOL/USDT", qty: "10",   price: "148.00", status: "cancelled", time: "13:55:10" },
-  { id: "o4", side: "sell", type: "limit",  symbol: "BTC/USDT", qty: "0.05", price: "68000",  status: "pending",   time: "now" },
-]
 
 const MOCK_PRICES: Record<string, number> = {
   "BTC/USDT": 67500, "ETH/USDT": 3450, "BNB/USDT": 590, "SOL/USDT": 185,
@@ -356,7 +337,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     tpSlOrders, setTpSl,
   } = useTerminal()
 
-  const [tab, setTab] = useState<"new" | "history" | "grid" | "dca">("new")
+  const [tab, setTab] = useState<"new" | "grid">("new")
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
@@ -366,7 +347,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const [qty, setQty] = useState("")
   const [amount, setAmount] = useState("")
   const [anchor, setAnchor] = useState<AnchorField>("qty")
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS)
   const [lastResult, setLastResult] = useState<{ success: boolean; msg: string } | null>(null)
   // True when user has manually edited the form while a placed order is selected (editingOrderId set)
   const [formEditMode, setFormEditMode] = useState(false)
@@ -783,33 +763,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
 
-    const newOrder: Order = {
-      id, side: effectiveSide, type: orderType, symbol, qty,
-      price: orderType !== "market" ? price : undefined,
-      status: "pending",
-      time,
-    }
-
-    setOrders((prev) => [newOrder, ...prev])
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
     resetFormToNew()
 
     setTimeout(() => {
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "filled" } : o)))
       setLastResult(null)
     }, 1500)
   }
 
-  const handleCancel = (id: string) => {
-    setOrders((prev) => prev.map((o) => (o.id === id && o.status === "pending" ? { ...o, status: "cancelled" } : o)))
-  }
-
-  const statusIcon = (status: OrderStatus) => {
-    if (status === "filled")    return <CheckCircle size={10} style={{ color: "#00e5a0" }} />
-    if (status === "cancelled") return <XCircle     size={10} style={{ color: "#ff4757" }} />
-    return <Clock size={10} style={{ color: "#ffd32a" }} />
-  }
 
   const qtyBorder = anchor === "qty"    ? `1px solid ${effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
   const amtBorder = anchor === "amount" ? `1px solid ${effectiveSide === "buy" ? "rgba(0,229,160,0.5)" : "rgba(255,71,87,0.5)"}` : "1px solid rgba(255,255,255,0.1)"
@@ -825,7 +787,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tab toggle */}
       <div className="flex-shrink-0 flex" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        {(["new", "history", "grid", "dca"] as const).map((t) => (
+        {(["new", "grid"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -838,13 +800,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             }}
             onMouseDown={stopProp}
           >
-            {t === "new" ? "New Order" : t === "history" ? "History" : t === "grid" ? "Grid" : "DCA"}
+            {t === "new" ? "New Order" : "Grid"}
           </button>
         ))}
       </div>
 
 
-      {tab === "new" ? (
+      {tab === "new" && (
         <div className="flex-1 overflow-auto min-h-0 flex flex-col">
 
           {/* Template bar */}
@@ -1402,59 +1364,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           )}
 
           </div>{/* end inner px-3 py-2 flex flex-col */}
-        </div>
-      ) : tab === "history" ? (
-        /* History */
-        <div className="flex-1 overflow-auto min-h-0">
-          <div className="flex gap-1 px-2 py-0.5 text-xs font-mono"
-            style={{ opacity: 0.35, borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: 10 }}>
-            <span style={{ width: 14 }} />
-            <span style={{ width: 52 }}>Symbol</span>
-            <span style={{ width: 26 }}>Side</span>
-            <span style={{ flex: 1 }}>Qty</span>
-            <span className="text-right" style={{ width: 55 }}>Price</span>
-            <span style={{ width: 20 }} />
-          </div>
-          {orders.map((o) => (
-            <div
-              key={o.id}
-              className="flex items-center gap-1 px-2 text-xs font-mono"
-              style={{ height: 28, borderBottom: "1px solid rgba(255,255,255,0.025)" }}
-            >
-              <span style={{ width: 14, flexShrink: 0 }}>{statusIcon(o.status)}</span>
-              <span style={{ width: 52, opacity: 0.7 }}>{o.symbol}</span>
-              <span style={{ width: 26, color: o.side === "buy" ? "#00e5a0" : "#ff4757", fontWeight: 600, fontSize: 10 }}>
-                {o.side.toUpperCase()}
-              </span>
-              <span style={{ flex: 1, opacity: 0.6 }}>{o.qty}</span>
-              <span className="text-right" style={{ width: 55, opacity: 0.7 }}>
-                {o.price ? o.price : "MKT"}
-              </span>
-              {o.status === "pending" && (
-                <button
-                  onClick={() => handleCancel(o.id)}
-                  className="opacity-30 hover:opacity-100 transition-opacity"
-                  style={{ width: 20 }}
-                  onMouseDown={stopProp}
-                >
-                  <XCircle size={10} />
-                </button>
-              )}
-              {o.status !== "pending" && <span style={{ width: 20 }} />}
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* DCA */
-        <div className="flex-1 overflow-auto min-h-0">
-          <DcaTab
-            symbol={symbol}
-            futuresSide={futuresSide}
-            entryPrice={mockPrice}
-            availableBalance={freeMargin}
-            leverage={posSettings.leverage}
-            onSideChange={(s) => activeChart && updateWidget(activeChart.id, { futuresSide: s })}
-          />
         </div>
       )}
 
