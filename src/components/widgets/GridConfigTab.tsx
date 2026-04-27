@@ -829,12 +829,20 @@ export function GridConfigTab({
     // Compute the new slPercent from the dragged price
     setCfg((p) => {
       const viz = calcGridVisualization(p)
-      const avgEntry = viz.orders.length > 0
-        ? viz.orders.reduce((s, o) => s + o.price, 0) / viz.orders.length
-        : p.entryPrice
-      const basePrice = p.slMode === "avg_entry" ? avgEntry : p.entryPrice
-      if (basePrice === 0) return p
       const isLong = p.side === "long"
+      let basePrice: number
+      if (p.slMode === "avg_entry") {
+        basePrice = viz.avgEntryEstimate > 0 ? viz.avgEntryEstimate : p.entryPrice
+      } else if (p.slMode === "extreme_order") {
+        const prices = viz.orders.map((o) => o.price)
+        basePrice = prices.length > 0
+          ? (isLong ? Math.min(...prices) : Math.max(...prices))
+          : p.entryPrice
+      } else {
+        // default: first order price
+        basePrice = viz.orders[0]?.price ?? p.entryPrice
+      }
+      if (basePrice === 0) return p
       const newPct = isLong
         ? (1 - chartSlPrice / basePrice) * 100
         : (chartSlPrice / basePrice - 1) * 100
@@ -955,8 +963,14 @@ export function GridConfigTab({
           }
         }
 
-        if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005) return p
-        return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep }
+        // Compute lastOffsetPercent from chartLastPrice
+        const rawLastOffset = isLong
+          ? (entryPrice - chartLastPrice) / entryPrice * 100
+          : (chartLastPrice - entryPrice) / entryPrice * 100
+        const newLastOffset = Math.max(0, Math.round(rawLastOffset * 100) / 100)
+
+        if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005 && Math.abs(newLastOffset - p.lastOffsetPercent) < 0.005) return p
+        return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep, lastOffsetPercent: newLastOffset }
       }
     })
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
