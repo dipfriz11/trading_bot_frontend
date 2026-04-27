@@ -329,7 +329,7 @@ const MOCK_PRICES: Record<string, number> = {
 export function OrderConsoleWidget(_props: { widget: Widget }) {
   const {
     activeTab, activeChartId, setActiveChartId,
-    setDraftOrder, addPlacedOrder, placedOrders, draftOrders,
+    setDraftOrder, addPlacedOrder, positions: ctxPositions, draftOrders,
     isDraggingOrder,
     editingOrderId, setEditingOrderId,
     updatePlacedOrder,
@@ -528,7 +528,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const trackedPlacedPricesRef = useRef<Record<string, number>>({})
   useEffect(() => {
     if (!activeChart) return
-    const orders = placedOrders[activePositionKey] ?? []
+    const orders = ctxPositions[activePositionKey]?.orders ?? []
     for (const o of orders) {
       const prev = trackedPlacedPricesRef.current[o.id]
       const placedThreshold = Math.max(o.price * 0.00001, 1e-8)
@@ -541,7 +541,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       }
       trackedPlacedPricesRef.current[o.id] = o.price
     }
-  }, [placedOrders, activePositionKey])
+  }, [ctxPositions, activePositionKey])
 
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
@@ -549,7 +549,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       setFormEditMode(false)
       return
     }
-    const order = (placedOrders[activePositionKey] ?? []).find((o) => o.id === editingOrderId)
+    const order = (ctxPositions[activePositionKey]?.orders ?? []).find((o: import("@/types/terminal").ChartPlacedOrder) => o.id === editingOrderId)
     if (!order) { setFormEditMode(false); return }
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(order.price))
@@ -912,7 +912,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const newQty = parseFloat(qty)
     if (isNaN(newPrice) || newPrice <= 0) return
 
-    const existingOrder = placedOrders[activePositionKey]?.find((o) => o.id === editingOrderId)
+    const existingOrder = ctxPositions[activePositionKey]?.orders.find((o) => o.id === editingOrderId)
     const effectiveQty = newQty > 0 ? newQty : (existingOrder?.qty ?? 0)
     const newNotional = effectiveQty * newPrice
     const newMargin = existingOrder?.marketType === "futures" && existingOrder?.leverage

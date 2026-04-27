@@ -1220,11 +1220,12 @@ const LOCAL_DRAFT_ID = "__draft__"
 export function ChartWidget({ widget }: ChartWidgetProps) {
   const {
     activeTab, updateWidget, activeChartId, setActiveChartId,
-    draftOrders, placedOrders: ctxPlacedOrders,
+    draftOrders,
     setDraftOrder: ctxSetDraft,
     addPlacedOrder: ctxAddPlaced,
     removePlacedOrder: ctxRemovePlaced, updatePlacedOrderPrice: ctxUpdatePrice,
     updatePlacedOrder: ctxUpdatePlacedOrder,
+    positions: ctxPositions,
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
@@ -1285,10 +1286,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     : hasOrderConsole
       ? (draftOrders[widget.id] ? { ...draftOrders[widget.id]!, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
       : localDraft
-  // Always read placed orders from context so PortfolioWidget sees them regardless of mode
-  // Exclude grid orders — they are rendered by GridOrdersOverlay (avoid double render)
-  const placedForChart: PlacedOrder[] = (ctxPlacedOrders[positionKey] ?? []).filter(
-    (o) => o.source !== "grid"
+  // Read placed orders from the position — exclude grid orders (rendered by GridOrdersOverlay)
+  const placedForChart: PlacedOrder[] = (ctxPositions[positionKey]?.orders ?? []).filter(
+    (o: PlacedOrder) => o.source !== "grid"
   )
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
 
@@ -1337,7 +1337,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     if (isDraftOrder) {
       startPrice = draftForChart?.price ?? 0
     } else {
-      startPrice = ctxPlacedOrders[positionKey]?.find((o) => o.id === id)?.price ?? 0
+      startPrice = ctxPositions[positionKey]?.orders.find((o) => o.id === id)?.price ?? 0
     }
 
     const startY = e.clientY
@@ -1404,7 +1404,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, positionKey, draftForChart, draftOrders, ctxPlacedOrders, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
+  }, [hasOrderConsole, widget.id, positionKey, draftForChart, draftOrders, ctxPositions, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {
@@ -1740,7 +1740,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
               onPlaceOrder={handlePlaceOrder}
               registerDragPriceHandler={registerDragPriceHandler}
               registerDraftDragHandler={registerDraftDragHandler}
-              editingOrder={localEditingOrderId ? (ctxPlacedOrders[positionKey] ?? []).find((o) => o.id === localEditingOrderId) : undefined}
+              editingOrder={localEditingOrderId ? (ctxPositions[positionKey]?.orders ?? []).find((o) => o.id === localEditingOrderId) : undefined}
               onUpdateOrder={(id, updates) => {
                 ctxUpdatePlacedOrder(positionKey, id, updates)
                 setLocalEditingOrderId(null)

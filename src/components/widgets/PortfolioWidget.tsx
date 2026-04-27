@@ -346,7 +346,7 @@ function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void 
 
 export function PortfolioWidget(_props: { widget: Widget }) {
   const [tab, setTab] = useState<"positions" | "orders">("positions")
-  const { placedOrders, removePlacedOrder, positions: livePositions, partialClosePosition, closePosition } = useTerminal()
+  const { positions: livePositions, removePlacedOrder, partialClosePosition, closePosition } = useTerminal()
 
   // Use live positions if any exist, otherwise fall back to mock for demo
   const liveList = Object.values(livePositions)
@@ -366,15 +366,18 @@ export function PortfolioWidget(_props: { widget: Widget }) {
         unrealizedPnlPct: p.pnlPct,
         notional: p.size * p.entryPrice,
         openedAt: "",
+        orders: [],
+        status: "active" as const,
+        realizedPnl: 0,
       }))
 
   const totalPnl = displayPositions.reduce((sum, p) => sum + p.unrealizedPnl, 0)
   const isPnlPos = totalPnl >= 0
 
-  // Collect all placed orders (non-draft) across all positions
+  // Collect all placed orders (non-draft) from positions
   const allOrders: FlatOrder[] = []
-  for (const [pk, orders] of Object.entries(placedOrders)) {
-    for (const o of orders) {
+  for (const [pk, pos] of Object.entries(livePositions)) {
+    for (const o of pos.orders) {
       if (!o.isDraft) allOrders.push({ ...o, positionKey: pk })
     }
   }

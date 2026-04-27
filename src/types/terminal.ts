@@ -102,6 +102,41 @@ export interface Position {
   leverage: number
 }
 
+// ---- Order types (canonical home — re-exported from TerminalContext for compat) ----
+
+export type OrderSource = "manual" | "grid" | "dca" | "bot" | "webhook"
+
+export interface ChartDraftOrder {
+  side: "buy" | "sell"
+  price: number
+  qty: number
+  orderType: "limit" | "market"
+}
+
+export interface ChartPlacedOrder {
+  id: string
+  side: "buy" | "sell"
+  price: number
+  qty: number
+  orderType: "limit" | "market"
+  isDraft?: boolean
+  symbol?: string
+  accountId?: string
+  exchangeId?: string
+  marketType?: "spot" | "futures"
+  leverage?: number
+  margin?: number
+  time?: string
+  status?: "pending" | "filled" | "cancelled"
+  source?: OrderSource
+  gridIndex?: number
+  gridConsoleId?: string
+  botName?: string
+  webhookName?: string
+}
+
+export type PositionStatus = "active" | "pending" | "closed"
+
 // Live position — created/updated by the position manager in TerminalContext
 export interface LivePosition {
   // Identity (same key as PositionKey)
@@ -122,6 +157,13 @@ export interface LivePosition {
   notional: number      // size * avgEntry
 
   openedAt: string      // HH:MM:SS when position was first opened
+
+  // Order storage — all placed orders belonging to this position
+  orders: ChartPlacedOrder[]
+
+  status: PositionStatus   // pending = orders placed but no fill yet; active = at least one fill
+  realizedPnl: number
+  sourceConsoleId?: string // grid/DCA console that opened this position
 }
 
 export interface Alert {

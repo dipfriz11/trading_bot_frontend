@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
-import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg, LivePosition } from "@/types/terminal"
+import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg, LivePosition, ChartPlacedOrder, ChartDraftOrder } from "@/types/terminal"
 import { WIDGET_LABELS, WIDGET_MIN_SIZE } from "@/types/terminal"
 import { nanoid } from "@/lib/nanoid"
 import { ACCOUNTS } from "@/lib/mock-data"
@@ -112,46 +112,12 @@ export interface ChartGridOrders {
 type PreviewOrderMap = Record<string, ChartGridPreview | undefined>
 type GridOrderMap = Record<string, ChartGridOrders | undefined>
 
-// ---- Order bridge types ----
-
-export interface ChartDraftOrder {
-  side: "buy" | "sell"
-  price: number
-  qty: number
-  orderType: "limit" | "market"
-}
-
-export type OrderSource = "manual" | "grid" | "dca" | "bot" | "webhook"
-
-export interface ChartPlacedOrder {
-  id: string
-  side: "buy" | "sell"
-  price: number
-  qty: number
-  orderType: "limit" | "market"
-  isDraft?: boolean
-  // Order metadata for display
-  symbol?: string
-  accountId?: string
-  exchangeId?: string
-  marketType?: "spot" | "futures"
-  leverage?: number
-  margin?: number   // actual margin locked (notional / leverage)
-  time?: string
-  status?: "pending" | "filled" | "cancelled"
-  // Source flags — where this order originated
-  source?: OrderSource
-  gridIndex?: number        // 1-based index within a grid (#1, #2, …)
-  gridConsoleId?: string    // groups all orders belonging to the same grid session
-  botName?: string          // e.g. "ScalpBot v2"
-  webhookName?: string      // e.g. "TradingView Alert"
-}
+// ---- Order bridge types — defined in types/terminal.ts, re-exported here for consumers ----
+export type { ChartDraftOrder, ChartPlacedOrder, OrderSource, PositionStatus } from "@/types/terminal"
 
 // draftOrders keyed by chartWidgetId (UI-scoped, intentional)
 type DraftOrderMap = Record<string, ChartDraftOrder | undefined>
-// placedOrders keyed by PositionKey — survives chart widget close/reopen
-type PlacedOrderMap = Record<PositionKey, ChartPlacedOrder[]>
-// livePositions keyed by PositionKey
+// livePositions keyed by PositionKey — orders live inside each LivePosition
 type PositionsMap = Record<PositionKey, LivePosition>
 
 export interface ChartTpSl {
@@ -182,9 +148,8 @@ interface TerminalContextValue {
   activeChartId: string | null
   setActiveChartId: (id: string | null) => void
 
-  // Order bridge — order-console writes here; ChartWidget reads
+  // Order bridge — order-console writes here; ChartWidget reads via positions[pk].orders
   draftOrders: DraftOrderMap
-  placedOrders: PlacedOrderMap
   setDraftOrder: (chartId: string, draft: ChartDraftOrder | undefined) => void
   addPlacedOrder: (positionKey: PositionKey, order: ChartPlacedOrder) => void
   removePlacedOrder: (positionKey: PositionKey, orderId: string) => void
@@ -209,9 +174,9 @@ interface TerminalContextValue {
   setTpSl: (chartId: string, tpSl: Partial<ChartTpSl>) => void
   clearTpSl: (chartId: string) => void
 
-  // Live positions (position manager)
+  // Live positions (position manager) — orders live inside each position
   positions: PositionsMap
-  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional">) => void
+  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => void
   closePosition: (posKey: PositionKey) => void
   partialClosePosition: (posKey: PositionKey, closeSize: number) => void
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
@@ -241,7 +206,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [activeChartId, _setActiveChartId] = useState<string | null>(null)
   const setActiveChartId = _setActiveChartId
   const [draftOrders, setDraftOrders] = useState<DraftOrderMap>({})
-  const [placedOrders, setPlacedOrdersMap] = useState<PlacedOrderMap>({})
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
@@ -249,12 +213,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
   const [positions, setPositionsMap] = useState<PositionsMap>({})
   // Stable refs for reading latest state in callbacks without triggering re-renders
-  const placedOrdersRef = React.useRef<PlacedOrderMap>({})
   const previewOrdersRef = React.useRef<PreviewOrderMap>({})
   const gridOrdersRef = React.useRef<GridOrderMap>({})
   const positionsRef = React.useRef<PositionsMap>({})
   const balancesRef = React.useRef<BalanceStore>(buildInitialBalances())
-  placedOrdersRef.current = placedOrders
   previewOrdersRef.current = previewOrders
   gridOrdersRef.current = gridOrders
   positionsRef.current = positions
@@ -444,25 +406,31 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  // Order bridge setters
+  // Order bridge setters — orders live inside positions[pk].orders
   const setDraftOrder = useCallback((chartId: string, draft: ChartDraftOrder | undefined) => {
     setDraftOrders((prev) => ({ ...prev, [chartId]: draft }))
   }, [])
 
   const addPlacedOrder = useCallback((positionKey: PositionKey, order: ChartPlacedOrder) => {
-    setPlacedOrdersMap((prev) => ({
-      ...prev,
-      [positionKey]: [...(prev[positionKey] ?? []), order],
-    }))
+    setPositionsMap((prev) => {
+      const pos = prev[positionKey]
+      if (!pos) return prev
+      return { ...prev, [positionKey]: { ...pos, orders: [...pos.orders, order] } }
+    })
   }, [])
 
   const removePlacedOrder = useCallback((positionKey: PositionKey, orderId: string) => {
-    const prev = placedOrdersRef.current
-    const keyOrders = prev[positionKey] ?? []
-    const removed = keyOrders.find((o) => o.id === orderId)
+    const pos = positionsRef.current[positionKey]
+    if (!pos) return
+    const removed = pos.orders.find((o) => o.id === orderId)
 
-    setPlacedOrdersMap({ ...prev, [positionKey]: keyOrders.filter((o) => o.id !== orderId) })
+    setPositionsMap((prev) => {
+      const p = prev[positionKey]
+      if (!p) return prev
+      return { ...prev, [positionKey]: { ...p, orders: p.orders.filter((o) => o.id !== orderId) } }
+    })
 
+    // Sync grid overlay when a grid order is cancelled individually
     if (removed?.source === "grid" && removed.gridConsoleId) {
       const consoleId = removed.gridConsoleId
       const prevGrid = gridOrdersRef.current
@@ -489,9 +457,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const updatePlacedOrderPrice = useCallback((positionKey: PositionKey, orderId: string, price: number) => {
-    const prev = placedOrdersRef.current
-    const orders = prev[positionKey] ?? []
-    const order = orders.find((o) => o.id === orderId)
+    const pos = positionsRef.current[positionKey]
+    if (!pos) return
+    const order = pos.orders.find((o) => o.id === orderId)
     if (!order) return
 
     const newNotional = order.qty * price
@@ -499,32 +467,40 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       ? newNotional / order.leverage
       : newNotional
 
-    const updatedOrders = orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o)
-    const newMap = { ...prev, [positionKey]: updatedOrders }
-    setPlacedOrdersMap(newMap)
+    setPositionsMap((prev) => {
+      const p = prev[positionKey]
+      if (!p) return prev
+      const updatedOrders = p.orders.map((o) => o.id === orderId ? { ...o, price, margin: newMargin } : o)
+      return { ...prev, [positionKey]: { ...p, orders: updatedOrders } }
+    })
 
     if (order.accountId && order.exchangeId && order.marketType) {
       const k = balKey(order.accountId, order.exchangeId, order.marketType)
-      const totalInOrders = Object.values(newMap)
-        .flat()
-        .filter((o) => o.accountId === order.accountId && o.exchangeId === order.exchangeId && o.marketType === order.marketType && o.margin != null)
-        .reduce((sum, o) => sum + (o.margin ?? 0), 0)
-      const b = balancesRef.current
-      const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-      setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
+      // Recalculate total inOrders from all positions
+      setPositionsMap((prev) => {
+        const totalInOrders = Object.values(prev)
+          .flatMap((p) => p.orders)
+          .filter((o) => o.accountId === order.accountId && o.exchangeId === order.exchangeId && o.marketType === order.marketType && o.margin != null)
+          .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+        const b = balancesRef.current
+        const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+        setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
+        return prev
+      })
     }
   }, [])
 
   const updatePlacedOrder = useCallback((positionKey: PositionKey, orderId: string, updates: Partial<ChartPlacedOrder>) => {
-    setPlacedOrdersMap((prev) => ({
-      ...prev,
-      [positionKey]: (prev[positionKey] ?? []).map((o) => o.id === orderId ? { ...o, ...updates } : o),
-    }))
+    setPositionsMap((prev) => {
+      const p = prev[positionKey]
+      if (!p) return prev
+      return { ...prev, [positionKey]: { ...p, orders: p.orders.map((o) => o.id === orderId ? { ...o, ...updates } : o) } }
+    })
   }, [])
 
   // ── Position Manager ─────────────────────────────────────────────────────────
 
-  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional">) => {
+  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => {
     const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     setPositionsMap((prev) => {
       const existing = prev[pk]
@@ -557,7 +533,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const pnlPct = (rawPnl / notional) * pos.leverage * 100
       return {
         ...prev,
-        [pk]: { ...pos, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct },
+        [pk]: { ...pos, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: [], status: "pending", realizedPnl: 0 },
       }
     })
   }, [])
@@ -699,28 +675,19 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
       const posPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
-      const prevPlaced = placedOrdersRef.current
-      const posOrders = prevPlaced[posPk] ?? []
-      const withoutOld = posOrders.filter((o) => o.gridConsoleId !== consoleId)
-      const updatedMap = { ...prevPlaced, [posPk]: [...withoutOld, ...newOrders] }
-      setPlacedOrdersMap(updatedMap)
-
-      const totalInOrders = Object.values(updatedMap)
-        .flat()
-        .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
-        .reduce((sum, o) => sum + (o.margin ?? 0), 0)
-      const b = balancesRef.current
-      const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-      setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
 
       // Virtual position — exists as soon as grid orders are placed, before any fill
       const totalQty = entry.orders.reduce((s, o) => s + o.qty, 0)
       const weightedAvg = totalQty > 0
         ? entry.orders.reduce((s, o) => s + o.price * o.qty, 0) / totalQty
         : (entry.orders[0]?.price ?? 0)
+
       setPositionsMap((prevPos) => {
         const existing = prevPos[posPk]
         if (existing) {
+          // Merge — replace grid orders for this console, keep rest
+          const withoutOld = existing.orders.filter((o) => o.gridConsoleId !== consoleId)
+          const mergedOrders = [...withoutOld, ...newOrders]
           const newSize = totalQty
           const newAvg = weightedAvg
           const notional = newSize * newAvg
@@ -731,7 +698,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           const pnlPct = notional > 0 ? (rawPnl / notional) * entry.leverage * 100 : 0
           return {
             ...prevPos,
-            [posPk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct },
+            [posPk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: mergedOrders },
           }
         }
         const notional = totalQty * weightedAvg
@@ -751,8 +718,24 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             unrealizedPnl: 0,
             unrealizedPnlPct: 0,
             openedAt: time,
+            orders: newOrders,
+            status: "pending",
+            realizedPnl: 0,
+            sourceConsoleId: consoleId,
           },
         }
+      })
+
+      // Update balance inOrders from positions
+      setPositionsMap((prev) => {
+        const totalInOrders = Object.values(prev)
+          .flatMap((p) => p.orders)
+          .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
+          .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+        const b = balancesRef.current
+        const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+        setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.round(totalInOrders * 100) / 100 } })
+        return prev
       })
     }
   }, [])
@@ -766,27 +749,32 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
     if (entry && entry.accountId && entry.exchangeId && entry.marketType) {
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
-      const prevPlaced = placedOrdersRef.current
-      const updatedMap: typeof prevPlaced = {}
-      for (const [pk, orders] of Object.entries(prevPlaced)) {
-        updatedMap[pk] = orders.filter((o) => o.gridConsoleId !== consoleId)
-      }
-      setPlacedOrdersMap(updatedMap)
-
-      const totalInOrders = Object.values(updatedMap)
-        .flat()
-        .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
-        .reduce((sum, o) => sum + (o.margin ?? 0), 0)
-      const b = balancesRef.current
-      const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-      setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } })
-
-      // Remove virtual position when grid is cancelled
       const cancelPk = posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
+
+      // Remove grid orders from position, then recalc balance
       setPositionsMap((prev) => {
-        const n = { ...prev }
-        delete n[cancelPk]
-        return n
+        const pos = prev[cancelPk]
+        if (!pos) return prev
+        const remainingOrders = pos.orders.filter((o) => o.gridConsoleId !== consoleId)
+        // If no orders remain, delete the position entirely
+        if (remainingOrders.length === 0) {
+          const n = { ...prev }
+          delete n[cancelPk]
+          return n
+        }
+        return { ...prev, [cancelPk]: { ...pos, orders: remainingOrders } }
+      })
+
+      // Recalc inOrders from remaining positions
+      setPositionsMap((prev) => {
+        const totalInOrders = Object.values(prev)
+          .flatMap((p) => p.orders)
+          .filter((o) => o.accountId === entry.accountId && o.exchangeId === entry.exchangeId && o.marketType === entry.marketType && o.margin != null)
+          .reduce((sum, o) => sum + (o.margin ?? 0), 0)
+        const b = balancesRef.current
+        const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+        setBalances({ ...b, [k]: { walletBalance: cur.walletBalance, inOrders: Math.max(0, Math.round(totalInOrders * 100) / 100) } })
+        return prev
       })
     }
   }, [])
@@ -816,42 +804,46 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const orders = entry.orders.map((o) => o.id === orderId ? { ...o, price: newPrice } : o)
       return { ...prev, [consoleId]: { ...entry, orders } }
     })
-    setPlacedOrdersMap((prev) => {
-      const result: typeof prev = {}
-      for (const [chartId, orders] of Object.entries(prev)) {
-        result[chartId] = orders.map((o) =>
-          o.id === orderId && o.source === "grid" && o.gridConsoleId === consoleId
-            ? { ...o, price: newPrice }
-            : o
-        )
+    setPositionsMap((prev) => {
+      const result: PositionsMap = {}
+      for (const [pk, pos] of Object.entries(prev)) {
+        result[pk] = {
+          ...pos,
+          orders: pos.orders.map((o) =>
+            o.id === orderId && o.source === "grid" && o.gridConsoleId === consoleId
+              ? { ...o, price: newPrice }
+              : o
+          ),
+        }
       }
       return result
     })
   }, [])
 
   const removeGridEntry = useCallback((consoleId: string, orderId: string) => {
+    // Remove from positions[pk].orders and refund balance
+    setPositionsMap((prev) => {
+      let removedOrder: ChartPlacedOrder | undefined
+      const result: PositionsMap = {}
+      for (const [pk, pos] of Object.entries(prev)) {
+        if (!removedOrder) removedOrder = pos.orders.find((o) => o.id === orderId && o.source === "grid")
+        result[pk] = { ...pos, orders: pos.orders.filter((o) => o.id !== orderId) }
+      }
+      if (removedOrder?.accountId && removedOrder.exchangeId && removedOrder.marketType && removedOrder.margin != null) {
+        const k = balKey(removedOrder.accountId, removedOrder.exchangeId, removedOrder.marketType)
+        setBalances((b) => {
+          const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
+          const newInOrders = Math.max(0, Math.round((cur.inOrders - removedOrder!.margin!) * 100) / 100)
+          return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
+        })
+      }
+      return result
+    })
+
+    // Remove from grid overlay
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
-
-      // Also remove from placedOrders and refund balance (mirror of removePlacedOrder for grid orders)
-      setPlacedOrdersMap((prevPlaced) => {
-        const result: typeof prevPlaced = {}
-        for (const [pk, orders] of Object.entries(prevPlaced)) {
-          const removed = orders.find((o) => o.id === orderId && o.source === "grid")
-          if (removed?.accountId && removed.exchangeId && removed.marketType && removed.margin != null) {
-            const k = balKey(removed.accountId, removed.exchangeId, removed.marketType)
-            setBalances((b) => {
-              const cur = b[k] ?? { walletBalance: 0, inOrders: 0 }
-              const newInOrders = Math.max(0, Math.round((cur.inOrders - removed.margin!) * 100) / 100)
-              return { ...b, [k]: { walletBalance: cur.walletBalance, inOrders: newInOrders } }
-            })
-          }
-          result[pk] = orders.filter((o) => o.id !== orderId)
-        }
-        return result
-      })
-
       const orders = entry.orders.filter((o) => o.id !== orderId)
       if (orders.length === 0) {
         const n = { ...prev }
@@ -860,7 +852,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, [consoleId]: { ...entry, orders } }
     })
-  }, [setPlacedOrdersMap, setBalances])
+  }, [setBalances])
 
   const removeGridTpSl = useCallback((consoleId: string, target: "tp" | "sl", tpIndex?: number) => {
     setGridOrdersMap((prev) => {
@@ -942,7 +934,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         activeChartId,
         setActiveChartId,
         draftOrders,
-        placedOrders,
         setDraftOrder,
         addPlacedOrder,
         removePlacedOrder,
