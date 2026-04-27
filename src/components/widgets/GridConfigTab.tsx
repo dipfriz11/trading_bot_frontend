@@ -906,6 +906,9 @@ export const GridConfigTab = memo(function GridConfigTab({
     // React whenever slPrice transitions from non-null to null (user clicked x on chart)
     if (prevChartSlPriceRef.current !== undefined && prevChartSlPriceRef.current !== null && chartSlPrice === null) {
       setCfg((p) => ({ ...p, slEnabled: false }))
+      // Also update shared state so the shared→cfg sync effect doesn't overwrite this
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, slEnabled: false }))
     }
     prevChartSlPriceRef.current = chartSlPrice
   }, [chartSlPrice])
@@ -954,21 +957,23 @@ export const GridConfigTab = memo(function GridConfigTab({
     if (chartTpLevelsLen >= prev) return
 
     if (chartTpLevelsLen === 0) {
-      // All TPs removed → deactivate block
+      // All TPs removed → deactivate block; also update shared state to prevent overwrite
       setCfg((p) => ({ ...p, tpEnabled: false }))
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, tpEnabled: false }))
       return
     }
 
     // Partial removal — user removed one TP on the chart
-    // Same logic for both preview and placed: sync form to match remaining chart TPs
     const remaining = chartTpLevels ?? []
+    let newTpPercent: number | null = null
+    let newMultiLevels: { tpPercent: number; closePercent: number }[] | null = null
     setCfg((p) => {
       const isLong = p.side === "long"
       const viz = calcGridVisualization(p)
       const firstOrderPrice = viz.orders[0]?.price ?? p.entryPrice
       const basePrice = p.tpMode === "avg_entry" ? firstOrderPrice : p.entryPrice
       const n = remaining.length
-      // Redistribute closePercent evenly: floor for all, add remainder to last
       const base = Math.floor(100 / n)
       const remainder = 100 - base * n
       const newLevels = remaining.map((price, i) => {
@@ -978,7 +983,8 @@ export const GridConfigTab = memo(function GridConfigTab({
         const closePercent = i === n - 1 ? base + remainder : base
         return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent }
       })
-      const newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
+      newTpPercent = newLevels[0]?.tpPercent ?? p.tpPercent
+      newMultiLevels = newLevels
       return {
         ...p,
         tpPercent: newTpPercent,
@@ -987,6 +993,14 @@ export const GridConfigTab = memo(function GridConfigTab({
         multiTpEnabled: n > 1,
       }
     })
+    // Also sync shared state to prevent shared→cfg effect from overwriting
+    if (newTpPercent !== null && newMultiLevels !== null) {
+      const tp = newTpPercent
+      const levels = newMultiLevels as { tpPercent: number; closePercent: number }[]
+      const n = levels.length
+      const setter = activeSideRef.current === "long" ? setLongSharedTpSlRef.current : setShortSharedTpSlRef.current
+      setter((p) => ({ ...p, tpPercent: tp, multiTpCount: n, multiTpLevels: levels, multiTpEnabled: n > 1 }))
+    }
   }, [chartTpLevelsLen, isPlaced])
 
   // When tpEnabled is turned ON while placed → immediately apply TP to chart from config
