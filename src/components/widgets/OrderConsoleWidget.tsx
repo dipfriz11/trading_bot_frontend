@@ -338,6 +338,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "grid">("new")
+  const _devTabRef = useRef(tab)
+  if (import.meta.env.DEV && _devTabRef.current !== tab) {
+    console.log(`[OrderConsoleWidget] tab changed: ${_devTabRef.current} → ${tab}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
+    _devTabRef.current = tab
+  }
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")

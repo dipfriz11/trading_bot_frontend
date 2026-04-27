@@ -506,9 +506,14 @@ export const GridConfigTab = memo(function GridConfigTab({
 }: GridConfigTabProps) {
   // ── DEV render counter ────────────────────────────────────────────────────
   const _devRc = useRef(0)
+  const _devPrevIsVisible = useRef(isVisible)
   if (import.meta.env.DEV) {
     _devRc.current++
-    console.log(`[GridConfigTab] render #${_devRc.current} isVisible=${isVisible} consoleWidgetId=${consoleWidgetId}`)
+    const changed = _devPrevIsVisible.current !== isVisible ? ` *** CHANGED from ${_devPrevIsVisible.current}` : ""
+    _devPrevIsVisible.current = isVisible
+    if (changed || _devRc.current <= 4) {
+      console.log(`[GridConfigTab] render #${_devRc.current} isVisible=${isVisible}${changed}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
+    }
   }
 
   // ── Multi-grid slots (separate per side) ─────────────────────────────────
