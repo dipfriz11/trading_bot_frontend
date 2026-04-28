@@ -27,6 +27,15 @@ function buildInitialBalances(): BalanceStore {
 }
 
 const STORAGE_KEY = "crypto-terminal-v1"
+const GRID_ORDERS_KEY = "crypto-terminal-grid-orders-v1"
+
+function loadGridOrders(): GridOrderMap {
+  try {
+    const raw = localStorage.getItem(GRID_ORDERS_KEY)
+    if (raw) return JSON.parse(raw) as GridOrderMap
+  } catch {}
+  return {}
+}
 
 function createDefaultTab(id: string, label: string): Tab {
   return {
@@ -214,7 +223,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
   const [previewOrders, setPreviewOrdersMap] = useState<PreviewOrderMap>({})
-  const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>({})
+  const [gridOrders, setGridOrdersMap] = useState<GridOrderMap>(loadGridOrders)
   const [positions, setPositionsMap] = useState<PositionsMap>({})
   // Stable refs for reading latest state in callbacks without triggering re-renders
   const previewOrdersRef = React.useRef<PreviewOrderMap>({})
@@ -234,6 +243,13 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     } catch {
     }
   }, [state])
+
+  // Persist gridOrders to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRID_ORDERS_KEY, JSON.stringify(gridOrders))
+    } catch {}
+  }, [gridOrders])
 
   // Load positions from Supabase on mount
   useEffect(() => {
@@ -636,6 +652,24 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const dd = String(now.getDate()).padStart(2, "0")
     const mm = String(now.getMonth() + 1).padStart(2, "0")
     const filledAt = `${hh}:${min}:${ss} ${dd}.${mm}`
+
+    // Find order first to remove from gridOrders outside the positions updater
+    const currentPos = positionsRef.current[pk]
+    const targetOrder = currentPos?.orders.find((o) => o.id === orderId)
+    if (targetOrder?.gridConsoleId && targetOrder.status !== "filled") {
+      const cid = targetOrder.gridConsoleId
+      setGridOrdersMap((gPrev) => {
+        const grid = gPrev[cid]
+        if (!grid) return gPrev
+        const remaining = grid.orders.filter((o) => o.id !== orderId)
+        if (remaining.length === 0) {
+          const n = { ...gPrev }
+          delete n[cid]
+          return n
+        }
+        return { ...gPrev, [cid]: { ...grid, orders: remaining } }
+      })
+    }
 
     setPositionsMap((prev) => {
       const pos = prev[pk]
