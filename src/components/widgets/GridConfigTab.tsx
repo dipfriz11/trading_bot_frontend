@@ -1219,7 +1219,7 @@ export const GridConfigTab = memo(function GridConfigTab({
   // Push preview whenever config changes and totalQuote > 0
   useEffect(() => {
     if (!isVisible) {
-      if (!isPlaced) cancelGridOrders(consoleId)
+      cancelGridPreview(consoleId)
       return
     }
     if (!activeChartId) {
