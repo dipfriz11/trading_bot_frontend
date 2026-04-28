@@ -1216,21 +1216,6 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   return (
     <div style={{ position: "relative", width, height }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
-          width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
-        />
-      )}
       {gridOrdersList && gridOrdersList.length > 0 && (
         <GridOrdersOverlay
           gridOrdersList={gridOrdersList}
@@ -1255,6 +1240,21 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
+          width={width} height={height}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
+        />
+      )}
       {tpSl && onTpSlDragStart && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null) && (
         <TpSlOverlay
           tpSl={tpSl} width={width} height={height}
@@ -1358,21 +1358,6 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
   return (
     <div style={{ position: "relative", width, height }}>
       <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
-          width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
-        />
-      )}
       {gridOrdersList && gridOrdersList.length > 0 && (
         <GridOrdersOverlay
           gridOrdersList={gridOrdersList}
@@ -1397,6 +1382,21 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
+          width={width} height={height}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
+        />
+      )}
       {tpSl && onTpSlDragStart && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null) && (
         <TpSlOverlay
           tpSl={tpSl} width={width} height={height}
