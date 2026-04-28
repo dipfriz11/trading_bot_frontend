@@ -606,6 +606,19 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const closePosition = useCallback((pk: PositionKey) => {
+    // Clean up any grid entries (including empty ones left by fillOrder) for this position
+    const pos = positionsRef.current[pk]
+    if (pos) {
+      const consoleIds = new Set(pos.orders.map((o) => o.gridConsoleId).filter(Boolean) as string[])
+      if (pos.sourceConsoleId) consoleIds.add(pos.sourceConsoleId)
+      if (consoleIds.size > 0) {
+        setGridOrdersMap((prev) => {
+          const n = { ...prev }
+          for (const cid of consoleIds) delete n[cid]
+          return n
+        })
+      }
+    }
     setPositionsMap((prev) => {
       const n = { ...prev }
       delete n[pk]
@@ -662,11 +675,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         const grid = gPrev[cid]
         if (!grid) return gPrev
         const remaining = grid.orders.filter((o) => o.id !== orderId)
-        if (remaining.length === 0) {
-          const n = { ...gPrev }
-          delete n[cid]
-          return n
-        }
+        // Keep the grid entry even with empty orders so cancelGridOrders can still find it
         return { ...gPrev, [cid]: { ...grid, orders: remaining } }
       })
     }
