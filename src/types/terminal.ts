@@ -102,6 +102,84 @@ export interface Position {
   leverage: number
 }
 
+// ---- Order types (canonical home — re-exported from TerminalContext for compat) ----
+
+export type OrderSource = "manual" | "grid" | "dca" | "bot" | "webhook"
+
+export interface ChartDraftOrder {
+  side: "buy" | "sell"
+  price: number
+  qty: number
+  orderType: "limit" | "market"
+}
+
+export interface ChartPlacedOrder {
+  id: string
+  side: "buy" | "sell"
+  price: number
+  qty: number
+  orderType: "limit" | "market"
+  isDraft?: boolean
+  symbol?: string
+  accountId?: string
+  exchangeId?: string
+  marketType?: "spot" | "futures"
+  leverage?: number
+  margin?: number
+  time?: string
+  filledAt?: string    // HH:MM:SS DD.MM when order was filled
+  filledPct?: number   // 0–100 fill percentage
+  status?: "pending" | "filled" | "cancelled"
+  source?: OrderSource
+  gridIndex?: number
+  gridConsoleId?: string
+  botName?: string
+  webhookName?: string
+}
+
+export type PositionStatus = "active" | "pending" | "closed"
+
+// Live position — created/updated by the position manager in TerminalContext
+export interface LivePosition {
+  // Identity (same key as PositionKey)
+  accountId: string
+  exchangeId: string
+  marketType: "spot" | "futures"
+  symbol: string
+
+  side: "long" | "short"
+  size: number          // base asset qty — virtual (pending orders) size
+  realSize: number      // actual filled size on exchange (0 = virtual position)
+  avgEntry: number      // volume-weighted average entry price
+  leverage: number
+  marginMode: "cross" | "isolated"
+  markPrice: number     // latest mark/last price (updated externally)
+
+  // TP/SL percent for display
+  tpPct?: number
+  slPct?: number
+  tpPrice?: number
+  slPrice?: number
+
+  // Computed on the fly, stored for quick access
+  unrealizedPnl: number
+  unrealizedPnlPct: number
+  notional: number      // size * avgEntry
+
+  openedAt: string      // HH:MM:SS when position was first opened
+  openedDate: string    // DD.MM date portion
+
+  // Short human-readable ID (e.g. "5673700")
+  shortId: string
+
+  // Order storage — all placed orders belonging to this position
+  orders: ChartPlacedOrder[]
+
+  status: PositionStatus   // pending = orders placed but no fill yet; active = at least one fill
+  realizedPnl: number
+  sourceConsoleId?: string // grid/DCA console that opened this position
+}
+
 export interface Alert {
   id: string
   symbol: string
@@ -501,7 +579,7 @@ export const WIDGET_LABELS: Record<WidgetType, string> = {
   chart: "Price Chart",
   orderbook: "Order Book",
   trades: "Trades Feed",
-  portfolio: "Portfolio / Positions",
+  portfolio: "Positions",
   screener: "Asset Screener",
   pnl: "P&L Statistics",
   alerts: "Alerts",

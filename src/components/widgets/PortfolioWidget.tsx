@@ -1,14 +1,26 @@
 import { useState } from "react"
-import { generatePositions, formatPrice, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
-import type { Widget } from "@/types/terminal"
-import { useTerminal } from "@/contexts/TerminalContext"
-import type { ChartPlacedOrder, OrderSource } from "@/contexts/TerminalContext"
-import { X } from "lucide-react"
+import { EXCHANGES } from "@/lib/mock-data"
+import type { Widget, LivePosition, ChartPlacedOrder } from "@/types/terminal"
+import { useTerminal, posKey } from "@/contexts/TerminalContext"
+import { X, ChevronDown, ChevronRight, Pencil, CircleCheck as CheckCircle2, Circle, CircleAlert as AlertCircle } from "lucide-react"
 
-const positions = generatePositions()
-
-interface FlatOrder extends ChartPlacedOrder {
-  chartId: string
+// ─── Color palette ────────────────────────────────────────────────────────────
+const C = {
+  long: "#00e5a0",
+  short: "#ff4757",
+  buy: "#00e5a0",
+  sell: "#ff4757",
+  pnlPos: "#00e5a0",
+  pnlNeg: "#ff4757",
+  muted: "rgba(200,214,229,0.5)",
+  dim: "rgba(255,255,255,0.25)",
+  dimmer: "rgba(255,255,255,0.14)",
+  accent: "#4d9fff",
+  warn: "#ffaa44",
+  border: "rgba(255,255,255,0.05)",
+  rowHover: "rgba(255,255,255,0.025)",
+  bg: "rgba(0,0,0,0.12)",
+  filled: "#00e5a0",
 }
 
 function fmtPrice(n: number) {
@@ -17,325 +29,611 @@ function fmtPrice(n: number) {
   return n.toFixed(6)
 }
 
+function fmtQty(n: number) {
+  return n.toFixed(n < 1 ? 4 : 2)
+}
+
 function fmtUSDT(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const SOURCE_BADGE_STYLES: Record<OrderSource, { bg: string; color: string; border: string }> = {
-  manual: { bg: "transparent", color: "transparent", border: "transparent" },
-  grid:    { bg: "rgba(77,159,255,0.1)",  color: "#4d9fff",  border: "rgba(77,159,255,0.25)" },
-  dca:     { bg: "rgba(168,85,247,0.1)",  color: "#a855f7",  border: "rgba(168,85,247,0.25)" },
-  bot:     { bg: "rgba(255,171,0,0.1)",   color: "#ffab00",  border: "rgba(255,171,0,0.25)" },
-  webhook: { bg: "rgba(0,229,160,0.08)",  color: "#00e5a0",  border: "rgba(0,229,160,0.2)" },
+function fmtPct(n: number, decimals = 2) {
+  const abs = Math.abs(n)
+  const sign = n >= 0 ? "+" : "-"
+  return `${sign}${abs.toFixed(decimals)}%`
 }
 
-function SourceBadge({ order }: { order: FlatOrder }) {
-  const source = order.source ?? "manual"
-  if (source === "manual") return null
-  const style = SOURCE_BADGE_STYLES[source]
+// ─── Tags G / TP / SL ─────────────────────────────────────────────────────────
 
-  let label = source.toUpperCase()
-  if (source === "grid" && order.gridIndex != null) label = `GRID #${order.gridIndex}`
-  if (source === "bot" && order.botName) label = `BOT · ${order.botName}`
-  if (source === "webhook" && order.webhookName) label = `⚡ ${order.webhookName}`
+function PositionTags({ pos }: { pos: LivePosition }) {
+  const hasGrid = pos.orders.some((o) => o.source === "grid")
+  const hasTp = pos.tpPrice != null || pos.tpPct != null || pos.orders.some((o) => o.side === "sell" && o.source === "grid")
+  const hasSl = pos.slPrice != null || pos.slPct != null || pos.orders.some((o) => o.orderType === "market" && o.side === "sell")
 
   return (
-    <span
-      className="px-1.5 py-0.5 font-mono rounded"
-      style={{
-        fontSize: 8,
-        background: style.bg,
-        color: style.color,
-        border: `1px solid ${style.border}`,
-        letterSpacing: "0.03em",
-      }}
-    >
-      {label}
-    </span>
+    <div className="flex items-center gap-0.5">
+      {hasGrid && (
+        <span className="px-1 py-0.5 rounded font-mono font-bold"
+          style={{ fontSize: 8, background: "rgba(77,159,255,0.12)", color: C.accent, border: "1px solid rgba(77,159,255,0.25)" }}>
+          G
+        </span>
+      )}
+      {hasTp && (
+        <span className="px-1 py-0.5 rounded font-mono font-bold"
+          style={{ fontSize: 8, background: "rgba(0,229,160,0.1)", color: C.buy, border: "1px solid rgba(0,229,160,0.22)" }}>
+          TP
+        </span>
+      )}
+      {hasSl && (
+        <span className="px-1 py-0.5 rounded font-mono font-bold"
+          style={{ fontSize: 8, background: "rgba(255,71,87,0.1)", color: C.sell, border: "1px solid rgba(255,71,87,0.22)" }}>
+          SL
+        </span>
+      )}
+    </div>
   )
 }
 
-function OrderRow({ order, onCancel }: { order: FlatOrder; onCancel: () => void }) {
-  const accLabel = ACCOUNTS.find((a) => a.id === order.accountId)?.label ?? order.accountId ?? "—"
-  const exLabel  = EXCHANGES.find((e) => e.id === order.exchangeId)?.label ?? order.exchangeId ?? "—"
-  const notional = order.qty * order.price
-  const isBuy = order.side === "buy"
-  const isFutures = order.marketType === "futures"
-  const isPending = order.status === "pending"
+// ─── Collapsed position row ───────────────────────────────────────────────────
+
+function CollapsedRow({
+  pos,
+  positionKey: _positionKey,
+  expanded,
+  onToggle,
+  onClose,
+}: {
+  pos: LivePosition
+  positionKey: string
+  expanded: boolean
+  onToggle: () => void
+  onClose: () => void
+}) {
+  const isLong = pos.side === "long"
+  const sideColor = isLong ? C.long : C.short
+  const isActive = pos.status === "active"
+  const pnlColor = pos.unrealizedPnl >= 0 ? C.pnlPos : C.pnlNeg
+  const exLabel = EXCHANGES.find((e) => e.id === pos.exchangeId)?.label ?? pos.exchangeId
+  const marginLabel = `${pos.marginMode === "cross" ? "Cross" : "Iso"} ×${pos.leverage}`
 
   return (
     <div
-      className="group px-3 py-2 transition-colors hover:bg-white/[0.03]"
-      style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+      className="group flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors"
+      style={{ borderBottom: `1px solid ${C.border}`, background: "transparent" }}
+      onClick={onToggle}
+      onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* Row 1: Symbol + side badge + status + cancel */}
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5">
-          {/* Side badge */}
-          <span
-            className="px-1.5 py-0.5 text-xs font-mono font-bold rounded"
-            style={{
-              background: isBuy ? "rgba(0,229,160,0.15)" : "rgba(255,71,87,0.15)",
-              color: isBuy ? "#00e5a0" : "#ff4757",
-              border: `1px solid ${isBuy ? "rgba(0,229,160,0.3)" : "rgba(255,71,87,0.3)"}`,
-              fontSize: 9,
-            }}
-          >
-            {isBuy ? "BUY" : "SELL"}
-          </span>
+      {/* Expand arrow */}
+      <span style={{ color: C.dimmer, flexShrink: 0 }}>
+        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+      </span>
 
-          {/* Symbol */}
-          <span className="text-xs font-mono font-semibold" style={{ color: "rgba(200,214,229,0.9)" }}>
-            {order.symbol ?? "—"}
-          </span>
-
-          {/* Market type badge */}
-          <span
-            className="px-1 font-mono rounded"
-            style={{
-              fontSize: 8,
-              background: isFutures ? "rgba(255,165,0,0.12)" : "rgba(30,111,239,0.1)",
-              color: isFutures ? "#ffa500" : "#4d9fff",
-              border: `1px solid ${isFutures ? "rgba(255,165,0,0.25)" : "rgba(30,111,239,0.2)"}`,
-            }}
-          >
-            {isFutures ? "PERP" : "SPOT"}
-          </span>
-
-          {/* Order type */}
-          <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>
-            {order.orderType.toUpperCase()}
-          </span>
-
-          {/* Leverage for futures */}
-          {isFutures && order.leverage && (
-            <span className="text-xs font-mono" style={{ color: "#4d9fff", fontSize: 9 }}>
-              {order.leverage}×
-            </span>
-          )}
-
-          {/* Source badge */}
-          <SourceBadge order={order} />
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Status */}
-          <span
-            className="font-mono rounded px-1.5 py-0.5"
-            style={{
-              fontSize: 9,
-              background: isPending
-                ? "rgba(255,211,42,0.1)"
-                : order.status === "filled"
-                  ? "rgba(0,229,160,0.1)"
-                  : "rgba(255,71,87,0.1)",
-              color: isPending ? "#ffd32a" : order.status === "filled" ? "#00e5a0" : "#ff4757",
-              border: `1px solid ${isPending ? "rgba(255,211,42,0.2)" : order.status === "filled" ? "rgba(0,229,160,0.2)" : "rgba(255,71,87,0.2)"}`,
-            }}
-          >
-            {order.status?.toUpperCase() ?? "PENDING"}
-          </span>
-
-          {/* Cancel button */}
-          {isPending && (
-            <button
-              onClick={onCancel}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
-              style={{ color: "rgba(255,71,87,0.7)" }}
-              title="Cancel order"
-            >
-              <X size={10} />
-            </button>
-          )}
-        </div>
+      {/* ID block */}
+      <div className="flex flex-col" style={{ minWidth: 54 }}>
+        <span className="font-mono font-bold" style={{ fontSize: 10, color: "rgba(200,214,229,0.85)" }}>
+          {pos.shortId || pos.accountId.slice(0, 7)}
+        </span>
+        <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>
+          {pos.accountId.slice(0, 8)}
+        </span>
       </div>
 
-      {/* Row 2: Price + Qty + Notional + Margin */}
-      <div className="flex items-center gap-4 mb-1">
-        <div className="flex flex-col">
-          <span className="font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>Price</span>
-          <span className="font-mono" style={{ color: "rgba(200,214,229,0.85)", fontSize: 10 }}>
-            {fmtPrice(order.price)} USDT
+      {/* Side + margin + leverage */}
+      <div className="flex flex-col" style={{ minWidth: 62 }}>
+        <span className="font-mono font-bold" style={{ fontSize: 10, color: sideColor, letterSpacing: "0.02em" }}>
+          {isLong ? "LONG" : "SHORT"}
+        </span>
+        <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>
+          {marginLabel}
+        </span>
+      </div>
+
+      {/* Symbol */}
+      <div className="flex items-center gap-1" style={{ minWidth: 80 }}>
+        <span className="font-mono font-semibold" style={{ fontSize: 11, color: "rgba(200,214,229,0.9)" }}>
+          {pos.symbol}
+        </span>
+        <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>{exLabel.slice(0, 3).toUpperCase()}</span>
+      </div>
+
+      {/* PnL (active) or empty (pending) */}
+      {isActive ? (
+        <div className="flex flex-col items-end" style={{ minWidth: 70 }}>
+          <span className="font-mono font-bold" style={{ fontSize: 10, color: pnlColor }}>
+            {pos.unrealizedPnl >= 0 ? "+" : ""}${fmtUSDT(pos.unrealizedPnl)}
+          </span>
+          <span className="font-mono" style={{ fontSize: 8, color: pnlColor, opacity: 0.75 }}>
+            {fmtPct(pos.unrealizedPnlPct)}
           </span>
         </div>
-        <div className="flex flex-col">
-          <span className="font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>Qty</span>
-          <span className="font-mono" style={{ color: "rgba(200,214,229,0.85)", fontSize: 10 }}>
-            {order.qty.toFixed(order.qty < 1 ? 6 : 4)}
+      ) : (
+        <div className="flex flex-col items-end" style={{ minWidth: 70 }}>
+          <span className="font-mono" style={{ fontSize: 9, color: C.dim }}>virtual</span>
+        </div>
+      )}
+
+      {/* Date + Tags */}
+      <div className="flex flex-col items-end ml-auto gap-0.5" style={{ minWidth: 80 }}>
+        <div className="flex items-center gap-1">
+          <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>
+            {pos.openedAt} {pos.openedDate}
           </span>
         </div>
-        <div className="flex flex-col">
-          <span className="font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>Notional</span>
-          <span className="font-mono" style={{ color: "rgba(200,214,229,0.85)", fontSize: 10 }}>
-            {fmtUSDT(notional)} USDT
-          </span>
-        </div>
-        {isFutures && order.margin != null && (
-          <div className="flex flex-col">
-            <span className="font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>Margin</span>
-            <span className="font-mono" style={{ color: "#4d9fff", fontSize: 10 }}>
-              {fmtUSDT(order.margin)} USDT
+        <PositionTags pos={pos} />
+      </div>
+
+      {/* Close button */}
+      <button
+        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded flex-shrink-0"
+        style={{ color: "rgba(255,71,87,0.7)" }}
+        onClick={(e) => { e.stopPropagation(); onClose() }}
+        onMouseDown={(e) => e.stopPropagation()}
+        title="Close position"
+      >
+        <X size={11} />
+      </button>
+    </div>
+  )
+}
+
+// ─── Order row inside expanded position ──────────────────────────────────────
+
+function PositionOrderRow({
+  order,
+  positionKey: _positionKey,
+  onCancel,
+}: {
+  order: ChartPlacedOrder
+  positionKey: string
+  onCancel: () => void
+}) {
+  const isBuy = order.side === "buy"
+  const sideColor = isBuy ? C.buy : C.sell
+  const isFilled = order.status === "filled"
+  const isCancelled = order.status === "cancelled"
+
+  let typeLabel = order.orderType === "market" ? "Market" : "Limit"
+  if (order.source === "grid" && order.gridIndex != null) {
+    typeLabel = `Limit · ${order.gridIndex}`
+  }
+
+  const isSlOrder = order.orderType === "market" && order.side === "sell" && order.source === "grid"
+  const typeDisplay = isSlOrder ? "SL Market" : typeLabel
+
+  const fillPct = order.filledPct ?? (isFilled ? 100 : 0)
+  const qty = fmtQty(order.qty)
+
+  return (
+    <div
+      className="group flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.02]"
+      style={{ borderBottom: `1px solid ${C.border}` }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {/* Order ID */}
+      <span className="font-mono" style={{ fontSize: 8, color: C.dimmer, minWidth: 66, flexShrink: 0 }}>
+        {order.id.slice(0, 10)}
+      </span>
+
+      {/* BUY/SELL badge */}
+      <span
+        className="px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0"
+        style={{
+          fontSize: 8,
+          background: isBuy ? "rgba(0,229,160,0.1)" : "rgba(255,71,87,0.1)",
+          color: sideColor,
+          border: `1px solid ${isBuy ? "rgba(0,229,160,0.22)" : "rgba(255,71,87,0.22)"}`,
+        }}
+      >
+        {isBuy ? "BUY" : "SELL"}
+      </span>
+
+      {/* Order type */}
+      <span className="font-mono flex-shrink-0" style={{ fontSize: 9, color: "rgba(200,214,229,0.7)", minWidth: 70 }}>
+        {typeDisplay}
+      </span>
+
+      {/* Qty */}
+      <div className="flex flex-col items-end" style={{ minWidth: 40 }}>
+        <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>{qty}</span>
+        {order.source === "grid" && (
+          <div className="flex gap-0.5">
+            <span style={{ color: C.dim, fontSize: 8 }}>≡</span>
+            <span className="font-mono" style={{ fontSize: 7, color: C.dim }}>
+              {order.gridIndex != null ? `${order.gridIndex}` : ""}
             </span>
           </div>
         )}
+      </div>
+
+      {/* Fill status icon */}
+      <div className="flex-shrink-0">
+        {isFilled ? (
+          <CheckCircle2 size={10} style={{ color: C.filled }} />
+        ) : isCancelled ? (
+          <AlertCircle size={10} style={{ color: C.sell }} />
+        ) : isSlOrder ? (
+          <Circle size={10} style={{ color: C.warn }} />
+        ) : (
+          <div style={{
+            width: 10, height: 10, borderRadius: "50%",
+            border: `1.5px solid ${C.dim}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.dim, opacity: 0 }} />
+          </div>
+        )}
+      </div>
+
+      {/* Price */}
+      <div className="flex items-center gap-1 flex-1">
+        <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>
+          {fmtPrice(order.price)}
+        </span>
+        <button
+          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+          style={{ color: C.accent }}
+          title="Edit price"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Pencil size={8} />
+        </button>
+      </div>
+
+      {/* Fill % */}
+      <span className="font-mono" style={{ fontSize: 9, color: fillPct === 100 ? C.filled : C.dim, minWidth: 30, textAlign: "right" }}>
+        {fillPct}%
+      </span>
+
+      {/* Notional / volume */}
+      <span className="font-mono" style={{ fontSize: 9, color: C.muted, minWidth: 38, textAlign: "right" }}>
+        {fmtUSDT(order.qty * order.price)}
+      </span>
+
+      {/* Date placed */}
+      <div className="flex flex-col items-end" style={{ minWidth: 80 }}>
         {order.time && (
-          <div className="flex flex-col ml-auto">
-            <span className="font-mono" style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>Time</span>
-            <span className="font-mono" style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>
-              {order.time}
-            </span>
-          </div>
+          <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>
+            {order.time}
+          </span>
+        )}
+        {order.filledAt && (
+          <span className="font-mono" style={{ fontSize: 8, color: C.filled, opacity: 0.8 }}>
+            → {order.filledAt}
+          </span>
         )}
       </div>
 
-      {/* Row 3: Account + Exchange */}
-      <div className="flex items-center gap-2">
-        <span className="font-mono" style={{ color: "rgba(255,255,255,0.25)", fontSize: 9 }}>
-          {accLabel}
-        </span>
-        <span style={{ color: "rgba(255,255,255,0.1)", fontSize: 9 }}>·</span>
-        <span className="font-mono" style={{ color: "rgba(255,255,255,0.25)", fontSize: 9 }}>
-          {exLabel}
-        </span>
+      {/* Cancel button */}
+      {order.status === "pending" && (
+        <button
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded flex-shrink-0"
+          style={{ color: "rgba(255,71,87,0.65)" }}
+          onClick={(e) => { e.stopPropagation(); onCancel() }}
+          title="Cancel order"
+        >
+          <X size={9} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Expanded position details ────────────────────────────────────────────────
+
+function ExpandedPosition({
+  pos,
+  positionKey,
+  onClose,
+}: {
+  pos: LivePosition
+  positionKey: string
+  onClose: (size: number) => void
+}) {
+  const { removePlacedOrder } = useTerminal()
+  const isActive = pos.status === "active"
+  const isLong = pos.side === "long"
+  const pnlColor = pos.unrealizedPnl >= 0 ? C.pnlPos : C.pnlNeg
+
+  // Sort orders: filled first, then pending, then cancelled
+  const sortedOrders = [...pos.orders].sort((a, b) => {
+    const rank = (o: ChartPlacedOrder) => o.status === "filled" ? 0 : o.status === "pending" ? 1 : 2
+    return rank(a) - rank(b)
+  })
+
+  return (
+    <div
+      style={{ background: C.bg, borderBottom: `1px solid rgba(255,255,255,0.07)` }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {/* Active position summary row */}
+      {isActive && (
+        <div
+          className="flex items-center gap-2 px-3 py-1.5"
+          style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(255,255,255,0.015)" }}
+        >
+          {/* Filled size / total size */}
+          <div className="flex flex-col" style={{ minWidth: 60 }}>
+            <span className="font-mono font-semibold" style={{ fontSize: 10, color: "rgba(200,214,229,0.9)" }}>
+              {fmtQty(pos.realSize)}
+            </span>
+            {pos.size !== pos.realSize && (
+              <span className="font-mono" style={{ fontSize: 8, color: C.accent }}>
+                +{fmtQty(pos.size)}
+              </span>
+            )}
+          </div>
+
+          {/* SL % */}
+          {pos.slPct != null && (
+            <div className="flex flex-col" style={{ minWidth: 55 }}>
+              <span className="font-mono font-semibold" style={{ fontSize: 10, color: C.sell }}>
+                {fmtPct(-Math.abs(pos.slPct))}
+              </span>
+              {pos.slPrice != null && (
+                <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>SL</span>
+              )}
+            </div>
+          )}
+
+          {/* PnL $ */}
+          <div className="flex flex-col" style={{ minWidth: 58 }}>
+            <span className="font-mono font-semibold" style={{ fontSize: 10, color: pnlColor }}>
+              {pos.unrealizedPnl >= 0 ? "+" : ""}${fmtUSDT(pos.unrealizedPnl)}
+            </span>
+          </div>
+
+          {/* Entry / Mark */}
+          <div className="flex flex-col" style={{ minWidth: 72 }}>
+            <span className="font-mono" style={{ fontSize: 10, color: "rgba(200,214,229,0.85)" }}>
+              {fmtPrice(pos.avgEntry)}
+            </span>
+            <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>
+              {fmtPrice(pos.markPrice)}
+            </span>
+          </div>
+
+          {/* TP % */}
+          {pos.tpPct != null && (
+            <div className="flex flex-col" style={{ minWidth: 40 }}>
+              <span className="font-mono font-semibold" style={{ fontSize: 10, color: C.buy }}>
+                {fmtPct(pos.tpPct)}
+              </span>
+              <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>TP</span>
+            </div>
+          )}
+
+          {/* Volume */}
+          <div className="flex flex-col items-end ml-auto" style={{ minWidth: 55 }}>
+            <span className="font-mono" style={{ fontSize: 10, color: C.muted }}>
+              {fmtUSDT(pos.notional)}
+            </span>
+            {pos.leverage > 1 && (
+              <span className="font-mono" style={{ fontSize: 8, color: C.dim }}>
+                m: {fmtUSDT(pos.notional / pos.leverage)}
+              </span>
+            )}
+          </div>
+
+          {/* Progress bar for fill */}
+          {pos.realSize > 0 && pos.size > 0 && (
+            <div style={{ width: 48, minWidth: 48 }}>
+              <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%",
+                  width: `${Math.min(100, (pos.realSize / pos.size) * 100)}%`,
+                  background: isLong ? C.long : C.short,
+                  borderRadius: 2,
+                }} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Orders header row */}
+      <div
+        className="grid px-3 py-0.5"
+        style={{
+          gridTemplateColumns: "70px 48px 72px 28px 1fr 32px 52px 80px 24px",
+          borderBottom: `1px solid ${C.border}`,
+        }}
+      >
+        {["ID", "Side", "Type", "Qty", "Price", "%", "Vol", "Date", ""].map((h) => (
+          <span key={h} className="font-mono" style={{ fontSize: 7, color: C.dimmer, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {/* Order rows */}
+      {sortedOrders.length === 0 ? (
+        <div className="px-3 py-2 font-mono" style={{ fontSize: 9, color: C.dim }}>
+          No orders
+        </div>
+      ) : (
+        sortedOrders.map((order) => (
+          <PositionOrderRow
+            key={order.id}
+            order={order}
+            positionKey={positionKey}
+            onCancel={() => removePlacedOrder(positionKey, order.id)}
+          />
+        ))
+      )}
+
+      {/* Close actions */}
+      <div
+        className="flex items-center gap-1.5 px-3 py-1.5"
+        style={{ borderTop: `1px solid ${C.border}` }}
+      >
+        <span className="font-mono" style={{ fontSize: 8, color: C.dim, marginRight: 4 }}>Close:</span>
+        {[25, 50, 75].map((pct) => (
+          <button
+            key={pct}
+            className="px-2 py-0.5 rounded font-mono transition-colors hover:bg-white/10"
+            style={{
+              fontSize: 9,
+              background: "rgba(255,255,255,0.04)",
+              border: `1px solid rgba(255,255,255,0.08)`,
+              color: C.muted,
+            }}
+            onClick={() => onClose(pos.size * (pct / 100))}
+          >
+            {pct}%
+          </button>
+        ))}
+        <button
+          className="px-2 py-0.5 rounded font-mono transition-colors ml-auto"
+          style={{
+            fontSize: 9,
+            background: "rgba(255,71,87,0.08)",
+            border: "1px solid rgba(255,71,87,0.2)",
+            color: C.sell,
+          }}
+          onClick={() => onClose(pos.size)}
+        >
+          Close All
+        </button>
       </div>
     </div>
   )
 }
 
+// ─── Column headers ───────────────────────────────────────────────────────────
+
+function PositionListHeader() {
+  return (
+    <div
+      className="flex items-center gap-2 px-2 py-1"
+      style={{ borderBottom: `1px solid rgba(255,255,255,0.06)` }}
+    >
+      {[
+        { label: "ID", w: 54 },
+        { label: "Type", w: 62 },
+        { label: "Pair", w: 80 },
+        { label: "PnL", w: 70 },
+        { label: "Date", flex: true },
+      ].map(({ label, w, flex }) => (
+        <span
+          key={label}
+          className="font-mono"
+          style={{
+            fontSize: 8,
+            color: C.dimmer,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            width: flex ? undefined : w,
+            flex: flex ? 1 : undefined,
+            textAlign: flex ? "right" : undefined,
+          }}
+        >
+          {label}
+        </span>
+      ))}
+      <span style={{ width: 20 }} />
+    </div>
+  )
+}
+
+// ─── Main widget ──────────────────────────────────────────────────────────────
+
 export function PortfolioWidget(_props: { widget: Widget }) {
-  const [tab, setTab] = useState<"positions" | "orders">("positions")
-  const { placedOrders, removePlacedOrder } = useTerminal()
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+  const { positions: livePositions, closePosition, partialClosePosition } = useTerminal()
 
-  const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0)
+  const liveList = Object.entries(livePositions)
 
-  // Collect all placed orders (non-draft) across all charts
-  const allOrders: FlatOrder[] = []
-  for (const [chartId, orders] of Object.entries(placedOrders)) {
-    for (const o of orders) {
-      if (!o.isDraft) {
-        allOrders.push({ ...o, chartId })
-      }
-    }
+  const totalPnl = liveList.reduce((sum, [, p]) => sum + p.unrealizedPnl, 0)
+  const activeCount = liveList.filter(([, p]) => p.status === "active").length
+  const pendingCount = liveList.filter(([, p]) => p.status === "pending").length
+  const isPnlPos = totalPnl >= 0
+
+  function toggleExpand(pk: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(pk)) next.delete(pk)
+      else next.add(pk)
+      return next
+    })
   }
-  // Also check active tab charts for metadata
-  const pendingCount = allOrders.filter((o) => o.status === "pending" || o.status == null).length
+
+  function handleClose(pos: LivePosition, size: number) {
+    const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
+    if (size >= pos.size) closePosition(pk)
+    else partialClosePosition(pk, size)
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Summary */}
+      {/* Header */}
       <div
         className="flex items-center gap-4 px-3 py-1.5 flex-shrink-0"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <div>
-          <div className="text-xs font-mono" style={{ opacity: 0.5 }}>Total P&L</div>
-          <div className="text-sm font-mono font-bold" style={{ color: totalPnl >= 0 ? "#00e5a0" : "#ff4757" }}>
-            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
+        {/* Total PnL */}
+        {liveList.length > 0 && (
+          <div>
+            <div className="font-mono" style={{ fontSize: 8, color: C.dim, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Total P&L
+            </div>
+            <div className="font-mono font-bold" style={{ fontSize: 12, color: isPnlPos ? C.pnlPos : C.pnlNeg }}>
+              {isPnlPos ? "+" : ""}${totalPnl.toFixed(2)}
+            </div>
           </div>
-        </div>
-        <div>
-          <div className="text-xs font-mono" style={{ opacity: 0.5 }}>Positions</div>
-          <div className="text-sm font-mono font-bold">{positions.length}</div>
-        </div>
+        )}
 
-        <div className="ml-auto flex gap-1">
-          {(["positions", "orders"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="relative px-2 py-0.5 text-xs font-mono rounded capitalize"
-              style={{
-                background: tab === t ? "rgba(30,111,239,0.2)" : "transparent",
-                border: `1px solid ${tab === t ? "#1e6fef" : "rgba(255,255,255,0.1)"}`,
-                color: tab === t ? "#1e6fef" : "rgba(255,255,255,0.4)",
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              {t}
-              {t === "orders" && pendingCount > 0 && (
-                <span
-                  className="ml-1 rounded-full px-1 font-mono font-bold"
-                  style={{
-                    fontSize: 8,
-                    background: "rgba(255,211,42,0.2)",
-                    color: "#ffd32a",
-                    border: "1px solid rgba(255,211,42,0.3)",
-                  }}
-                >
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* Counts */}
+        <div className="flex items-center gap-2">
+          {activeCount > 0 && (
+            <div className="flex items-center gap-1">
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.long }} />
+              <span className="font-mono" style={{ fontSize: 9, color: C.muted }}>{activeCount} active</span>
+            </div>
+          )}
+          {pendingCount > 0 && (
+            <div className="flex items-center gap-1">
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.warn }} />
+              <span className="font-mono" style={{ fontSize: 9, color: C.muted }}>{pendingCount} virtual</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {tab === "positions" ? (
-        <div className="flex-1 overflow-auto min-h-0">
-          {/* Header */}
-          <div
-            className="grid px-3 py-1 text-xs font-mono flex-shrink-0"
-            style={{ gridTemplateColumns: "1fr 60px 80px 80px 80px", opacity: 0.4, borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-          >
-            <span>Symbol</span>
-            <span className="text-right">Size</span>
-            <span className="text-right">Entry</span>
-            <span className="text-right">Mark</span>
-            <span className="text-right">P&L</span>
+      {/* List */}
+      <div className="flex-1 overflow-auto min-h-0" onMouseDown={(e) => e.stopPropagation()}>
+        {liveList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2" style={{ opacity: 0.22 }}>
+            <span className="font-mono text-sm" style={{ color: "rgba(200,214,229,0.8)" }}>No open positions</span>
+            <span className="font-mono text-xs" style={{ color: "rgba(200,214,229,0.5)" }}>Place orders to see positions here</span>
           </div>
-          {positions.map((pos, i) => (
-            <div
-              key={i}
-              className="grid px-3 py-1.5 text-xs font-mono hover:bg-white/5 transition-colors"
-              style={{ gridTemplateColumns: "1fr 60px 80px 80px 80px", borderBottom: "1px solid rgba(255,255,255,0.03)" }}
-            >
-              <div>
-                <span style={{ color: pos.side === "long" ? "#00e5a0" : "#ff4757" }}>
-                  [{pos.side === "long" ? "L" : "S"}]
-                </span>
-                <span className="ml-1">{pos.symbol}</span>
-                <span className="ml-1 text-xs" style={{ opacity: 0.4 }}>x{pos.leverage}</span>
-              </div>
-              <span className="text-right" style={{ opacity: 0.85 }}>{pos.size}</span>
-              <span className="text-right" style={{ opacity: 0.7 }}>{formatPrice(pos.entryPrice)}</span>
-              <span className="text-right" style={{ opacity: 0.85 }}>{formatPrice(pos.markPrice)}</span>
-              <div className="text-right" style={{ color: pos.pnl >= 0 ? "#00e5a0" : "#ff4757" }}>
-                {pos.pnl >= 0 ? "+" : ""}${pos.pnl.toFixed(0)}
-                <div style={{ opacity: 0.7 }}>({pos.pnlPct >= 0 ? "+" : ""}{pos.pnlPct.toFixed(2)}%)</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex-1 overflow-auto min-h-0">
-          {allOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2" style={{ opacity: 0.3 }}>
-              <span className="text-sm font-mono">No open orders</span>
-              <span className="text-xs font-mono" style={{ opacity: 0.6 }}>Place an order to see it here</span>
-            </div>
-          ) : (
-            <>
-              {/* Column headers */}
-              <div
-                className="flex items-center justify-between px-3 py-1"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-              >
-                <span className="text-xs font-mono" style={{ opacity: 0.35, fontSize: 9 }}>
-                  {allOrders.length} order{allOrders.length !== 1 ? "s" : ""} · {pendingCount} pending
-                </span>
-              </div>
-
-              {allOrders.map((order) => (
-                <OrderRow
-                  key={order.id}
-                  order={order}
-                  onCancel={() => removePlacedOrder(order.chartId, order.id)}
-                />
-              ))}
-            </>
-          )}
-        </div>
-      )}
+        ) : (
+          <>
+            <PositionListHeader />
+            {liveList.map(([pk, pos]) => {
+              const expanded = expandedKeys.has(pk)
+              return (
+                <div key={pk}>
+                  <CollapsedRow
+                    pos={pos}
+                    positionKey={pk}
+                    expanded={expanded}
+                    onToggle={() => toggleExpand(pk)}
+                    onClose={() => handleClose(pos, pos.size)}
+                  />
+                  {expanded && (
+                    <ExpandedPosition
+                      pos={pos}
+                      positionKey={pk}
+                      onClose={(size) => handleClose(pos, size)}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </>
+        )}
+      </div>
     </div>
   )
 }

@@ -5,7 +5,7 @@ import type { GridConfig, GridMultiTpLevel, GridSharedTpSl } from "@/types/termi
 import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
-import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, useGridPreviewEntry } from "@/contexts/TerminalContext"
 import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
 import { nanoid } from "@/lib/nanoid"
 
@@ -504,18 +504,6 @@ export const GridConfigTab = memo(function GridConfigTab({
   exchangeId,
   isVisible = true,
 }: GridConfigTabProps) {
-  // ── DEV render counter ────────────────────────────────────────────────────
-  const _devRc = useRef(0)
-  const _devPrevIsVisible = useRef(isVisible)
-  if (import.meta.env.DEV) {
-    _devRc.current++
-    const changed = _devPrevIsVisible.current !== isVisible ? ` *** CHANGED from ${_devPrevIsVisible.current}` : ""
-    _devPrevIsVisible.current = isVisible
-    if (changed || _devRc.current <= 4) {
-      console.log(`[GridConfigTab] render #${_devRc.current} isVisible=${isVisible}${changed}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
-    }
-  }
-
   // ── Multi-grid slots (separate per side) ─────────────────────────────────
   const [longSlots, setLongSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
   const [shortSlots, setShortSlots] = useState<{ slotId: string }[]>(() => [{ slotId: nanoid() }])
@@ -550,13 +538,14 @@ export const GridConfigTab = memo(function GridConfigTab({
     return () => ro.disconnect()
   }, [])
 
-  const [cfg, setCfg] = useState<GridConfig>({
+  const [cfg, _setCfg] = useState<GridConfig>({
     ...DEFAULT_GRID_CONFIG,
     symbol: externalSymbol ?? DEFAULT_GRID_CONFIG.symbol,
     side: externalFuturesSide ?? DEFAULT_GRID_CONFIG.side,
     entryPrice: externalEntryPrice ?? DEFAULT_GRID_CONFIG.entryPrice,
     leverage: externalLeverage ?? DEFAULT_GRID_CONFIG.leverage,
   })
+  const setCfg = _setCfg
   // Always-current cfg ref for use in effects/callbacks without stale closure
   const cfgRef = useRef(cfg)
 
@@ -614,16 +603,33 @@ export const GridConfigTab = memo(function GridConfigTab({
       bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
     }))
   }, [activeChartId, externalSymbol, externalEntryPrice])
+
+  // Update entryPrice live when market price changes (after initial init)
+  const prevExternalPriceRef = useRef(externalEntryPrice)
+  useEffect(() => {
+    if (!externalEntryPrice || externalEntryPrice <= 0) return
+    if (externalEntryPrice === prevExternalPriceRef.current) return
+    prevExternalPriceRef.current = externalEntryPrice
+    // Only update entryPrice if the key has already been initialised (skip on first run)
+    if (!initialisedKeyRef.current) return
+    setCfg((p) => {
+      if (p.entryPrice === externalEntryPrice) return p
+      // Recalculate top/bottom proportionally if they were auto-set (±3%)
+      const ratio = p.entryPrice > 0 ? externalEntryPrice / p.entryPrice : 1
+      const newTop = Math.round(p.topPrice * ratio * 100) / 100
+      const newBottom = Math.round(p.bottomPrice * ratio * 100) / 100
+      return { ...p, entryPrice: externalEntryPrice, topPrice: newTop, bottomPrice: newBottom }
+    })
+  }, [externalEntryPrice])
+
   useEffect(() => {
     if (externalLeverage && externalLeverage > 0) {
-  
-      setCfg((p) => ({ ...p, leverage: externalLeverage }))
+      setCfg((p) => p.leverage === externalLeverage ? p : { ...p, leverage: externalLeverage })
     }
   }, [externalLeverage])
   useEffect(() => {
     if (externalFuturesSide) {
-  
-      setCfg((p) => ({ ...p, side: externalFuturesSide }))
+      setCfg((p) => p.side === externalFuturesSide ? p : { ...p, side: externalFuturesSide })
     }
   }, [externalFuturesSide])
 
@@ -681,7 +687,30 @@ export const GridConfigTab = memo(function GridConfigTab({
   // so that calcGridVisualization always works correctly from cfg
   useEffect(() => {
     if (multiPositionMode) return
-    setCfg((p) => ({ ...p, ...activeSideSharedTpSl }))
+    setCfg((p) => {
+      const s = activeSideSharedTpSl
+      // Bail out (return same reference) if all TP/SL scalar fields match
+      // and array fields are reference-equal (they come from shared state)
+      if (
+        p.tpEnabled === s.tpEnabled && p.tpMode === s.tpMode &&
+        p.tpPercent === s.tpPercent && p.tpClosePercent === s.tpClosePercent &&
+        p.multiTpEnabled === s.multiTpEnabled && p.multiTpCount === s.multiTpCount &&
+        p.multiTpLevels === s.multiTpLevels &&
+        p.tpRepositionEnabled === s.tpRepositionEnabled &&
+        p.perLevelTpEnabled === s.perLevelTpEnabled &&
+        p.perLevelTpGroups === s.perLevelTpGroups &&
+        p.slEnabled === s.slEnabled && p.slMode === s.slMode &&
+        p.slPercent === s.slPercent && p.slClosePercent === s.slClosePercent &&
+        p.resetTpEnabled === s.resetTpEnabled &&
+        p.resetTpTriggerLevels === s.resetTpTriggerLevels &&
+        p.defaultResetTpPercent === s.defaultResetTpPercent &&
+        p.defaultResetTpClosePercent === s.defaultResetTpClosePercent &&
+        p.resetTpRebuildTail === s.resetTpRebuildTail &&
+        p.resetTpPerLevelEnabled === s.resetTpPerLevelEnabled &&
+        p.resetTpPerLevelSettings === s.resetTpPerLevelSettings
+      ) return p
+      return { ...p, ...s }
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSideSharedTpSl, multiPositionMode])
 
@@ -736,8 +765,11 @@ export const GridConfigTab = memo(function GridConfigTab({
   const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
   // Subscribe only to this specific consoleId to avoid re-renders from other grids
   const currentGridState = useGridOrderEntry(consoleId)
-  const isPlaced = currentGridState?.state === "placed"
+  const currentPreviewState = useGridPreviewEntry(consoleId)
+  const isPlaced = !!currentGridState
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
+  // For drag-sync: use placed state when placed, otherwise use preview state
+  const currentDragState = currentGridState ?? currentPreviewState
 
   // Refs so that upd() and drag-sync effects can call markGridPendingUpdate
   // without capturing stale closures over isPlaced/consoleId
@@ -788,11 +820,38 @@ export const GridConfigTab = memo(function GridConfigTab({
       setter((p) => ({ ...p, [key]: val }))
       // Also update cfg so preview recalculates immediately
       setCfg((p) => ({ ...p, [key]: val }))
+    } else if (key === "stepPercent") {
+      // When user manually sets stepPercent, clear lastOffsetPercent so stepPercent takes effect
+      setCfg((p) => ({ ...p, stepPercent: val as number, lastOffsetPercent: 0 }))
+    } else if (key === "lastOffsetPercent") {
+      // When user sets lastOffsetPercent, also recompute stepPercent to keep it consistent
+      setCfg((p) => {
+        const n = Math.max(2, p.ordersCount)
+        const entryPrice = p.entryPrice > 0 ? p.entryPrice : 67000
+        const isLong = p.side === "long"
+        const firstOffset = p.firstOffsetPercent / 100
+        const lastOffset = (val as number) / 100
+        const firstPrice = isLong ? entryPrice * (1 - firstOffset) : entryPrice * (1 + firstOffset)
+        const lastPrice = isLong ? entryPrice * (1 - lastOffset) : entryPrice * (1 + lastOffset)
+        const ratio = firstPrice > 0 ? lastPrice / firstPrice : 1
+        let newStep = p.stepPercent
+        if (ratio > 0 && ratio !== 1) {
+          const rawStep = isLong
+            ? (1 - Math.pow(ratio, 1 / (n - 1))) * 100
+            : (Math.pow(ratio, 1 / (n - 1)) - 1) * 100
+          newStep = Math.max(0.01, Math.round(rawStep * 100) / 100)
+        }
+        return { ...p, lastOffsetPercent: val as number, stepPercent: newStep }
+      })
     } else {
       setCfg((p) => ({ ...p, [key]: val }))
     }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
-  }, [markGridPendingUpdate])
+    // Cancel preview immediately when totalQuote is cleared to zero
+    if (key === "totalQuote" && (val as number) <= 0) {
+      cancelGridPreview(consoleIdRef.current)
+    }
+  }, [markGridPendingUpdate, cancelGridPreview])
 
   // Ref always pointing at latest cfg — used by chart-switch effect to pre-sync before saving
   const prevCfgRef = useRef(cfg)
@@ -885,12 +944,11 @@ export const GridConfigTab = memo(function GridConfigTab({
   // Stable ID refs for order levels
   const orderIdRefs = useRef<string[]>([])
 
-  // Sync ordersCount when an entry is removed from the chart (x button)
+  // Sync ordersCount when a placed entry is removed from the chart (x button)
   const chartOrdersLen = currentGridState?.orders.length
   const prevChartOrdersLenRef = useRef<number | undefined>(undefined)
   useEffect(() => {
     if (chartOrdersLen === undefined) { prevChartOrdersLenRef.current = undefined; return }
-    // Only react when the chart reduced the count below what we expected
     if (prevChartOrdersLenRef.current !== undefined && chartOrdersLen < prevChartOrdersLenRef.current) {
       setCfg((p) => ({ ...p, ordersCount: chartOrdersLen }))
       orderIdRefs.current = currentGridState!.orders.map((o) => o.id)
@@ -898,9 +956,20 @@ export const GridConfigTab = memo(function GridConfigTab({
     prevChartOrdersLenRef.current = chartOrdersLen
   }, [chartOrdersLen])
 
+  // Sync ordersCount when a preview entry is removed from the chart (x button)
+  const chartPreviewOrdersLen = currentPreviewState?.orders.length
+  const prevChartPreviewOrdersLenRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (chartPreviewOrdersLen === undefined) { prevChartPreviewOrdersLenRef.current = undefined; return }
+    if (prevChartPreviewOrdersLenRef.current !== undefined && chartPreviewOrdersLen < prevChartPreviewOrdersLenRef.current) {
+      setCfg((p) => ({ ...p, ordersCount: chartPreviewOrdersLen }))
+    }
+    prevChartPreviewOrdersLenRef.current = chartPreviewOrdersLen
+  }, [chartPreviewOrdersLen])
+
   // ── SL sync: chart x → form deactivation ────────────────────────────────
   // When slPrice is nulled out on the chart (user clicked x), deactivate slEnabled in form
-  const chartSlPrice = currentGridState?.slPrice
+  const chartSlPrice = currentDragState?.slPrice
   const prevChartSlPriceRef = useRef<number | null | undefined>(undefined)
   useEffect(() => {
     // React whenever slPrice transitions from non-null to null (user clicked x on chart)
@@ -930,7 +999,7 @@ export const GridConfigTab = memo(function GridConfigTab({
 
   // ── TP sync: chart x button on individual TP lines ──────────────────────
   // Stabilize by value so array-reference churn in context doesn't re-fire effects
-  const rawChartTpLevels = currentGridState?.tpLevels
+  const rawChartTpLevels = currentDragState?.tpLevels
   const chartTpLevels = useMemo(
     () => rawChartTpLevels,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -941,7 +1010,7 @@ export const GridConfigTab = memo(function GridConfigTab({
   // Track how many TPs were active at placement so we know when "all" are removed
   const placedTpCountRef = useRef<number>(0)
   useEffect(() => {
-    if (isPlaced && currentGridState?.state === "placed") {
+    if (isPlaced && currentGridState) {
       if (chartTpLevelsLen !== undefined && chartTpLevelsLen > 0) {
         placedTpCountRef.current = chartTpLevelsLen
       }
@@ -1135,9 +1204,9 @@ export const GridConfigTab = memo(function GridConfigTab({
 
   // Sync form fields when first or last grid order is dragged on the chart
   // Stabilize by value to avoid firing when context creates a new array reference with same prices
-  const rawChartFirstPrice = currentGridState?.orders[0]?.price
-  const rawChartLastPrice = currentGridState?.orders.length
-    ? currentGridState.orders[currentGridState.orders.length - 1]?.price
+  const rawChartFirstPrice = currentDragState?.orders[0]?.price
+  const rawChartLastPrice = currentDragState?.orders.length
+    ? currentDragState.orders[currentDragState.orders.length - 1]?.price
     : undefined
   const chartFirstPrice = useMemo(() => rawChartFirstPrice, [rawChartFirstPrice])
   const chartLastPrice = useMemo(() => rawChartLastPrice, [rawChartLastPrice])
@@ -1167,7 +1236,7 @@ export const GridConfigTab = memo(function GridConfigTab({
         const rawFirstOffset = isLong
           ? (entryPrice - chartFirstPrice) / entryPrice * 100
           : (chartFirstPrice - entryPrice) / entryPrice * 100
-        const newFirstOffset = Math.max(0, Math.round(rawFirstOffset * 100) / 100)
+        const newFirstOffset = Math.round(rawFirstOffset * 100) / 100
 
         const n = p.ordersCount
         let newStep = p.stepPercent
@@ -1189,7 +1258,7 @@ export const GridConfigTab = memo(function GridConfigTab({
         const rawLastOffset = isLong
           ? (entryPrice - chartLastPrice) / entryPrice * 100
           : (chartLastPrice - entryPrice) / entryPrice * 100
-        const newLastOffset = Math.max(0, Math.round(rawLastOffset * 100) / 100)
+        const newLastOffset = Math.round(rawLastOffset * 100) / 100
 
         if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005 && Math.abs(newLastOffset - p.lastOffsetPercent) < 0.005) return p
         return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep, lastOffsetPercent: newLastOffset }
@@ -1207,24 +1276,9 @@ export const GridConfigTab = memo(function GridConfigTab({
   }
 
   // Push preview whenever config changes and totalQuote > 0
-  // DEV: track what triggered this effect
-  const prevPreviewDepsRef = useRef({ cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible })
   useEffect(() => {
-    if (import.meta.env.DEV) {
-      const prev = prevPreviewDepsRef.current
-      const changed: string[] = []
-      if (prev.cfg !== cfg) changed.push("cfg")
-      if (prev.activeChartId !== activeChartId) changed.push("activeChartId")
-      if (prev.isPlaced !== isPlaced) changed.push("isPlaced")
-      if (prev.activeLongIdx !== activeLongIdx) changed.push("activeLongIdx")
-      if (prev.activeShortIdx !== activeShortIdx) changed.push("activeShortIdx")
-      if (prev.multiPositionMode !== multiPositionMode) changed.push("multiPositionMode")
-      if (prev.isVisible !== isVisible) changed.push("isVisible")
-      prevPreviewDepsRef.current = { cfg, activeChartId, isPlaced, activeLongIdx, activeShortIdx, multiPositionMode, isVisible }
-      console.log(`[GridConfigTab previewEffect] consoleId=${consoleId} changed=[${changed.join(",")}]`)
-    }
     if (!isVisible) {
-      if (!isPlaced) cancelGridOrders(consoleId)
+      cancelGridPreview(consoleId)
       return
     }
     if (!activeChartId) {
@@ -1258,7 +1312,6 @@ export const GridConfigTab = memo(function GridConfigTab({
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
-      consoleId,
       side: cfg.side,
       orders: ordersForPreview,
       tpPrice: showTpSl ? viz.tpPrice : null,
@@ -1266,6 +1319,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
+      entryPrice: cfg.entryPrice,
       accountId,
       exchangeId,
       marketType,
@@ -1508,7 +1562,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       }
     }
 
-    // Cancel first to reset state from "placed" to allow setGridPreview to write fresh data
+    // Cancel placed grid first, then set fresh preview and place
     cancelGridOrders(snapshotConsoleId)
     // Then set fresh preview and immediately place
     setTimeout(() => {
@@ -1658,7 +1712,7 @@ export const GridConfigTab = memo(function GridConfigTab({
               return sideSlots.map((slot, idx) => {
                 const slotConsoleId = `${baseConsoleId}:${activeChartId ?? ""}:${slotSide}:${slot.slotId}`
                 const slotState = gridOrdersRef.current[slotConsoleId]
-                const slotPlaced = slotState?.state === "placed"
+                const slotPlaced = !!slotState
                 const slotPending = slotPlaced && slotState?.pendingUpdate
                 const isActive = isSideActive && idx === sideActiveIdx
                 return (

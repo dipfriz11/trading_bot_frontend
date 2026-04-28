@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -77,6 +77,7 @@ function _NI({
   const isFocused = useRef(false)
 
   useEffect(() => {
+
     if (!isFocused.current) setLocalVal(String(value))
   }, [value])
 
@@ -328,7 +329,7 @@ const MOCK_PRICES: Record<string, number> = {
 export function OrderConsoleWidget(_props: { widget: Widget }) {
   const {
     activeTab, activeChartId, setActiveChartId,
-    setDraftOrder, addPlacedOrder, placedOrders, draftOrders,
+    setDraftOrder, addPlacedOrder, positions: ctxPositions, draftOrders,
     isDraggingOrder,
     editingOrderId, setEditingOrderId,
     updatePlacedOrder,
@@ -338,14 +339,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     refundOrderBalance,
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview,
+    openPosition, fillOrder,
+    livePrices,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "grid">("new")
-  const _devTabRef = useRef(tab)
-  if (import.meta.env.DEV && _devTabRef.current !== tab) {
-    console.log(`[OrderConsoleWidget] tab changed: ${_devTabRef.current} → ${tab}`, new Error().stack?.split("\n").slice(1, 4).join(" | "))
-    _devTabRef.current = tab
-  }
   const [side, setSide] = useState<OrderSide>("buy")
   const [orderType, setOrderType] = useState<OrderType>("limit")
   const [price, setPrice] = useState("")
@@ -425,6 +423,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const futuresSide = activeChart?.futuresSide ?? "long"
   const accountId = activeChart?.accountId ?? "main"
   const exchangeId = activeChart?.exchangeId ?? "binance"
+  // Stable key — includes side so long/short orders don't collide
+  const activePositionKey = posKey(accountId, exchangeId, marketType, symbol, futuresSide)
   const { walletBalance, inOrders } = getBalance(accountId, exchangeId, marketType)
   const freeMargin = walletBalance - inOrders
   const { settings: posSettings } = usePositionSettings(symbol)
@@ -435,7 +435,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   const ticker = symbol.split("/")[0]
 
-  const mockPrice = MOCK_PRICES[symbol] ?? 100
+  const mockPrice = livePrices[symbol] ?? MOCK_PRICES[symbol] ?? 100
   const effectivePrice = orderType === "market" ? mockPrice : (parseFloat(price) || 0)
 
   const qtyRef = useRef(qty)
@@ -463,6 +463,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const key = `${activeChart?.id ?? ""}:${symbol}`
     if (initialisedKeyRef.current === key) return
     initialisedKeyRef.current = key
+    userEditedPriceRef.current = false
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(mockPrice))
     const q = parseFloat(qtyRef.current)
@@ -470,6 +471,23 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Use rAF so the push-draft effect sees the flag before running
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
   }, [symbol, activeChart?.id, mockPrice])
+
+  // Track whether user manually edited the price field (after init)
+  const userEditedPriceRef = useRef(false)
+
+  // Update price field when live price changes — only if user hasn't manually typed a value
+  const prevLivePriceRef = useRef(mockPrice)
+  useEffect(() => {
+    const live = livePrices[symbol]
+    if (!live) return
+    if (live === prevLivePriceRef.current) return
+    prevLivePriceRef.current = live
+    if (userEditedPriceRef.current) return
+    if (orderType !== "limit") return
+    settingPriceFromExternalRef.current = true
+    setPrice(priceToString(live))
+    requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
+  }, [livePrices, symbol, orderType])
 
   // ---- Push draft order to context whenever form changes ----
   useEffect(() => {
@@ -529,7 +547,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const trackedPlacedPricesRef = useRef<Record<string, number>>({})
   useEffect(() => {
     if (!activeChart) return
-    const orders = placedOrders[activeChart.id] ?? []
+    const orders = ctxPositions[activePositionKey]?.orders ?? []
     for (const o of orders) {
       const prev = trackedPlacedPricesRef.current[o.id]
       const placedThreshold = Math.max(o.price * 0.00001, 1e-8)
@@ -542,7 +560,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       }
       trackedPlacedPricesRef.current[o.id] = o.price
     }
-  }, [placedOrders, activeChart?.id])
+  }, [ctxPositions, activePositionKey])
 
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
@@ -550,7 +568,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       setFormEditMode(false)
       return
     }
-    const order = (placedOrders[activeChart.id] ?? []).find((o) => o.id === editingOrderId)
+    const order = (ctxPositions[activePositionKey]?.orders ?? []).find((o: import("@/types/terminal").ChartPlacedOrder) => o.id === editingOrderId)
     if (!order) { setFormEditMode(false); return }
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(order.price))
@@ -643,12 +661,17 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
 
+    // Guard: mark expected values so drag-sync effects don't echo these writes back
+    noExpectedSlPriceRef.current = viz.slPrice ?? null
+    noExpectedTpLevelsRef.current = viz.tpLevels ? [...viz.tpLevels] : undefined
+    noPreviewWroteSlRef.current = true
+    noPreviewWroteTpRef.current = true
+
     // When noTpSl grid preview is active, clear the simple tpSlOrders to avoid duplicate lines
     setTpSl(activeChart.id, { tp: null, sl: null })
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
-      consoleId: noConsoleId,
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
       tpPrice: viz.tpPrice,
@@ -684,7 +707,26 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // SL drag: slPrice changed non-null→non-null → recalc slPercent
   const prevNoSlPriceValueRef = useRef<number | null | undefined>(undefined)
   const noExpectedSlPriceRef = useRef<number | null | undefined>(undefined)
+  const noExpectedTpLevelsRef = useRef<number[] | undefined>(undefined)
+  const prevNoChartIdRef = useRef<string | undefined>(undefined)
+  // True while noPreviewEffect is the source of the latest slPrice/tpLevels write — prevents echo loop
+  const noPreviewWroteSlRef = useRef(false)
+  const noPreviewWroteTpRef = useRef(false)
   useEffect(() => {
+    // Reset history when chart changes so we don't misinterpret the first
+    // value from the new chart as a user drag (which was causing infinite loop)
+    if (prevNoChartIdRef.current !== activeChart?.id) {
+      prevNoChartIdRef.current = activeChart?.id
+      prevNoSlPriceValueRef.current = undefined
+      noPreviewWroteSlRef.current = false
+      return
+    }
+    // If noPreviewEffect just wrote this slPrice, skip — it came from form, not user drag
+    if (noPreviewWroteSlRef.current) {
+      noPreviewWroteSlRef.current = false
+      prevNoSlPriceValueRef.current = noChartSlPrice ?? null
+      return
+    }
     const prev = prevNoSlPriceValueRef.current
     prevNoSlPriceValueRef.current = noChartSlPrice ?? null
     if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) return
@@ -699,7 +741,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       ? (1 - noChartSlPrice / p) * 100
       : (noChartSlPrice / p - 1) * 100
     noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
-  }, [noChartSlPrice])
+  }, [noChartSlPrice, activeChart?.id])
 
   // TP x-click: tpLevels count decreased
   const noChartTpLevelsKey = noChartTpLevels?.join(",") ?? ""
@@ -740,6 +782,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
     const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
     if (!changed) return
+    // Skip if noPreviewEffect just wrote these tpLevels — not a user drag
+    if (noPreviewWroteTpRef.current) {
+      noPreviewWroteTpRef.current = false
+      return
+    }
+    // Skip if these are values we just wrote via noPreviewEffect
+    const exp = noExpectedTpLevelsRef.current
+    if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) return
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
     if (p <= 0) return
     const gSide = effectiveSide === "buy" ? "long" : "short"
@@ -808,13 +858,24 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
   }, [tpSlOrders, activeChart?.id])
 
-  // Reset TP/SL refs on chart switch
+  // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {
+
     lastTpPushedRef.current = null
     lastSlPushedRef.current = null
+    if (!activeChart?.id) return
+    // Immediately push current form values to the new chart to override any stale tpSl stored there
+    const tpNum = parseFloat(tp)
+    const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
+    const slNum = parseFloat(sl)
+    const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
+    lastTpPushedRef.current = newTp
+    lastSlPushedRef.current = newSl
+    setTpSl(activeChart.id, { tp: newTp, sl: newSl })
   }, [activeChart?.id])
 
   const handlePriceChange = (v: string) => {
+    userEditedPriceRef.current = true
     setPrice(v)
     if (editingOrderId) setFormEditMode(true)
     const p = parseFloat(v)
@@ -871,7 +932,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const newQty = parseFloat(qty)
     if (isNaN(newPrice) || newPrice <= 0) return
 
-    const existingOrder = placedOrders[activeChart.id]?.find((o) => o.id === editingOrderId)
+    const existingOrder = ctxPositions[activePositionKey]?.orders.find((o) => o.id === editingOrderId)
     const effectiveQty = newQty > 0 ? newQty : (existingOrder?.qty ?? 0)
     const newNotional = effectiveQty * newPrice
     const newMargin = existingOrder?.marketType === "futures" && existingOrder?.leverage
@@ -883,7 +944,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       deductOrderBalance(existingOrder.accountId, existingOrder.exchangeId, existingOrder.marketType, newMargin)
     }
 
-    updatePlacedOrder(activeChart.id, editingOrderId, {
+    updatePlacedOrder(activePositionKey, editingOrderId, {
       price: newPrice,
       ...(newQty > 0 ? { qty: newQty } : {}),
       margin: newMargin,
@@ -903,6 +964,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const resetFormToNew = (_clearQty = false) => {
     suppressDraftRef.current = true
     settingPriceFromExternalRef.current = true
+    userEditedPriceRef.current = false
     setQty("")
     setAmount("")
     setPrice(priceToString(mockPrice))
@@ -928,7 +990,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const notional = parseFloat(qty) * effectivePrice
       const margin = marketType === "futures" ? notional / posSettings.leverage : notional
 
-      addPlacedOrder(activeChart.id, {
+      addPlacedOrder(activePositionKey, {
         id,
         side: effectiveSide,
         price: effectivePrice,
@@ -942,8 +1004,40 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         leverage: posSettings.leverage,
         margin,
         time,
-        status: "pending",
+        status: orderType === "market" ? "filled" : "pending",
       })
+
+      // Open / merge into live position immediately — virtual position exists as soon as orders are placed
+      const posSide = effectiveSide === "buy" ? "long" : "short"
+      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
+      openPosition({
+        accountId,
+        exchangeId,
+        marketType,
+        symbol,
+        side: posSide,
+        size: parseFloat(qty),
+        avgEntry: effectivePrice,
+        leverage: posSettings.leverage,
+        marginMode: posSettings.marginMode ?? "cross",
+        markPrice: effectivePrice,
+        openedAt: time,
+        openedDate: (() => {
+          const n = new Date()
+          return `${String(n.getDate()).padStart(2, "0")}.${String(n.getMonth() + 1).padStart(2, "0")}`
+        })(),
+        shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
+        realSize: 0,
+      })
+
+      // Market orders execute immediately — simulate fill
+      if (orderType === "market") {
+        // Use setTimeout(0) so openPosition state update settles first
+        setTimeout(() => {
+          fillOrder(activePositionKeyForFill, id, effectivePrice)
+        }, 0)
+      }
+
       setDraftOrder(activeChart.id, undefined)
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
@@ -989,7 +1083,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             }}
             onMouseDown={stopProp}
           >
-            {t === "new" ? "New Order" : "Grid"}
+            {t === "new" ? "Order" : "Grid"}
           </button>
         ))}
       </div>
