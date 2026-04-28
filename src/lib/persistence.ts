@@ -25,17 +25,25 @@ interface PositionRow {
   symbol: string
   side: string
   size: number
+  real_size: number
   avg_entry: number
   leverage: number
+  margin_mode: string
   mark_price: number
   unrealized_pnl: number
   unrealized_pnl_pct: number
   notional: number
   opened_at: string
+  opened_date: string
+  short_id: string
   status: string
   realized_pnl: number
   source_console_id: string | null
   pos_key: string
+  tp_pct: number | null
+  sl_pct: number | null
+  tp_price: number | null
+  sl_price: number | null
 }
 
 interface OrderRow {
@@ -53,6 +61,8 @@ interface OrderRow {
   leverage: number | null
   margin: number | null
   time: string | null
+  filled_at: string | null
+  filled_pct: number | null
   status: string
   source: string
   grid_index: number | null
@@ -72,17 +82,25 @@ function positionToRow(pk: string, pos: LivePosition): Omit<PositionRow, "id"> {
     symbol: pos.symbol,
     side: pos.side,
     size: pos.size,
+    real_size: pos.realSize ?? 0,
     avg_entry: pos.avgEntry,
     leverage: pos.leverage,
+    margin_mode: pos.marginMode ?? "cross",
     mark_price: pos.markPrice,
     unrealized_pnl: pos.unrealizedPnl,
     unrealized_pnl_pct: pos.unrealizedPnlPct,
     notional: pos.notional,
     opened_at: pos.openedAt,
+    opened_date: pos.openedDate ?? "",
+    short_id: pos.shortId ?? "",
     status: pos.status,
     realized_pnl: pos.realizedPnl,
     source_console_id: pos.sourceConsoleId ?? null,
     pos_key: pk,
+    tp_pct: pos.tpPct ?? null,
+    sl_pct: pos.slPct ?? null,
+    tp_price: pos.tpPrice ?? null,
+    sl_price: pos.slPrice ?? null,
   }
 }
 
@@ -102,6 +120,8 @@ function orderToRow(order: ChartPlacedOrder, positionDbId: string): OrderRow {
     leverage: order.leverage ?? null,
     margin: order.margin ?? null,
     time: order.time ?? null,
+    filled_at: order.filledAt ?? null,
+    filled_pct: order.filledPct ?? null,
     status: order.status ?? "pending",
     source: order.source ?? "manual",
     grid_index: order.gridIndex ?? null,
@@ -119,16 +139,24 @@ function rowToPosition(row: PositionRow, orders: ChartPlacedOrder[]): [string, L
     symbol: row.symbol,
     side: row.side as "long" | "short",
     size: row.size,
+    realSize: row.real_size ?? 0,
     avgEntry: row.avg_entry,
     leverage: row.leverage,
+    marginMode: (row.margin_mode ?? "cross") as "cross" | "isolated",
     markPrice: row.mark_price,
     unrealizedPnl: row.unrealized_pnl,
     unrealizedPnlPct: row.unrealized_pnl_pct,
     notional: row.notional,
     openedAt: row.opened_at,
+    openedDate: row.opened_date ?? "",
+    shortId: row.short_id ?? "",
     status: row.status as "active" | "pending" | "closed",
     realizedPnl: row.realized_pnl,
     sourceConsoleId: row.source_console_id ?? undefined,
+    tpPct: row.tp_pct ?? undefined,
+    slPct: row.sl_pct ?? undefined,
+    tpPrice: row.tp_price ?? undefined,
+    slPrice: row.sl_price ?? undefined,
     orders,
   }
   return [row.pos_key, pos]
@@ -148,6 +176,8 @@ function rowToOrder(row: OrderRow): ChartPlacedOrder {
     leverage: row.leverage ?? undefined,
     margin: row.margin ?? undefined,
     time: row.time ?? undefined,
+    filledAt: row.filled_at ?? undefined,
+    filledPct: row.filled_pct ?? undefined,
     status: (row.status as "pending" | "filled" | "cancelled") ?? undefined,
     source: (row.source as "manual" | "grid" | "dca" | "bot" | "webhook") ?? undefined,
     gridIndex: row.grid_index ?? undefined,

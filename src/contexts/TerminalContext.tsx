@@ -564,9 +564,24 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         ? (pos.markPrice - pos.avgEntry) * pos.size
         : (pos.avgEntry - pos.markPrice) * pos.size
       const pnlPct = (rawPnl / notional) * pos.leverage * 100
+      const now = new Date()
+      const dd = String(now.getDate()).padStart(2, "0")
+      const mm = String(now.getMonth() + 1).padStart(2, "0")
       return {
         ...prev,
-        [pk]: { ...pos, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: [], status: "pending", realizedPnl: 0 },
+        [pk]: {
+          ...pos,
+          notional,
+          unrealizedPnl: rawPnl,
+          unrealizedPnlPct: pnlPct,
+          orders: [],
+          status: "pending",
+          realizedPnl: 0,
+          realSize: pos.realSize ?? 0,
+          marginMode: pos.marginMode ?? "cross",
+          shortId: pos.shortId || String(Math.floor(Math.random() * 9000000) + 1000000),
+          openedDate: pos.openedDate || `${dd}.${mm}`,
+        },
       }
     })
   }, [])
@@ -735,6 +750,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           }
         }
         const notional = totalQty * weightedAvg
+        const nowD = new Date()
+        const dd = String(nowD.getDate()).padStart(2, "0")
+        const mmD = String(nowD.getMonth() + 1).padStart(2, "0")
         return {
           ...prevPos,
           [posPk]: {
@@ -744,13 +762,17 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             symbol: entry.symbol,
             side: entry.side,
             size: totalQty,
+            realSize: 0,
             avgEntry: weightedAvg,
             leverage: entry.leverage,
+            marginMode: "cross" as const,
             markPrice: weightedAvg,
             notional,
             unrealizedPnl: 0,
             unrealizedPnlPct: 0,
             openedAt: time,
+            openedDate: `${dd}.${mmD}`,
+            shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
             orders: newOrders,
             status: "pending",
             realizedPnl: 0,

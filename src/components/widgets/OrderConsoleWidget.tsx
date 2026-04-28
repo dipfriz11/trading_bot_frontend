@@ -997,8 +997,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         size: parseFloat(qty),
         avgEntry: effectivePrice,
         leverage: posSettings.leverage,
+        marginMode: posSettings.marginMode ?? "cross",
         markPrice: effectivePrice,
         openedAt: time,
+        openedDate: (() => {
+          const n = new Date()
+          return `${String(n.getDate()).padStart(2, "0")}.${String(n.getMonth() + 1).padStart(2, "0")}`
+        })(),
+        shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
+        realSize: 0,
       })
 
       setDraftOrder(activeChart.id, undefined)

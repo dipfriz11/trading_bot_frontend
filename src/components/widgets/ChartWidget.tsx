@@ -1226,6 +1226,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     removePlacedOrder: ctxRemovePlaced, updatePlacedOrderPrice: ctxUpdatePrice,
     updatePlacedOrder: ctxUpdatePlacedOrder,
     positions: ctxPositions,
+    closePosition: ctxClosePosition,
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
@@ -1674,7 +1675,69 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       <div className="flex flex-1 min-h-0 flex-col">
         <div className="flex min-h-0 overflow-hidden"
           style={{ flex: (!hasOrderConsole && widget.showOrderForm) ? "1 1 auto" : "1 1 100%" }}>
-          <div ref={containerRef} className="flex-1 min-w-0 overflow-hidden" style={{ minHeight: 0 }}>
+          <div ref={containerRef} className="flex-1 min-w-0 overflow-hidden" style={{ minHeight: 0, position: "relative" }}>
+            {/* Position badge overlay — only shows when position is active */}
+            {(() => {
+              const pos = ctxPositions[positionKey]
+              if (!pos || pos.status !== "active") return null
+              const pnl = pos.unrealizedPnl
+              const pnlPct = pos.unrealizedPnlPct
+              const isPnlPos = pnl >= 0
+              const pnlColor = isPnlPos ? "#00e5a0" : "#ff4757"
+              return (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    left: 56,
+                    zIndex: 10,
+                    pointerEvents: "auto",
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div
+                    className="flex items-center gap-1.5 px-2 py-1 rounded font-mono"
+                    style={{
+                      background: "rgba(8,15,30,0.88)",
+                      border: `1px solid ${pnlColor}40`,
+                      backdropFilter: "blur(4px)",
+                      fontSize: 9,
+                      gap: 6,
+                    }}
+                  >
+                    <span style={{ color: "rgba(255,255,255,0.35)" }}>Close Position</span>
+                    <span style={{ color: pnlColor, fontWeight: 700 }}>
+                      {isPnlPos ? "+" : ""}${Math.abs(pnl).toFixed(2)}
+                    </span>
+                    <span style={{ color: pnlColor }}>
+                      {isPnlPos ? "+" : ""}{pnlPct.toFixed(2)}%
+                    </span>
+                    <span style={{ color: "rgba(200,214,229,0.7)" }}>
+                      {pos.realSize > 0 ? pos.realSize.toFixed(2) : pos.size.toFixed(2)}
+                    </span>
+                    <button
+                      className="flex items-center justify-center rounded transition-colors hover:bg-red-500/20"
+                      style={{
+                        width: 14, height: 14,
+                        color: "#ff4757",
+                        border: "1px solid rgba(255,71,87,0.35)",
+                        borderRadius: 3,
+                        fontSize: 10,
+                        lineHeight: 1,
+                        fontWeight: 700,
+                        paddingBottom: 1,
+                      }}
+                      onClick={() => {
+                        ctxClosePosition(positionKey)
+                      }}
+                      title="Close position"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
             {size.width > 0 && (
               chartType === "candlestick"
                 ? <CandlestickChart

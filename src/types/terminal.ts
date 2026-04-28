@@ -127,6 +127,8 @@ export interface ChartPlacedOrder {
   leverage?: number
   margin?: number
   time?: string
+  filledAt?: string    // HH:MM:SS DD.MM when order was filled
+  filledPct?: number   // 0–100 fill percentage
   status?: "pending" | "filled" | "cancelled"
   source?: OrderSource
   gridIndex?: number
@@ -146,10 +148,18 @@ export interface LivePosition {
   symbol: string
 
   side: "long" | "short"
-  size: number          // base asset qty
+  size: number          // base asset qty — virtual (pending orders) size
+  realSize: number      // actual filled size on exchange (0 = virtual position)
   avgEntry: number      // volume-weighted average entry price
   leverage: number
+  marginMode: "cross" | "isolated"
   markPrice: number     // latest mark/last price (updated externally)
+
+  // TP/SL percent for display
+  tpPct?: number
+  slPct?: number
+  tpPrice?: number
+  slPrice?: number
 
   // Computed on the fly, stored for quick access
   unrealizedPnl: number
@@ -157,6 +167,10 @@ export interface LivePosition {
   notional: number      // size * avgEntry
 
   openedAt: string      // HH:MM:SS when position was first opened
+  openedDate: string    // DD.MM date portion
+
+  // Short human-readable ID (e.g. "5673700")
+  shortId: string
 
   // Order storage — all placed orders belonging to this position
   orders: ChartPlacedOrder[]
