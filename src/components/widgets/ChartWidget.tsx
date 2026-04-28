@@ -360,7 +360,7 @@ function renderOrderLine(
   )
 }
 
-// ---- Position avg entry line ----
+// ---- Position avg entry line + badge ----
 function PositionLine({
   position,
   width,
@@ -369,6 +369,7 @@ function PositionLine({
   minPrice,
   maxPrice,
   padding,
+  onClose,
 }: {
   position: LivePosition
   width: number
@@ -377,12 +378,12 @@ function PositionLine({
   minPrice: number
   maxPrice: number
   padding: { left: number; right: number; top: number; bottom: number }
+  onClose: () => void
 }) {
   // Only show when there are real filled orders
   if (position.realSize <= 0 || position.avgEntry <= 0) return null
 
-  // Breakeven price = avgEntry * (1 + feeIn + feeOut) for short, avgEntry * (1 - feeIn - feeOut) for long
-  // Currently fees are 0%, so breakeven = avgEntry
+  // Breakeven = avgEntry adjusted for fees (currently 0%)
   const FEE_IN = 0
   const FEE_OUT = 0
   const breakeven = position.side === "long"
@@ -394,101 +395,139 @@ function PositionLine({
   const chartTop = padding.top
   const chartBottom = toY(minPrice)
   const rawY = toY(price)
-  const y = isOutOfRange
-    ? (price > maxPrice ? chartTop + 2 : chartBottom - 2)
+  const clampedY = isOutOfRange
+    ? (price > maxPrice ? chartTop + 14 : chartBottom - 14)
     : rawY
 
   const isLong = position.side === "long"
-  const lineColor = isLong ? "#1e6fef" : "#e05e00"
-  const labelBg = isLong ? "#0f2a5a" : "#3a1a00"
-  const labelFg = isLong ? "#4d9fff" : "#ff8844"
+  // LONG = green, SHORT = red — matching the badge color scheme
+  const lineColor = isLong ? "#00e5a0" : "#ff4757"
+  const badgeBorder = isLong ? "rgba(0,229,160,0.3)" : "rgba(255,71,87,0.3)"
 
-  const axisX = width - padding.right
-  const label = isLong ? "LONG" : "SHORT"
+  const pnl = position.unrealizedPnl
+  const pnlPct = position.unrealizedPnlPct
+  const isPnlPos = pnl >= 0
+  const pnlColor = isPnlPos ? "#00e5a0" : "#ff4757"
   const priceStr = priceToString(price)
-  const charW = 5.5
-  const PAD = 5
-  const labelW = PAD + label.length * charW + PAD
-  const priceW = PAD + priceStr.length * charW + PAD
-  void (labelW + priceW)
+  const realSizeStr = position.realSize > 0 ? position.realSize.toFixed(4) : position.size.toFixed(4)
+
+  // Badge sits at the left axis edge, vertically centered on the line
+  const badgeTop = clampedY
+  const badgeLeft = padding.left
 
   return (
-    <svg
-      style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", overflow: "visible" }}
-      width={width}
-      height={height}
-    >
-      {/* Dashed horizontal line */}
-      <line
-        x1={padding.left}
-        y1={y}
-        x2={axisX}
-        y2={y}
-        stroke={lineColor}
-        strokeWidth={1.5}
-        strokeDasharray="6,3"
-        opacity={0.85}
-      />
-      {/* Label badge on right axis */}
-      <g transform={`translate(${axisX}, ${y})`}>
-        {/* Side label */}
-        <rect
-          x={0}
-          y={-9}
-          width={labelW}
-          height={18}
-          fill={labelBg}
+    <>
+      {/* SVG line layer */}
+      <svg
+        style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", overflow: "visible" }}
+        width={width}
+        height={height}
+      >
+        {/* Dashed horizontal line across chart */}
+        <line
+          x1={padding.left}
+          y1={clampedY}
+          x2={width - padding.right}
+          y2={clampedY}
           stroke={lineColor}
-          strokeWidth={0.8}
-          rx={2}
+          strokeWidth={1}
+          strokeDasharray="5,3"
+          opacity={0.6}
         />
-        <text
-          x={labelW / 2}
-          y={4}
-          textAnchor="middle"
-          fill={labelFg}
-          fontSize={9}
-          fontFamily="'JetBrains Mono Variable', monospace"
-          fontWeight={700}
+        {/* Price tag on right axis */}
+        <g>
+          {(() => {
+            const charW = 5.8
+            const PAD = 5
+            const priceW = PAD + priceStr.length * charW + PAD
+            const tagX = width - padding.right
+            return (
+              <>
+                <rect x={tagX} y={clampedY - 9} width={priceW} height={18}
+                  fill={lineColor} rx={2} />
+                <text x={tagX + priceW / 2} y={clampedY + 4}
+                  textAnchor="middle" fill="#000" fontSize={9}
+                  fontFamily="'JetBrains Mono Variable', monospace" fontWeight={700}>
+                  {priceStr}
+                </text>
+              </>
+            )
+          })()}
+        </g>
+      </svg>
+
+      {/* HTML badge on LEFT side — same style as the top "Close Position" badge */}
+      <div
+        style={{
+          position: "absolute",
+          left: badgeLeft,
+          top: badgeTop,
+          transform: "translateY(-50%)",
+          zIndex: 10,
+          pointerEvents: "auto",
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center font-mono"
+          style={{
+            background: "rgba(8,15,30,0.92)",
+            border: `1px solid ${badgeBorder}`,
+            backdropFilter: "blur(4px)",
+            fontSize: 9,
+            gap: 5,
+            padding: "3px 6px",
+            borderRadius: 4,
+            whiteSpace: "nowrap",
+          }}
         >
-          {label}
-        </text>
-        {/* Price tag */}
-        <rect
-          x={labelW}
-          y={-9}
-          width={priceW}
-          height={18}
-          fill={lineColor}
-          rx={2}
-        />
-        <text
-          x={labelW + priceW / 2}
-          y={4}
-          textAnchor="middle"
-          fill="#fff"
-          fontSize={9}
-          fontFamily="'JetBrains Mono Variable', monospace"
-          fontWeight={600}
-        >
-          {priceStr}
-        </text>
-        {/* Clamp indicator dot when out of range */}
-        {isOutOfRange && (
-          <circle cx={-4} cy={0} r={3} fill={lineColor} opacity={0.8} />
-        )}
-      </g>
-      {/* Small left-edge tick */}
-      <line
-        x1={padding.left - 4}
-        y1={y}
-        x2={padding.left}
-        y2={y}
-        stroke={lineColor}
-        strokeWidth={1.5}
-        opacity={0.6}
-      />
-    </svg>
+          {/* Side label */}
+          <span style={{ color: lineColor, fontWeight: 700, letterSpacing: "0.05em" }}>
+            {isLong ? "LONG" : "SHORT"}
+          </span>
+          {/* Separator */}
+          <span style={{ color: "rgba(255,255,255,0.12)" }}>|</span>
+          {/* Breakeven price */}
+          <span style={{ color: "rgba(200,214,229,0.85)", fontWeight: 600 }}>
+            {priceStr}
+          </span>
+          {/* Separator */}
+          <span style={{ color: "rgba(255,255,255,0.12)" }}>|</span>
+          {/* PnL */}
+          <span style={{ color: pnlColor, fontWeight: 700 }}>
+            {isPnlPos ? "+" : ""}${Math.abs(pnl).toFixed(2)}
+          </span>
+          <span style={{ color: pnlColor }}>
+            {isPnlPos ? "+" : ""}{pnlPct.toFixed(2)}%
+          </span>
+          {/* Separator */}
+          <span style={{ color: "rgba(255,255,255,0.12)" }}>|</span>
+          {/* Size */}
+          <span style={{ color: "rgba(200,214,229,0.6)" }}>{realSizeStr}</span>
+          {/* Close button */}
+          <button
+            className="flex items-center justify-center rounded transition-colors"
+            style={{
+              width: 14, height: 14,
+              color: "#ff4757",
+              border: "1px solid rgba(255,71,87,0.35)",
+              borderRadius: 3,
+              fontSize: 10,
+              lineHeight: 1,
+              fontWeight: 700,
+              paddingBottom: 1,
+              marginLeft: 2,
+              background: "transparent",
+              cursor: "pointer",
+            }}
+            onClick={onClose}
+            title="Close position"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -515,6 +554,7 @@ interface ChartProps {
   onTpSlDragStart?: TpSlOverlayProps["onDragStart"]
   onTpSlClose?: TpSlOverlayProps["onClose"]
   activePosition?: LivePosition | null
+  onClosePosition?: () => void
 }
 
 interface OrdersOverlayProps {
@@ -1157,7 +1197,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -1223,6 +1263,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           width={width} height={height}
           toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
+          onClose={onClosePosition ?? (() => {})}
         />
       )}
     </div>
@@ -1298,7 +1339,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -1362,6 +1403,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           width={width} height={height}
           toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
+          onClose={onClosePosition ?? (() => {})}
         />
       )}
     </div>
@@ -1448,7 +1490,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       : localDraft
   // Read placed orders from the position — exclude grid orders (rendered by GridOrdersOverlay)
   const placedForChart: PlacedOrder[] = (ctxPositions[positionKey]?.orders ?? []).filter(
-    (o: PlacedOrder) => o.source !== "grid"
+    (o: PlacedOrder) => o.source !== "grid" && o.status !== "filled"
   )
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
 
@@ -1837,68 +1879,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         <div className="flex min-h-0 overflow-hidden"
           style={{ flex: (!hasOrderConsole && widget.showOrderForm) ? "1 1 auto" : "1 1 100%" }}>
           <div ref={containerRef} className="flex-1 min-w-0 overflow-hidden" style={{ minHeight: 0, position: "relative" }}>
-            {/* Position badge overlay — only shows when position is active */}
-            {(() => {
-              const pos = ctxPositions[positionKey]
-              if (!pos || pos.status !== "active") return null
-              const pnl = pos.unrealizedPnl
-              const pnlPct = pos.unrealizedPnlPct
-              const isPnlPos = pnl >= 0
-              const pnlColor = isPnlPos ? "#00e5a0" : "#ff4757"
-              return (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 8,
-                    left: 56,
-                    zIndex: 10,
-                    pointerEvents: "auto",
-                  }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <div
-                    className="flex items-center gap-1.5 px-2 py-1 rounded font-mono"
-                    style={{
-                      background: "rgba(8,15,30,0.88)",
-                      border: `1px solid ${pnlColor}40`,
-                      backdropFilter: "blur(4px)",
-                      fontSize: 9,
-                      gap: 6,
-                    }}
-                  >
-                    <span style={{ color: "rgba(255,255,255,0.35)" }}>Close Position</span>
-                    <span style={{ color: pnlColor, fontWeight: 700 }}>
-                      {isPnlPos ? "+" : ""}${Math.abs(pnl).toFixed(2)}
-                    </span>
-                    <span style={{ color: pnlColor }}>
-                      {isPnlPos ? "+" : ""}{pnlPct.toFixed(2)}%
-                    </span>
-                    <span style={{ color: "rgba(200,214,229,0.7)" }}>
-                      {pos.realSize > 0 ? pos.realSize.toFixed(2) : pos.size.toFixed(2)}
-                    </span>
-                    <button
-                      className="flex items-center justify-center rounded transition-colors hover:bg-red-500/20"
-                      style={{
-                        width: 14, height: 14,
-                        color: "#ff4757",
-                        border: "1px solid rgba(255,71,87,0.35)",
-                        borderRadius: 3,
-                        fontSize: 10,
-                        lineHeight: 1,
-                        fontWeight: 700,
-                        paddingBottom: 1,
-                      }}
-                      onClick={() => {
-                        ctxClosePosition(positionKey)
-                      }}
-                      title="Close position"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
             {size.width > 0 && (
               chartType === "candlestick"
                 ? <CandlestickChart
@@ -1922,6 +1902,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
                     activePosition={ctxPositions[positionKey]?.status === "active" ? ctxPositions[positionKey] : null}
+                    onClosePosition={() => ctxClosePosition(positionKey)}
                   />
                 : <LineChart
                     candles={candles} width={size.width} height={Math.max(chartAreaHeight, 80)}
@@ -1944,6 +1925,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
                     activePosition={ctxPositions[positionKey]?.status === "active" ? ctxPositions[positionKey] : null}
+                    onClosePosition={() => ctxClosePosition(positionKey)}
                   />
             )}
           </div>
