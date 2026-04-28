@@ -100,6 +100,9 @@ export interface ChartGridPreview {
   accountId?: string
   exchangeId?: string
   marketType?: "spot" | "futures"
+  /** When true, the entry order lines are not rendered (used by New Order form where the
+   *  draft line is already shown separately — only TP/SL lines should come from this preview) */
+  hideOrders?: boolean
 }
 
 // Placed grid: real orders sent to exchange. Balance locked.

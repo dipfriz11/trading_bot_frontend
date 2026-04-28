@@ -629,7 +629,7 @@ function GridPreviewOverlay({
         const chartH = height - padding.top - padding.bottom
         return (
           <g key={preview.consoleId}>
-            {preview.orders.map((o, idx) => (
+            {!preview.hideOrders && preview.orders.map((o, idx) => (
               <GridOrderLine
                 key={o.id}
                 id={`preview:${preview.consoleId}:${o.id}`}

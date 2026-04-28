@@ -682,6 +682,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       accountId,
       exchangeId,
       marketType,
+      hideOrders: true,
     })
   }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
 
