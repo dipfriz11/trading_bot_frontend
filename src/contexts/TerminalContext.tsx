@@ -210,6 +210,7 @@ interface TerminalContextValue {
   clearGridPendingUpdate: (consoleId: string) => void
   removeGridTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
+  removeGridPreviewEntry: (consoleId: string, orderId: string) => void
 
   // Live prices published by chart widgets (symbol → last close price)
   livePrices: Record<string, number>
@@ -966,6 +967,20 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const removeGridPreviewEntry = useCallback((consoleId: string, orderId: string) => {
+    setPreviewOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry) return prev
+      const orders = entry.orders.filter((o) => o.id !== orderId)
+      if (orders.length === 0) {
+        const n = { ...prev }
+        delete n[consoleId]
+        return n
+      }
+      return { ...prev, [consoleId]: { ...entry, orders } }
+    })
+  }, [])
+
   const updateGridPreviewPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
     setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -1154,6 +1169,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         clearGridPendingUpdate,
         removeGridTpSl,
         removeGridEntry,
+        removeGridPreviewEntry,
         livePrices,
         setLivePrice,
       }}

@@ -550,6 +550,7 @@ interface ChartProps {
   onPreviewOrderDragStart?: GridPreviewOverlayProps["onOrderDragStart"]
   onPreviewGridTpSlDragStart?: GridPreviewOverlayProps["onGridTpSlDragStart"]
   onPreviewClose?: GridPreviewOverlayProps["onClose"]
+  onPreviewEntryClose?: GridPreviewOverlayProps["onEntryClose"]
   tpSl?: ChartTpSl | null
   onTpSlDragStart?: TpSlOverlayProps["onDragStart"]
   onTpSlClose?: TpSlOverlayProps["onClose"]
@@ -612,10 +613,11 @@ interface GridPreviewOverlayProps {
   onOrderDragStart?: (consoleId: string, orderId: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
   onGridTpSlDragStart?: (consoleId: string, target: "tp" | "sl", tpIndex: number, e: React.MouseEvent, minP: number, maxP: number, chartH: number) => void
   onClose?: (consoleId: string) => void
+  onEntryClose?: (consoleId: string, orderId: string) => void
 }
 
 function GridPreviewOverlay({
-  previewOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onOrderDragStart, onGridTpSlDragStart, onClose,
+  previewOrdersList, width, height, toY, toPrice, minPrice, maxPrice, padding, dragHandlers, onOrderDragStart, onGridTpSlDragStart, onClose, onEntryClose,
 }: GridPreviewOverlayProps) {
   if (!previewOrdersList.length) return null
   return (
@@ -635,7 +637,7 @@ function GridPreviewOverlay({
                 toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                 width={width} padding={padding}
                 isDraft={true} {...DRAFT_COLORS}
-                onClose={() => onClose?.(preview.consoleId)}
+                onClose={() => onEntryClose?.(preview.consoleId, o.id)}
                 onDragStart={(e) => onOrderDragStart?.(preview.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
                 registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
               />
@@ -1197,7 +1199,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -1223,6 +1225,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           onOrderDragStart={onPreviewOrderDragStart}
           onGridTpSlDragStart={onPreviewGridTpSlDragStart}
           onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
         />
       )}
       {gridOrdersList && gridOrdersList.length > 0 && (
@@ -1339,7 +1342,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -1363,6 +1366,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           onOrderDragStart={onPreviewOrderDragStart}
           onGridTpSlDragStart={onPreviewGridTpSlDragStart}
           onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
         />
       )}
       {gridOrdersList && gridOrdersList.length > 0 && (
@@ -1425,7 +1429,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridEntry, applyGridTpSl,
+    previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl,
     tpSlOrders, setTpSl,
     setLivePrice,
   } = useTerminal()
@@ -1897,7 +1901,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                     onPreviewOrderDragStart={handleGridOrderDragStart}
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
-                    onPreviewClose={() => {/* preview lines aren't closeable from chart */}}
+                    onPreviewClose={undefined}
+                    onPreviewEntryClose={(consoleId, orderId) => removeGridPreviewEntry(consoleId, orderId)}
                     tpSl={chartTpSl}
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
@@ -1920,7 +1925,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onGridEntryClose={(consoleId, orderId) => removeGridEntry(consoleId, orderId)}
                     onPreviewOrderDragStart={handleGridOrderDragStart}
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
-                    onPreviewClose={() => {/* preview lines aren't closeable from chart */}}
+                    onPreviewClose={undefined}
+                    onPreviewEntryClose={(consoleId, orderId) => removeGridPreviewEntry(consoleId, orderId)}
                     tpSl={chartTpSl}
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}

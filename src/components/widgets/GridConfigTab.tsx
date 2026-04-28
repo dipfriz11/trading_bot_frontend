@@ -944,18 +944,28 @@ export const GridConfigTab = memo(function GridConfigTab({
   // Stable ID refs for order levels
   const orderIdRefs = useRef<string[]>([])
 
-  // Sync ordersCount when an entry is removed from the chart (x button)
+  // Sync ordersCount when a placed entry is removed from the chart (x button)
   const chartOrdersLen = currentGridState?.orders.length
   const prevChartOrdersLenRef = useRef<number | undefined>(undefined)
   useEffect(() => {
     if (chartOrdersLen === undefined) { prevChartOrdersLenRef.current = undefined; return }
-    // Only react when the chart reduced the count below what we expected
     if (prevChartOrdersLenRef.current !== undefined && chartOrdersLen < prevChartOrdersLenRef.current) {
       setCfg((p) => ({ ...p, ordersCount: chartOrdersLen }))
       orderIdRefs.current = currentGridState!.orders.map((o) => o.id)
     }
     prevChartOrdersLenRef.current = chartOrdersLen
   }, [chartOrdersLen])
+
+  // Sync ordersCount when a preview entry is removed from the chart (x button)
+  const chartPreviewOrdersLen = currentPreviewState?.orders.length
+  const prevChartPreviewOrdersLenRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (chartPreviewOrdersLen === undefined) { prevChartPreviewOrdersLenRef.current = undefined; return }
+    if (prevChartPreviewOrdersLenRef.current !== undefined && chartPreviewOrdersLen < prevChartPreviewOrdersLenRef.current) {
+      setCfg((p) => ({ ...p, ordersCount: chartPreviewOrdersLen }))
+    }
+    prevChartPreviewOrdersLenRef.current = chartPreviewOrdersLen
+  }, [chartPreviewOrdersLen])
 
   // ── SL sync: chart x → form deactivation ────────────────────────────────
   // When slPrice is nulled out on the chart (user clicked x), deactivate slEnabled in form
