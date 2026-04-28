@@ -603,6 +603,25 @@ export const GridConfigTab = memo(function GridConfigTab({
       bottomPrice: bottom > 0 ? bottom : p.bottomPrice,
     }))
   }, [activeChartId, externalSymbol, externalEntryPrice])
+
+  // Update entryPrice live when market price changes (after initial init)
+  const prevExternalPriceRef = useRef(externalEntryPrice)
+  useEffect(() => {
+    if (!externalEntryPrice || externalEntryPrice <= 0) return
+    if (externalEntryPrice === prevExternalPriceRef.current) return
+    prevExternalPriceRef.current = externalEntryPrice
+    // Only update entryPrice if the key has already been initialised (skip on first run)
+    if (!initialisedKeyRef.current) return
+    setCfg((p) => {
+      if (p.entryPrice === externalEntryPrice) return p
+      // Recalculate top/bottom proportionally if they were auto-set (±3%)
+      const ratio = p.entryPrice > 0 ? externalEntryPrice / p.entryPrice : 1
+      const newTop = Math.round(p.topPrice * ratio * 100) / 100
+      const newBottom = Math.round(p.bottomPrice * ratio * 100) / 100
+      return { ...p, entryPrice: externalEntryPrice, topPrice: newTop, bottomPrice: newBottom }
+    })
+  }, [externalEntryPrice])
+
   useEffect(() => {
     if (externalLeverage && externalLeverage > 0) {
       setCfg((p) => p.leverage === externalLeverage ? p : { ...p, leverage: externalLeverage })

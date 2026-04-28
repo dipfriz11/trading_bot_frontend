@@ -210,6 +210,10 @@ interface TerminalContextValue {
   clearGridPendingUpdate: (consoleId: string) => void
   removeGridTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
+
+  // Live prices published by chart widgets (symbol → last close price)
+  livePrices: Record<string, number>
+  setLivePrice: (symbol: string, price: number) => void
 }
 
 const TerminalContext = createContext<TerminalContextValue | null>(null)
@@ -236,6 +240,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   balancesRef.current = balances
 
   const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
+  const [livePrices, setLivePricesMap] = useState<Record<string, number>>({})
+  const setLivePrice = useCallback((symbol: string, price: number) => {
+    setLivePricesMap((prev) => prev[symbol] === price ? prev : { ...prev, [symbol]: price })
+  }, [])
 
   useEffect(() => {
     try {
@@ -1140,6 +1148,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         clearGridPendingUpdate,
         removeGridTpSl,
         removeGridEntry,
+        livePrices,
+        setLivePrice,
       }}
     >
       {children}

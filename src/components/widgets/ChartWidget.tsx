@@ -1232,6 +1232,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     deductOrderBalance,
     previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridEntry, applyGridTpSl,
     tpSlOrders, setTpSl,
+    setLivePrice,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1271,6 +1272,11 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const last = candles[candles.length - 1]
   const prev = candles[candles.length - 2]
   const isUp = last && prev ? last.close >= prev.close : true
+
+  // Publish last candle close as live price for this symbol
+  useEffect(() => {
+    if (last?.close) setLivePrice(symbol, last.close)
+  }, [symbol, last?.close, setLivePrice])
 
   // Standalone mode uses localEditingOrderId for the form; managed mode uses context editingOrderId
   const effectiveEditingOrderId = hasOrderConsole ? editingOrderId : localEditingOrderId

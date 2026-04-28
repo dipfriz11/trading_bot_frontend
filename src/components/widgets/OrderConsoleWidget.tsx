@@ -340,6 +340,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview,
     openPosition, fillOrder,
+    livePrices,
   } = useTerminal()
 
   const [tab, setTab] = useState<"new" | "grid">("new")
@@ -434,7 +435,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   const ticker = symbol.split("/")[0]
 
-  const mockPrice = MOCK_PRICES[symbol] ?? 100
+  const mockPrice = livePrices[symbol] ?? MOCK_PRICES[symbol] ?? 100
   const effectivePrice = orderType === "market" ? mockPrice : (parseFloat(price) || 0)
 
   const qtyRef = useRef(qty)
@@ -462,6 +463,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const key = `${activeChart?.id ?? ""}:${symbol}`
     if (initialisedKeyRef.current === key) return
     initialisedKeyRef.current = key
+    userEditedPriceRef.current = false
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(mockPrice))
     const q = parseFloat(qtyRef.current)
@@ -469,6 +471,23 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Use rAF so the push-draft effect sees the flag before running
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
   }, [symbol, activeChart?.id, mockPrice])
+
+  // Track whether user manually edited the price field (after init)
+  const userEditedPriceRef = useRef(false)
+
+  // Update price field when live price changes — only if user hasn't manually typed a value
+  const prevLivePriceRef = useRef(mockPrice)
+  useEffect(() => {
+    const live = livePrices[symbol]
+    if (!live) return
+    if (live === prevLivePriceRef.current) return
+    prevLivePriceRef.current = live
+    if (userEditedPriceRef.current) return
+    if (orderType !== "limit") return
+    settingPriceFromExternalRef.current = true
+    setPrice(priceToString(live))
+    requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
+  }, [livePrices, symbol, orderType])
 
   // ---- Push draft order to context whenever form changes ----
   useEffect(() => {
@@ -856,6 +875,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [activeChart?.id])
 
   const handlePriceChange = (v: string) => {
+    userEditedPriceRef.current = true
     setPrice(v)
     if (editingOrderId) setFormEditMode(true)
     const p = parseFloat(v)
@@ -944,6 +964,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const resetFormToNew = (_clearQty = false) => {
     suppressDraftRef.current = true
     settingPriceFromExternalRef.current = true
+    userEditedPriceRef.current = false
     setQty("")
     setAmount("")
     setPrice(priceToString(mockPrice))
