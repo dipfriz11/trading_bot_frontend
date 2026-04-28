@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react"
 import { generateCandles, formatPrice, generateOrderBook, ACCOUNTS, EXCHANGES } from "@/lib/mock-data"
 import { SYMBOLS } from "@/lib/mock-data"
-import type { Widget, Candle } from "@/types/terminal"
+import type { Widget, Candle, LivePosition } from "@/types/terminal"
 import { useTerminal, posKey } from "@/contexts/TerminalContext"
 import type { ChartPlacedOrder, ChartDraftOrder, ChartGridOrders, ChartGridPreview, ChartTpSl } from "@/contexts/TerminalContext"
 import { ChevronDown, User, Building2 } from "lucide-react"
@@ -360,6 +360,138 @@ function renderOrderLine(
   )
 }
 
+// ---- Position avg entry line ----
+function PositionLine({
+  position,
+  width,
+  height,
+  toY,
+  minPrice,
+  maxPrice,
+  padding,
+}: {
+  position: LivePosition
+  width: number
+  height: number
+  toY: (price: number) => number
+  minPrice: number
+  maxPrice: number
+  padding: { left: number; right: number; top: number; bottom: number }
+}) {
+  // Only show when there are real filled orders
+  if (position.realSize <= 0 || position.avgEntry <= 0) return null
+
+  // Breakeven price = avgEntry * (1 + feeIn + feeOut) for short, avgEntry * (1 - feeIn - feeOut) for long
+  // Currently fees are 0%, so breakeven = avgEntry
+  const FEE_IN = 0
+  const FEE_OUT = 0
+  const breakeven = position.side === "long"
+    ? position.avgEntry * (1 + FEE_IN + FEE_OUT)
+    : position.avgEntry * (1 - FEE_IN - FEE_OUT)
+
+  const price = breakeven
+  const isOutOfRange = price < minPrice || price > maxPrice
+  const chartTop = padding.top
+  const chartBottom = toY(minPrice)
+  const rawY = toY(price)
+  const y = isOutOfRange
+    ? (price > maxPrice ? chartTop + 2 : chartBottom - 2)
+    : rawY
+
+  const isLong = position.side === "long"
+  const lineColor = isLong ? "#1e6fef" : "#e05e00"
+  const labelBg = isLong ? "#0f2a5a" : "#3a1a00"
+  const labelFg = isLong ? "#4d9fff" : "#ff8844"
+
+  const axisX = width - padding.right
+  const label = isLong ? "LONG" : "SHORT"
+  const priceStr = priceToString(price)
+  const charW = 5.5
+  const PAD = 5
+  const labelW = PAD + label.length * charW + PAD
+  const priceW = PAD + priceStr.length * charW + PAD
+  void (labelW + priceW)
+
+  return (
+    <svg
+      style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", overflow: "visible" }}
+      width={width}
+      height={height}
+    >
+      {/* Dashed horizontal line */}
+      <line
+        x1={padding.left}
+        y1={y}
+        x2={axisX}
+        y2={y}
+        stroke={lineColor}
+        strokeWidth={1.5}
+        strokeDasharray="6,3"
+        opacity={0.85}
+      />
+      {/* Label badge on right axis */}
+      <g transform={`translate(${axisX}, ${y})`}>
+        {/* Side label */}
+        <rect
+          x={0}
+          y={-9}
+          width={labelW}
+          height={18}
+          fill={labelBg}
+          stroke={lineColor}
+          strokeWidth={0.8}
+          rx={2}
+        />
+        <text
+          x={labelW / 2}
+          y={4}
+          textAnchor="middle"
+          fill={labelFg}
+          fontSize={9}
+          fontFamily="'JetBrains Mono Variable', monospace"
+          fontWeight={700}
+        >
+          {label}
+        </text>
+        {/* Price tag */}
+        <rect
+          x={labelW}
+          y={-9}
+          width={priceW}
+          height={18}
+          fill={lineColor}
+          rx={2}
+        />
+        <text
+          x={labelW + priceW / 2}
+          y={4}
+          textAnchor="middle"
+          fill="#fff"
+          fontSize={9}
+          fontFamily="'JetBrains Mono Variable', monospace"
+          fontWeight={600}
+        >
+          {priceStr}
+        </text>
+        {/* Clamp indicator dot when out of range */}
+        {isOutOfRange && (
+          <circle cx={-4} cy={0} r={3} fill={lineColor} opacity={0.8} />
+        )}
+      </g>
+      {/* Small left-edge tick */}
+      <line
+        x1={padding.left - 4}
+        y1={y}
+        x2={padding.left}
+        y2={y}
+        stroke={lineColor}
+        strokeWidth={1.5}
+        opacity={0.6}
+      />
+    </svg>
+  )
+}
+
 interface ChartProps {
   candles: Candle[]
   width: number
@@ -382,6 +514,7 @@ interface ChartProps {
   tpSl?: ChartTpSl | null
   onTpSlDragStart?: TpSlOverlayProps["onDragStart"]
   onTpSlClose?: TpSlOverlayProps["onClose"]
+  activePosition?: LivePosition | null
 }
 
 interface OrdersOverlayProps {
@@ -1024,7 +1157,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -1082,6 +1215,14 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding} dragHandlers={dragHandlers}
           onDragStart={onTpSlDragStart} onClose={onTpSlClose}
+        />
+      )}
+      {activePosition && (
+        <PositionLine
+          position={activePosition}
+          width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
         />
       )}
     </div>
@@ -1157,7 +1298,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -1213,6 +1354,14 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding} dragHandlers={dragHandlers}
           onDragStart={onTpSlDragStart} onClose={onTpSlClose}
+        />
+      )}
+      {activePosition && (
+        <PositionLine
+          position={activePosition}
+          width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
         />
       )}
     </div>
@@ -1772,6 +1921,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     tpSl={chartTpSl}
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
+                    activePosition={ctxPositions[positionKey]?.status === "active" ? ctxPositions[positionKey] : null}
                   />
                 : <LineChart
                     candles={candles} width={size.width} height={Math.max(chartAreaHeight, 80)}
@@ -1793,6 +1943,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     tpSl={chartTpSl}
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
+                    activePosition={ctxPositions[positionKey]?.status === "active" ? ctxPositions[positionKey] : null}
                   />
             )}
           </div>
