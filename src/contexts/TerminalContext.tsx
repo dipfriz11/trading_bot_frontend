@@ -209,6 +209,7 @@ interface TerminalContextValue {
   markGridPendingUpdate: (consoleId: string) => void
   clearGridPendingUpdate: (consoleId: string) => void
   removeGridTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
+  removeGridPreviewTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
   removeGridPreviewEntry: (consoleId: string, orderId: string) => void
 
@@ -1064,6 +1065,22 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const removeGridPreviewTpSl = useCallback((consoleId: string, target: "tp" | "sl", tpIndex?: number) => {
+    setPreviewOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry) return prev
+      if (target === "tp") {
+        if (tpIndex !== undefined) {
+          const newLevels = entry.tpLevels.filter((_, i) => i !== tpIndex)
+          const newTpPrice = newLevels.length > 0 ? newLevels[0] : null
+          return { ...prev, [consoleId]: { ...entry, tpPrice: newTpPrice, tpLevels: newLevels } }
+        }
+        return { ...prev, [consoleId]: { ...entry, tpPrice: null, tpLevels: [] } }
+      }
+      return { ...prev, [consoleId]: { ...entry, slPrice: null } }
+    })
+  }, [])
+
   // Directly patch TP/SL on a placed grid without marking pendingUpdate
   const applyGridTpSl = useCallback((consoleId: string, patch: { tpPrice?: number | null; slPrice?: number | null; tpLevels?: number[] }) => {
     setGridOrdersMap((prev) => {
@@ -1168,6 +1185,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         markGridPendingUpdate,
         clearGridPendingUpdate,
         removeGridTpSl,
+        removeGridPreviewTpSl,
         removeGridEntry,
         removeGridPreviewEntry,
         livePrices,
