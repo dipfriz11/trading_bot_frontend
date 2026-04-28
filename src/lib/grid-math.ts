@@ -29,8 +29,23 @@ export function calcGridPrices(cfg: GridConfig): number[] {
     const firstPrice = isLong
       ? entryPrice * (1 - firstOffset)
       : entryPrice * (1 + firstOffset)
+    // Derive step from lastOffsetPercent when there are multiple orders
+    let effectiveStep = step
+    if (n > 1 && cfg.lastOffsetPercent > 0) {
+      const lastOffset = Math.max(0, cfg.lastOffsetPercent) / 100
+      const lastPrice = isLong
+        ? entryPrice * (1 - lastOffset)
+        : entryPrice * (1 + lastOffset)
+      const ratio = lastPrice / firstPrice
+      if (ratio > 0 && ratio !== 1) {
+        const rawStep = isLong
+          ? 1 - Math.pow(ratio, 1 / (n - 1))
+          : Math.pow(ratio, 1 / (n - 1)) - 1
+        effectiveStep = Math.max(0.0001, rawStep)
+      }
+    }
     for (let i = 0; i < n; i++) {
-      prices.push(isLong ? firstPrice * Math.pow(1 - step, i) : firstPrice * Math.pow(1 + step, i))
+      prices.push(isLong ? firstPrice * Math.pow(1 - effectiveStep, i) : firstPrice * Math.pow(1 + effectiveStep, i))
     }
   } else {
     const top = cfg.topPrice > 0 ? cfg.topPrice : entryPrice * 1.05
@@ -61,10 +76,26 @@ export function calcGridVisualization(cfg: GridConfig): GridVisualization {
       ? entryPrice * (1 - firstOffset)
       : entryPrice * (1 + firstOffset)
 
+    // Derive step from lastOffsetPercent when there are multiple orders
+    let effectiveStep = step
+    if (n > 1 && cfg.lastOffsetPercent > 0) {
+      const lastOffset = Math.max(0, cfg.lastOffsetPercent) / 100
+      const lastPrice = isLong
+        ? entryPrice * (1 - lastOffset)
+        : entryPrice * (1 + lastOffset)
+      const ratio = lastPrice / firstPrice
+      if (ratio > 0 && ratio !== 1) {
+        const rawStep = isLong
+          ? 1 - Math.pow(ratio, 1 / (n - 1))
+          : Math.pow(ratio, 1 / (n - 1)) - 1
+        effectiveStep = Math.max(0.0001, rawStep)
+      }
+    }
+
     for (let i = 0; i < n; i++) {
       const p = isLong
-        ? firstPrice * Math.pow(1 - step, i)
-        : firstPrice * Math.pow(1 + step, i)
+        ? firstPrice * Math.pow(1 - effectiveStep, i)
+        : firstPrice * Math.pow(1 + effectiveStep, i)
       prices.push(p)
     }
   } else {

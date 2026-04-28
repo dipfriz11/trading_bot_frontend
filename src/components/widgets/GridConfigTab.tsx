@@ -820,6 +820,29 @@ export const GridConfigTab = memo(function GridConfigTab({
       setter((p) => ({ ...p, [key]: val }))
       // Also update cfg so preview recalculates immediately
       setCfg((p) => ({ ...p, [key]: val }))
+    } else if (key === "stepPercent") {
+      // When user manually sets stepPercent, clear lastOffsetPercent so stepPercent takes effect
+      setCfg((p) => ({ ...p, stepPercent: val as number, lastOffsetPercent: 0 }))
+    } else if (key === "lastOffsetPercent") {
+      // When user sets lastOffsetPercent, also recompute stepPercent to keep it consistent
+      setCfg((p) => {
+        const n = Math.max(2, p.ordersCount)
+        const entryPrice = p.entryPrice > 0 ? p.entryPrice : 67000
+        const isLong = p.side === "long"
+        const firstOffset = Math.max(0, p.firstOffsetPercent) / 100
+        const lastOffset = Math.max(0, val as number) / 100
+        const firstPrice = isLong ? entryPrice * (1 - firstOffset) : entryPrice * (1 + firstOffset)
+        const lastPrice = isLong ? entryPrice * (1 - lastOffset) : entryPrice * (1 + lastOffset)
+        const ratio = firstPrice > 0 ? lastPrice / firstPrice : 1
+        let newStep = p.stepPercent
+        if (ratio > 0 && ratio !== 1) {
+          const rawStep = isLong
+            ? (1 - Math.pow(ratio, 1 / (n - 1))) * 100
+            : (Math.pow(ratio, 1 / (n - 1)) - 1) * 100
+          newStep = Math.max(0.01, Math.round(rawStep * 100) / 100)
+        }
+        return { ...p, lastOffsetPercent: val as number, stepPercent: newStep }
+      })
     } else {
       setCfg((p) => ({ ...p, [key]: val }))
     }
