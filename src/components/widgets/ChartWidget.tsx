@@ -1519,6 +1519,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     e.stopPropagation()
     e.preventDefault()
 
+    const isPreview = !gridOrders[consoleId] && !!previewOrders[consoleId]
     const grid = gridOrders[consoleId] ?? previewOrders[consoleId]
     if (!grid) return
 
@@ -1527,9 +1528,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       : (grid.tpLevels[tpIndex] ?? 0)
     if (!startPrice) return
 
+    const prefix = isPreview ? "preview" : "grid"
     const dragKey = target === "sl"
-      ? `grid:${consoleId}:sl`
-      : `grid:${consoleId}:tp${tpIndex === 0 ? "" : tpIndex + 1}`
+      ? `${prefix}:${consoleId}:sl`
+      : `${prefix}:${consoleId}:tp${tpIndex === 0 ? "" : tpIndex + 1}`
 
     const startY = e.clientY
     const DRAG_THRESHOLD = 4
