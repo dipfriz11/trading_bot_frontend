@@ -1260,6 +1260,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
+      entryPrice: cfg.entryPrice,
       accountId,
       exchangeId,
       marketType,

@@ -87,6 +87,7 @@ export interface ChartGridPreview {
   tpLevels: number[]
   symbol: string
   leverage: number
+  entryPrice?: number
   accountId?: string
   exchangeId?: string
   marketType?: "spot" | "futures"
@@ -837,11 +838,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      // Auto-fill orders that cross the market price (negative offset scenario)
-      // For LONG (buy): price >= weightedAvg means order is at/above market → fills immediately
-      // For SHORT (sell): price <= weightedAvg means order is at/below market → fills immediately
+      // Auto-fill orders that cross the market price (negative first offset scenario)
+      // For LONG (buy): order placed at or above current price → fills immediately
+      // For SHORT (sell): order placed at or below current price → fills immediately
+      const marketPrice = entry.entryPrice ?? weightedAvg
       const autoFillOrders = newOrders.filter((o) =>
-        entry.side === "long" ? o.price >= weightedAvg : o.price <= weightedAvg,
+        entry.side === "long" ? o.price >= marketPrice : o.price <= marketPrice,
       )
       if (autoFillOrders.length > 0) {
         setTimeout(() => {
