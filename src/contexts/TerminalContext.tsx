@@ -181,6 +181,8 @@ interface TerminalContextValue {
   closePosition: (posKey: PositionKey) => void
   partialClosePosition: (posKey: PositionKey, closeSize: number) => void
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
+  // Simulate order fill: marks order as filled, adds qty to realSize, sets position active
+  fillOrder: (posKey: PositionKey, orderId: string, fillPrice?: number) => void
 
   // Grid orders bridge
   previewOrders: PreviewOrderMap
@@ -625,6 +627,60 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const fillOrder = useCallback((pk: PositionKey, orderId: string, fillPrice?: number) => {
+    const now = new Date()
+    const hh = String(now.getHours()).padStart(2, "0")
+    const min = String(now.getMinutes()).padStart(2, "0")
+    const ss = String(now.getSeconds()).padStart(2, "0")
+    const dd = String(now.getDate()).padStart(2, "0")
+    const mm = String(now.getMonth() + 1).padStart(2, "0")
+    const filledAt = `${hh}:${min}:${ss} ${dd}.${mm}`
+
+    setPositionsMap((prev) => {
+      const pos = prev[pk]
+      if (!pos) return prev
+
+      const order = pos.orders.find((o) => o.id === orderId)
+      if (!order || order.status === "filled") return prev
+
+      const price = fillPrice ?? order.price
+      const qty = order.qty
+
+      // Recalculate avg entry with this fill
+      const prevRealSize = pos.realSize ?? 0
+      const newRealSize = prevRealSize + qty
+      const newAvgEntry = prevRealSize > 0
+        ? (pos.avgEntry * prevRealSize + price * qty) / newRealSize
+        : price
+
+      const notional = pos.size * newAvgEntry
+      const rawPnl = pos.side === "long"
+        ? (pos.markPrice - newAvgEntry) * pos.size
+        : (newAvgEntry - pos.markPrice) * pos.size
+      const pnlPct = notional > 0 ? (rawPnl / notional) * pos.leverage * 100 : 0
+
+      const updatedOrders = pos.orders.map((o) =>
+        o.id === orderId
+          ? { ...o, status: "filled" as const, filledAt, filledPct: 100, price }
+          : o
+      )
+
+      return {
+        ...prev,
+        [pk]: {
+          ...pos,
+          realSize: newRealSize,
+          avgEntry: newAvgEntry,
+          notional,
+          unrealizedPnl: rawPnl,
+          unrealizedPnlPct: pnlPct,
+          status: "active",
+          orders: updatedOrders,
+        },
+      }
+    })
+  }, [])
+
   const setGridPreview = useCallback((consoleId: string, data: Omit<ChartGridPreview, "consoleId"> | null) => {
     // If grid is already placed, just mark it as pending update — don't overwrite preview
     const placedEntry = gridOrdersRef.current[consoleId]
@@ -780,6 +836,20 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           },
         }
       })
+
+      // Auto-fill orders that cross the market price (negative offset scenario)
+      // For LONG (buy): price >= weightedAvg means order is at/above market → fills immediately
+      // For SHORT (sell): price <= weightedAvg means order is at/below market → fills immediately
+      const autoFillOrders = newOrders.filter((o) =>
+        entry.side === "long" ? o.price >= weightedAvg : o.price <= weightedAvg,
+      )
+      if (autoFillOrders.length > 0) {
+        setTimeout(() => {
+          for (const o of autoFillOrders) {
+            fillOrder(posPk, o.id, o.price)
+          }
+        }, 0)
+      }
 
       // Update balance inOrders from positions
       setPositionsMap((prev) => {
@@ -1009,6 +1079,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         closePosition,
         partialClosePosition,
         updatePositionMark,
+        fillOrder,
         previewOrders,
         previewOrdersRef,
         gridOrders,
