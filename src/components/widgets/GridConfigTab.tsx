@@ -821,7 +821,11 @@ export const GridConfigTab = memo(function GridConfigTab({
       setCfg((p) => ({ ...p, [key]: val }))
     }
     if (isPlacedRef.current) markGridPendingUpdate(consoleIdRef.current)
-  }, [markGridPendingUpdate])
+    // Cancel preview immediately when totalQuote is cleared to zero
+    if (key === "totalQuote" && (val as number) <= 0) {
+      cancelGridPreview(consoleIdRef.current)
+    }
+  }, [markGridPendingUpdate, cancelGridPreview])
 
   // Ref always pointing at latest cfg — used by chart-switch effect to pre-sync before saving
   const prevCfgRef = useRef(cfg)
