@@ -1056,6 +1056,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (!entry) return prev
       return { ...prev, [consoleId]: { ...entry, ...patch } }
     })
+    // Also update preview so drag-sync works when grid is not yet placed
+    setPreviewOrdersMap((prev) => {
+      const entry = prev[consoleId]
+      if (!entry) return prev
+      return { ...prev, [consoleId]: { ...entry, ...patch } }
+    })
   }, [])
 
   const setTpSl = useCallback((chartId: string, patch: Partial<ChartTpSl>) => {

@@ -5,7 +5,7 @@ import type { GridConfig, GridMultiTpLevel, GridSharedTpSl } from "@/types/termi
 import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
-import { useTerminal, useGridOrderEntry } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, useGridPreviewEntry } from "@/contexts/TerminalContext"
 import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
 import { nanoid } from "@/lib/nanoid"
 
@@ -765,8 +765,11 @@ export const GridConfigTab = memo(function GridConfigTab({
   const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
   // Subscribe only to this specific consoleId to avoid re-renders from other grids
   const currentGridState = useGridOrderEntry(consoleId)
+  const currentPreviewState = useGridPreviewEntry(consoleId)
   const isPlaced = !!currentGridState
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
+  // For drag-sync: use placed state when placed, otherwise use preview state
+  const currentDragState = currentGridState ?? currentPreviewState
 
   // Refs so that upd() and drag-sync effects can call markGridPendingUpdate
   // without capturing stale closures over isPlaced/consoleId
@@ -933,7 +936,7 @@ export const GridConfigTab = memo(function GridConfigTab({
 
   // ── SL sync: chart x → form deactivation ────────────────────────────────
   // When slPrice is nulled out on the chart (user clicked x), deactivate slEnabled in form
-  const chartSlPrice = currentGridState?.slPrice
+  const chartSlPrice = currentDragState?.slPrice
   const prevChartSlPriceRef = useRef<number | null | undefined>(undefined)
   useEffect(() => {
     // React whenever slPrice transitions from non-null to null (user clicked x on chart)
@@ -963,7 +966,7 @@ export const GridConfigTab = memo(function GridConfigTab({
 
   // ── TP sync: chart x button on individual TP lines ──────────────────────
   // Stabilize by value so array-reference churn in context doesn't re-fire effects
-  const rawChartTpLevels = currentGridState?.tpLevels
+  const rawChartTpLevels = currentDragState?.tpLevels
   const chartTpLevels = useMemo(
     () => rawChartTpLevels,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1168,9 +1171,9 @@ export const GridConfigTab = memo(function GridConfigTab({
 
   // Sync form fields when first or last grid order is dragged on the chart
   // Stabilize by value to avoid firing when context creates a new array reference with same prices
-  const rawChartFirstPrice = currentGridState?.orders[0]?.price
-  const rawChartLastPrice = currentGridState?.orders.length
-    ? currentGridState.orders[currentGridState.orders.length - 1]?.price
+  const rawChartFirstPrice = currentDragState?.orders[0]?.price
+  const rawChartLastPrice = currentDragState?.orders.length
+    ? currentDragState.orders[currentDragState.orders.length - 1]?.price
     : undefined
   const chartFirstPrice = useMemo(() => rawChartFirstPrice, [rawChartFirstPrice])
   const chartLastPrice = useMemo(() => rawChartLastPrice, [rawChartLastPrice])

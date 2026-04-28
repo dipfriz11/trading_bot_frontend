@@ -1515,7 +1515,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     e.stopPropagation()
     e.preventDefault()
 
-    const grid = gridOrders[consoleId]
+    const grid = gridOrders[consoleId] ?? previewOrders[consoleId]
     if (!grid) return
 
     const startPrice = target === "sl"
@@ -1563,7 +1563,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [gridOrders, applyGridTpSl])
+  }, [gridOrders, previewOrders, applyGridTpSl])
 
   // ---- TP/SL drag handler ----
   const handleTpSlDragStart = useCallback((
