@@ -829,8 +829,8 @@ export const GridConfigTab = memo(function GridConfigTab({
         const n = Math.max(2, p.ordersCount)
         const entryPrice = p.entryPrice > 0 ? p.entryPrice : 67000
         const isLong = p.side === "long"
-        const firstOffset = Math.max(0, p.firstOffsetPercent) / 100
-        const lastOffset = Math.max(0, val as number) / 100
+        const firstOffset = p.firstOffsetPercent / 100
+        const lastOffset = (val as number) / 100
         const firstPrice = isLong ? entryPrice * (1 - firstOffset) : entryPrice * (1 + firstOffset)
         const lastPrice = isLong ? entryPrice * (1 - lastOffset) : entryPrice * (1 + lastOffset)
         const ratio = firstPrice > 0 ? lastPrice / firstPrice : 1
@@ -1226,7 +1226,7 @@ export const GridConfigTab = memo(function GridConfigTab({
         const rawFirstOffset = isLong
           ? (entryPrice - chartFirstPrice) / entryPrice * 100
           : (chartFirstPrice - entryPrice) / entryPrice * 100
-        const newFirstOffset = Math.max(0, Math.round(rawFirstOffset * 100) / 100)
+        const newFirstOffset = Math.round(rawFirstOffset * 100) / 100
 
         const n = p.ordersCount
         let newStep = p.stepPercent
@@ -1248,7 +1248,7 @@ export const GridConfigTab = memo(function GridConfigTab({
         const rawLastOffset = isLong
           ? (entryPrice - chartLastPrice) / entryPrice * 100
           : (chartLastPrice - entryPrice) / entryPrice * 100
-        const newLastOffset = Math.max(0, Math.round(rawLastOffset * 100) / 100)
+        const newLastOffset = Math.round(rawLastOffset * 100) / 100
 
         if (Math.abs(newFirstOffset - p.firstOffsetPercent) < 0.005 && Math.abs(newStep - p.stepPercent) < 0.005 && Math.abs(newLastOffset - p.lastOffsetPercent) < 0.005) return p
         return { ...p, firstOffsetPercent: newFirstOffset, stepPercent: newStep, lastOffsetPercent: newLastOffset }

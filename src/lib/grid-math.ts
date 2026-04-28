@@ -25,14 +25,14 @@ export function calcGridPrices(cfg: GridConfig): number[] {
   const step = Math.max(0.01, cfg.stepPercent) / 100
 
   if (cfg.placementMode === "step_percent") {
-    const firstOffset = Math.max(0, cfg.firstOffsetPercent) / 100
+    const firstOffset = cfg.firstOffsetPercent / 100
     const firstPrice = isLong
       ? entryPrice * (1 - firstOffset)
       : entryPrice * (1 + firstOffset)
     // Derive step from lastOffsetPercent when there are multiple orders
     let effectiveStep = step
-    if (n > 1 && cfg.lastOffsetPercent > 0) {
-      const lastOffset = Math.max(0, cfg.lastOffsetPercent) / 100
+    if (n > 1 && cfg.lastOffsetPercent !== 0) {
+      const lastOffset = cfg.lastOffsetPercent / 100
       const lastPrice = isLong
         ? entryPrice * (1 - lastOffset)
         : entryPrice * (1 + lastOffset)
@@ -71,15 +71,15 @@ export function calcGridVisualization(cfg: GridConfig): GridVisualization {
 
   if (cfg.placementMode === "step_percent") {
     // First order is firstOffsetPercent away from entry
-    const firstOffset = Math.max(0, cfg.firstOffsetPercent) / 100
+    const firstOffset = cfg.firstOffsetPercent / 100
     const firstPrice = isLong
       ? entryPrice * (1 - firstOffset)
       : entryPrice * (1 + firstOffset)
 
     // Derive step from lastOffsetPercent when there are multiple orders
     let effectiveStep = step
-    if (n > 1 && cfg.lastOffsetPercent > 0) {
-      const lastOffset = Math.max(0, cfg.lastOffsetPercent) / 100
+    if (n > 1 && cfg.lastOffsetPercent !== 0) {
+      const lastOffset = cfg.lastOffsetPercent / 100
       const lastPrice = isLong
         ? entryPrice * (1 - lastOffset)
         : entryPrice * (1 + lastOffset)
