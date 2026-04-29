@@ -915,36 +915,44 @@ function TpSlOverlay({ tpSl, width, height, toY, minPrice, maxPrice, padding, dr
   const badgeX = padLeft + 4
   const PAD = 8; const CLOSE_W = 20; const charW = 5.8
 
+  const TP_LINE_COLORS = {
+    color: "#1a7a5a", textColor: "#00e5a0",
+    closeBtnColor: "#1a7a5a", closeBtnFg: "#00e5a0",
+    priceTagColor: "#1a7a5a", priceTagFg: "#00e5a0",
+  }
+
+  // Use tpLevels array if available (multi-TP), otherwise fall back to single tp
+  const tpLevels = tpSl.tpLevels && tpSl.tpLevels.length > 0
+    ? tpSl.tpLevels
+    : tpSl.tp !== null ? [tpSl.tp] : []
+
   return (
     <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}>
-      {tpSl.tp !== null && (() => {
-        const price = tpSl.tp!
-        const TP_LINE_COLORS = {
-          color: "#1a7a5a", textColor: "#00e5a0",
-          closeBtnColor: "#1a7a5a", closeBtnFg: "#00e5a0",
-          priceTagColor: "#1a7a5a", priceTagFg: "#00e5a0",
-        }
+      {tpLevels.map((price, idx) => {
+        const totalTp = tpLevels.length
         const outOfRange = price < minPrice || price > maxPrice
         const chartTop = padding.top
         const chartBottom = toY(minPrice)
         const rawY = toY(price)
-        const y = outOfRange ? (price > maxPrice ? chartTop + 2 : chartBottom - 2) : rawY
-        const label = "TAKE PROFIT"
+        const stackOffset = (totalTp - 1 - idx) * 22
+        const y = outOfRange ? (price > maxPrice ? chartTop + 2 + stackOffset : chartBottom - 2 - stackOffset) : rawY
+        const label = totalTp > 1 ? `TP ${idx + 1}` : "TAKE PROFIT"
         const labelW = PAD + label.length * charW + PAD
         const badgeW = labelW + CLOSE_W
         return (
           <TpSlLine
+            key={`tp${idx}`}
             price={price} y={y} label={label}
             axisX={axisX} badgeX={badgeX} padLeft={padLeft}
             badgeW={badgeW} labelW={labelW} CLOSE_W={CLOSE_W} PAD={PAD}
             {...TP_LINE_COLORS}
             onDragStart={(e) => onDragStart("tp", e, minPrice, maxPrice, chartH, padding.top)}
             onClose={() => onClose("tp")}
-            registerMove={(fn) => { dragHandlers.current.set("__tp__", fn) }}
+            registerMove={(fn) => { dragHandlers.current.set(`__tp${idx}__`, fn) }}
             toYFn={toY}
           />
         )
-      })()}
+      })}
       {tpSl.sl !== null && (() => {
         const price = tpSl.sl!
         const SL_LINE_COLORS = {

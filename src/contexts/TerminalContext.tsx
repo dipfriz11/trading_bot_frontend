@@ -133,6 +133,7 @@ type PositionsMap = Record<PositionKey, LivePosition>
 export interface ChartTpSl {
   tp: number | null
   sl: number | null
+  tpLevels?: number[]
 }
 type TpSlMap = Record<string, ChartTpSl>
 

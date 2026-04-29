@@ -650,7 +650,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     lastDraftPricePushedRef.current = p
 
     // Clear simple tpSlOrders to avoid duplicate lines
-    setTpSl(activeChart.id, { tp: null, sl: null })
+    setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
@@ -1025,8 +1025,42 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
-    // Keep TP/SL lines visible after order is placed
-    if (noTpSl.tpEnabled || noTpSl.slEnabled) {
+    // Transfer TP/SL from preview into the chart's position TP/SL
+    if (activeChart && (noTpSl.tpEnabled || noTpSl.slEnabled)) {
+      const gSide = effectiveSide === "buy" ? "long" : "short"
+      const miniCfg = {
+        enabled: true, symbol, side: gSide,
+        ordersCount: 1, entryPrice: effectivePrice,
+        topPrice: 0, bottomPrice: 0,
+        totalQuote: parseFloat(qty) * effectivePrice, budgetMode: "quote" as const,
+        leverage: posSettings.leverage,
+        gridType: "arithmetic" as const, entryType: "limit" as const,
+        placementMode: "step_percent" as const,
+        firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
+        direction: "down" as const, qtyMode: "quote" as const,
+        multiplier: 1, multiplierEnabled: false, density: 1,
+        gridMode: "standard" as const,
+        tpEnabled: noTpSl.tpEnabled, tpMode: noTpSl.tpMode,
+        tpPercent: noTpSl.tpPercent, tpClosePercent: noTpSl.tpClosePercent,
+        multiTpEnabled: noTpSl.multiTpEnabled, multiTpCount: noTpSl.multiTpCount,
+        multiTpLevels: noTpSl.multiTpLevels,
+        tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
+        slEnabled: noTpSl.slEnabled, slMode: noTpSl.slMode,
+        slPercent: noTpSl.slPercent, slClosePercent: noTpSl.slClosePercent,
+        trailEnabled: false, trailTriggerPercent: 1,
+        trailLimitPriceEnabled: false, trailLimitPrice: 0,
+        autoEnabled: false, stopOnSl: false, stopNew: false,
+        resetTpEnabled: false, resetTpTriggerLevels: [],
+        defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
+        resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+      }
+      const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
+      const tpLevels = noTpSl.tpEnabled ? (viz.tpLevels ?? []) : []
+      const tpVal = tpLevels[0] ?? null
+      const slVal = noTpSl.slEnabled ? (viz.slPrice ?? null) : null
+      if (tpVal !== null || slVal !== null) {
+        setTpSl(activeChart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
+      }
       noJustPlacedRef.current = true
     }
     resetFormToNew()
