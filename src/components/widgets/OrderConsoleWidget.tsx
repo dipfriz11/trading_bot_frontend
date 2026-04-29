@@ -544,6 +544,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
   }, [ctxPositions, activePositionKey])
 
+  // True while the form holds data loaded from a placed order (edit mode or just-ended drag).
+  // Prevents noPreviewEffect from treating stale placed-order qty/price as a new draft.
+  const formLoadedFromPlacedRef = useRef(false)
+
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
     if (!editingOrderId || !activeChart) {
@@ -552,6 +556,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
     const order = (ctxPositions[activePositionKey]?.orders ?? []).find((o: import("@/types/terminal").ChartPlacedOrder) => o.id === editingOrderId)
     if (!order) { setFormEditMode(false); return }
+    formLoadedFromPlacedRef.current = true
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(order.price))
     setQty(order.qty.toString())
@@ -591,10 +596,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       cancelGridPreview(noConsoleId)
       return
     }
-    // Don't immediately create a draft preview right after a placed-order drag ends.
-    // The form is being reset to market price in the same render cycle — creating a
-    // preview now would call setTpSl(null) and wipe the real placed TP/SL lines.
-    if (noPlacedDragJustEndedRef.current) {
+    // The form still holds data loaded from a placed order (edit mode just ended or drag just
+    // released). Don't create a draft preview — it would call setTpSl(null) and wipe the
+    // real placed TP/SL lines. The flag is cleared by resetFormToNew() when the form is
+    // explicitly reset, or when the user manually edits qty/price.
+    if (formLoadedFromPlacedRef.current) {
       cancelGridPreview(noConsoleId)
       return
     }
@@ -871,6 +877,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [activeChart?.id])
 
   const handlePriceChange = (v: string) => {
+    formLoadedFromPlacedRef.current = false
     userEditedPriceRef.current = true
     setPrice(v)
     if (editingOrderId) setFormEditMode(true)
@@ -886,6 +893,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const handleQtyChange = (v: string) => {
+    formLoadedFromPlacedRef.current = false
     setAnchor("qty")
     setQty(v)
     if (editingOrderId) setFormEditMode(true)
@@ -895,6 +903,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const handleAmountChange = (v: string) => {
+    formLoadedFromPlacedRef.current = false
     setAnchor("amount")
     setAmount(v)
     if (editingOrderId) setFormEditMode(true)
@@ -958,6 +967,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const resetFormToNew = (_clearQty = false) => {
+    formLoadedFromPlacedRef.current = false
     settingPriceFromExternalRef.current = true
     userEditedPriceRef.current = false
     setQty("")

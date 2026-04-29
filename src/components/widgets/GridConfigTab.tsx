@@ -1570,20 +1570,18 @@ export const GridConfigTab = memo(function GridConfigTab({
 
     // Cancel placed grid first, then set fresh preview and place
     cancelGridOrders(snapshotConsoleId)
-    // Then set fresh preview and immediately place
+    // Pass newData directly to placeGridOrders so there is no intermediate render
+    // showing draft (dashed) lines — the grid goes directly from cleared → placed.
     setTimeout(() => {
-      setGridPreview(snapshotConsoleId, newData)
-      setTimeout(() => {
-        placeGridOrders(snapshotConsoleId)
-        // In non-multipos mode, re-anchor owner's TP/SL to the just-placed grid's geometry
-        if (ownerUpdate) {
-          applyGridTpSl(ownerUpdate.consoleId, {
-            tpPrice: ownerUpdate.tpPrice,
-            slPrice: ownerUpdate.slPrice,
-            tpLevels: ownerUpdate.tpLevels,
-          })
-        }
-      }, 0)
+      placeGridOrders(snapshotConsoleId, newData)
+      // In non-multipos mode, re-anchor owner's TP/SL to the just-placed grid's geometry
+      if (ownerUpdate) {
+        applyGridTpSl(ownerUpdate.consoleId, {
+          tpPrice: ownerUpdate.tpPrice,
+          slPrice: ownerUpdate.slPrice,
+          tpLevels: ownerUpdate.tpLevels,
+        })
+      }
     }, 0)
   }
 

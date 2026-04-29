@@ -198,7 +198,7 @@ interface TerminalContextValue {
   gridOrders: GridOrderMap
   gridOrdersRef: React.RefObject<GridOrderMap>
   setGridPreview: (consoleId: string, data: Omit<ChartGridPreview, "consoleId"> | null) => void
-  placeGridOrders: (consoleId: string) => void
+  placeGridOrders: (consoleId: string, directData?: Omit<ChartGridPreview, "consoleId">) => void
   cancelGridOrders: (consoleId: string) => void
   cancelGridPreview: (consoleId: string) => void
   registerOrderPreviewCancelCb: (consoleId: string, cb: () => void) => void
@@ -786,8 +786,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  const placeGridOrders = useCallback((consoleId: string) => {
-    const preview = previewOrdersRef.current[consoleId]
+  const placeGridOrders = useCallback((consoleId: string, directData?: Omit<ChartGridPreview, "consoleId">) => {
+    const preview: ChartGridPreview | undefined = directData
+      ? { ...directData, consoleId }
+      : previewOrdersRef.current[consoleId]
     if (!preview) return
 
     const ordersWithIndex = preview.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
