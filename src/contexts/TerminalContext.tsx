@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react"
-import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg, LivePosition, ChartPlacedOrder, ChartDraftOrder } from "@/types/terminal"
+import type { TerminalState, Tab, Widget, WidgetType, Theme, WidgetRect, TransparentBgPreset, GlassGraphiteBg, LivePosition, ChartPlacedOrder } from "@/types/terminal"
 import { WIDGET_LABELS, WIDGET_MIN_SIZE } from "@/types/terminal"
 import { nanoid } from "@/lib/nanoid"
 import { ACCOUNTS } from "@/lib/mock-data"
@@ -89,6 +89,7 @@ export function posKey(
 export interface ChartGridPreview {
   chartId: string
   consoleId: string
+  source?: "grid" | "order"
   side: "long" | "short"
   orders: Array<{ id: string; price: number; qty: number }>
   tpPrice: number | null
@@ -100,9 +101,6 @@ export interface ChartGridPreview {
   accountId?: string
   exchangeId?: string
   marketType?: "spot" | "futures"
-  /** When true, the entry order lines are not rendered (used by New Order form where the
-   *  draft line is already shown separately — only TP/SL lines should come from this preview) */
-  hideOrders?: boolean
 }
 
 // Placed grid: real orders sent to exchange. Balance locked.
@@ -129,8 +127,6 @@ type GridOrderMap = Record<string, ChartGridOrders | undefined>
 // ---- Order bridge types — defined in types/terminal.ts, re-exported here for consumers ----
 export type { ChartDraftOrder, ChartPlacedOrder, OrderSource, PositionStatus } from "@/types/terminal"
 
-// draftOrders keyed by chartWidgetId (UI-scoped, intentional)
-type DraftOrderMap = Record<string, ChartDraftOrder | undefined>
 // livePositions keyed by PositionKey — orders live inside each LivePosition
 type PositionsMap = Record<PositionKey, LivePosition>
 
@@ -163,8 +159,6 @@ interface TerminalContextValue {
   setActiveChartId: (id: string | null) => void
 
   // Order bridge — order-console writes here; ChartWidget reads via positions[pk].orders
-  draftOrders: DraftOrderMap
-  setDraftOrder: (chartId: string, draft: ChartDraftOrder | undefined) => void
   addPlacedOrder: (positionKey: PositionKey, order: ChartPlacedOrder) => void
   removePlacedOrder: (positionKey: PositionKey, orderId: string) => void
   updatePlacedOrderPrice: (positionKey: PositionKey, orderId: string, price: number) => void
@@ -190,7 +184,7 @@ interface TerminalContextValue {
 
   // Live positions (position manager) — orders live inside each position
   positions: PositionsMap
-  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrder?: ChartPlacedOrder) => void
+  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => void
   closePosition: (posKey: PositionKey) => void
   partialClosePosition: (posKey: PositionKey, closeSize: number) => void
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
@@ -227,7 +221,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<TerminalState>(loadState)
   const [activeChartId, _setActiveChartId] = useState<string | null>(null)
   const setActiveChartId = _setActiveChartId
-  const [draftOrders, setDraftOrders] = useState<DraftOrderMap>({})
   const [isDraggingOrder, setIsDraggingOrder] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
   const [balances, setBalances] = useState<BalanceStore>(buildInitialBalances)
@@ -404,8 +397,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           : t
       ),
     }))
-    // Only clean up UI-scoped draft; placed orders are keyed by positionKey and survive widget removal
-    setDraftOrders((d) => { const n = { ...d }; delete n[widgetId]; return n })
   }, [])
 
   const updateWidget = useCallback((widgetId: string, updates: Partial<Widget>) => {
@@ -472,10 +463,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // Order bridge setters — orders live inside positions[pk].orders
-  const setDraftOrder = useCallback((chartId: string, draft: ChartDraftOrder | undefined) => {
-    setDraftOrders((prev) => ({ ...prev, [chartId]: draft }))
-  }, [])
-
   const addPlacedOrder = useCallback((positionKey: PositionKey, order: ChartPlacedOrder) => {
     setPositionsMap((prev) => {
       const pos = prev[positionKey]
@@ -565,7 +552,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   // ── Position Manager ─────────────────────────────────────────────────────────
 
-  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrder?: ChartPlacedOrder) => {
+  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => {
     const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     setPositionsMap((prev) => {
       const existing = prev[pk]
@@ -588,7 +575,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             unrealizedPnl: rawPnl,
             unrealizedPnlPct: pnlPct,
             markPrice: pos.markPrice,
-            orders: initialOrder ? [...existing.orders, initialOrder] : existing.orders,
           },
         }
       }
@@ -607,7 +593,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           notional,
           unrealizedPnl: rawPnl,
           unrealizedPnlPct: pnlPct,
-          orders: initialOrder ? [initialOrder] : [],
+          orders: [],
           status: "pending",
           realizedPnl: 0,
           realSize: pos.realSize ?? 0,
@@ -1153,8 +1139,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         updateWidgetRect,
         activeChartId,
         setActiveChartId,
-        draftOrders,
-        setDraftOrder,
         addPlacedOrder,
         removePlacedOrder,
         updatePlacedOrderPrice,
