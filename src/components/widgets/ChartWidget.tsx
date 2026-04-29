@@ -1154,19 +1154,21 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         console.log(`[CHART-DIV] mousedown (${e.clientX},${e.clientY}) topEl=${el?.tagName} cls="${el?.className?.toString().slice(0,50)}"`)
       }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding} dragHandlers={dragHandlers}
+          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
+        />
+      )}
+      {activePosition && (
+        <PositionLine
+          position={activePosition}
           width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
+          onClose={onClosePosition ?? (() => {})}
         />
       )}
       {gridOrdersList && gridOrdersList.length > 0 && (
@@ -1193,21 +1195,19 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
-      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
-        <PlacedTpSlOverlay
-          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding} dragHandlers={dragHandlers}
-          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
-        />
-      )}
-      {activePosition && (
-        <PositionLine
-          position={activePosition}
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
           width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          onClose={onClosePosition ?? (() => {})}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
         />
       )}
     </div>
@@ -1296,19 +1296,21 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
   return (
     <div style={{ position: "relative", width, height }}>
       <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding} dragHandlers={dragHandlers}
+          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
+        />
+      )}
+      {activePosition && (
+        <PositionLine
+          position={activePosition}
           width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
+          onClose={onClosePosition ?? (() => {})}
         />
       )}
       {gridOrdersList && gridOrdersList.length > 0 && (
@@ -1335,21 +1337,19 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
-      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
-        <PlacedTpSlOverlay
-          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding} dragHandlers={dragHandlers}
-          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
-        />
-      )}
-      {activePosition && (
-        <PositionLine
-          position={activePosition}
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
           width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          onClose={onClosePosition ?? (() => {})}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
         />
       )}
     </div>
