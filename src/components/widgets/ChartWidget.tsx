@@ -736,12 +736,14 @@ function GridOrderLine({
   const renderedYRef = useRef(toY(price))
   const toYRef = useRef(toY)
   toYRef.current = toY
+  const isDraggingThisRef = useRef(false)
 
   useEffect(() => {
     if (!registerMove) return
     registerMove(id, (newPrice: number) => {
       const el = groupRef.current
       if (!el) return
+      isDraggingThisRef.current = true
       const newY = toYRef.current(newPrice)
       const delta = newY - renderedYRef.current
       el.setAttribute("transform", `translate(0, ${delta})`)
@@ -749,6 +751,12 @@ function GridOrderLine({
   }, [id, registerMove])
 
   useEffect(() => {
+    // Don't reset transform while drag is visually active — the line is being dragged
+    if (isDraggingThisRef.current) {
+      isDraggingThisRef.current = false
+      renderedYRef.current = toY(price)
+      return
+    }
     if (groupRef.current) groupRef.current.removeAttribute("transform")
     renderedYRef.current = toY(price)
   })
