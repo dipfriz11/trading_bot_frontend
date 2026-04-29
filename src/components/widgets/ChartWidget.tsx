@@ -50,12 +50,12 @@ function BuyOrderBadge({
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
   priceTag: string; isEditing: boolean; isDraft?: boolean
-  onClose: () => void
+  onClose?: () => void
   onDragStart: (e: React.MouseEvent) => void
   axisX: number; padLeft: number
 }) {
   const PAD = 8
-  const CLOSE_W = 20
+  const CLOSE_W = onClose ? 20 : 0
   const charW = 5.8
   const labelW = PAD + label.length * charW + PAD
   const badgeH = 20
@@ -95,7 +95,7 @@ function BuyOrderBadge({
           </text>
         </g>
       )}
-      <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
+      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={badgeX + labelW} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={badgeX + labelW + CLOSE_W / 2} y={y + 4.5}
@@ -105,7 +105,7 @@ function BuyOrderBadge({
           style={{ pointerEvents: "none" }}>
           ×
         </text>
-      </g>
+      </g>}
       {/* Price tag on right axis */}
       <rect x={axisX} y={y - 9} width={axisPriceW} height={18}
         fill={priceTagColor} rx={2} style={{ pointerEvents: "none" }} />
@@ -128,12 +128,12 @@ function SellOrderBadge({
   closeBtnColor: string; closeBtnFg: string
   priceTagColor: string; priceTagFg: string
   priceTag: string; isEditing: boolean; isDraft?: boolean
-  onClose: () => void
+  onClose?: () => void
   onDragStart: (e: React.MouseEvent) => void
   axisX: number
 }) {
   const PAD = 8
-  const CLOSE_W = 20
+  const CLOSE_W = onClose ? 20 : 0
   const charW = 5.8
   const labelW = PAD + label.length * charW + PAD
   const badgeH = 20
@@ -152,7 +152,7 @@ function SellOrderBadge({
           strokeDasharray="3,2" style={{ pointerEvents: "none" }} />
       )}
       {/* Close button */}
-      <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
+      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={closeX} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={closeX + CLOSE_W / 2} y={y + 4.5}
@@ -162,7 +162,7 @@ function SellOrderBadge({
           style={{ pointerEvents: "none" }}>
           ×
         </text>
-      </g>
+      </g>}
       {/* Badge body */}
       {isDraft ? (
         <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
@@ -801,7 +801,7 @@ function GridOrderLine({
             closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
             priceTagColor={priceTagColor} priceTagFg={priceTagFg}
             priceTag={formatPrice(price)}
-            onClose={onClose ?? (() => {})}
+            onClose={onClose}
             onDragStart={onDragStart ?? (() => {})}
             axisX={axisX}
             isEditing={false}
@@ -820,7 +820,7 @@ function GridOrderLine({
             closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
             priceTagColor={priceTagColor} priceTagFg={priceTagFg}
             priceTag={formatPrice(price)}
-            onClose={onClose ?? (() => {})}
+            onClose={onClose}
             onDragStart={onDragStart ?? (() => {})}
             axisX={axisX} padLeft={padding.left}
             isEditing={false}
