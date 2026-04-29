@@ -1489,7 +1489,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // Standalone mode: use local state
   // Suppress draftOrder when New Order preview is active (avoids duplicate lines)
   const hasNewOrderPreview = Object.values(previewOrders).some(
-    (g) => g?.chartId === widget.id && g.consoleId.endsWith(":no")
+    (g) => g?.chartId === widget.id && g.consoleId.startsWith("no:")
   )
   const draftForChart: PlacedOrder | undefined = hasNewOrderPreview
     ? undefined
