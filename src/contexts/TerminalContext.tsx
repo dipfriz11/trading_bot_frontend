@@ -1012,7 +1012,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   const cancelOrderPreview = useCallback((consoleId: string) => {
     const cb = orderPreviewCancelCbsRef.current.get(consoleId)
-    console.log(`[cancelOrderPreview] consoleId=${consoleId} cbRegistered=${!!cb} registeredKeys=[${[...orderPreviewCancelCbsRef.current.keys()].join(',')}]`)
     if (cb) cb()
     else cancelGridPreview(consoleId)
   }, [cancelGridPreview])

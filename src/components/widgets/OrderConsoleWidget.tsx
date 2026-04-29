@@ -413,7 +413,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // Register handler so ChartWidget X-click on entry line clears form instead of flickering
   useEffect(() => {
     registerOrderPreviewCancelCb(noConsoleId, () => {
-      console.log(`[OCW-cb] X-cancel callback fired consoleId=${noConsoleId}`)
       noCancelledRef.current = true
       cancelGridPreview(noConsoleId)
       setQty("")
@@ -660,41 +659,37 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // ---- New Order: push entry + TP/SL preview lines to chart ----
   useEffect(() => {
-    console.log(`[NoPE] run tab=${tab} editId=${editingOrderId} formLoaded=${formLoadedFromPlacedRef.current} qty=${qty} noCancelled=${noCancelledRef.current} justPlaced=${noJustPlacedRef.current}`)
     if (!activeChart || tab !== "new" || editingOrderId) {
-      console.log(`[NoPE] early-exit: no activeChart or not new tab or editing`)
       cancelGridPreview(noConsoleId)
       return
     }
+    // The form still holds data loaded from a placed order (edit mode just ended or drag just
+    // released). Don't create a draft preview — it would call setTpSl(null) and wipe the
+    // real placed TP/SL lines. The flag is cleared by resetFormToNew() when the form is
+    // explicitly reset, or when the user manually edits qty/price.
     if (formLoadedFromPlacedRef.current) {
-      console.log(`[NoPE] early-exit: formLoadedFromPlaced=true`)
       cancelGridPreview(noConsoleId)
       return
     }
 
     const qtyNum = parseFloat(qty)
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    console.log(`[NoPE] qtyNum=${qtyNum} p=${p} priceRef=${priceRef.current}`)
 
     if (!(qtyNum > 0 && p > 0)) {
       if (noJustPlacedRef.current) {
         noJustPlacedRef.current = false
-        console.log(`[NoPE] qty<=0: justPlaced=true, skip cancel`)
         return
       }
       if (noCancelledRef.current) {
         noCancelledRef.current = false
-        console.log(`[NoPE] qty<=0: noCancelled=true, skip cancel`)
         return
       }
-      console.log(`[NoPE] qty<=0: cancelGridPreview`)
       cancelGridPreview(noConsoleId)
       return
     }
 
     if (noCancelledRef.current) {
       noCancelledRef.current = false
-      console.log(`[NoPE] qty>0 but noCancelled=true: cancel+return`)
       cancelGridPreview(noConsoleId)
       return
     }
@@ -739,12 +734,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastDraftPricePushedRef.current = p
 
-    // Если уже есть реальный ордер в позиции (включая виртуальную grid-позицию) —
-    // TP/SL живут с позицией, не трогаем их и не рисуем draft-линии поверх.
-    const positionOrders = ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []
-    const existingPlacedOrder = positionOrders.find((o) => o.source !== "grid")
-    const hasAnyPositionOrder = positionOrders.length > 0
-    if (!existingPlacedOrder && !hasAnyPositionOrder) {
+    // Если уже есть реальный (не-grid) ордер в позиции — TP/SL живут с позицией,
+    // не трогаем их и не рисуем draft-линии поверх.
+    const existingPlacedOrder = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).find((o) => o.source !== "grid")
+    if (!existingPlacedOrder) {
       setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
     }
 
@@ -753,9 +746,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
-      tpPrice: (existingPlacedOrder || hasAnyPositionOrder) ? null : viz.tpPrice,
-      slPrice: (existingPlacedOrder || hasAnyPositionOrder) ? null : viz.slPrice,
-      tpLevels: (existingPlacedOrder || hasAnyPositionOrder) ? [] : viz.tpLevels,
+      tpPrice: existingPlacedOrder ? null : viz.tpPrice,
+      slPrice: existingPlacedOrder ? null : viz.slPrice,
+      tpLevels: existingPlacedOrder ? [] : viz.tpLevels,
       symbol,
       leverage: posSettings.leverage,
       accountId,

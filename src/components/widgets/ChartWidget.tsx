@@ -74,7 +74,7 @@ function BuyOrderBadge({
       )}
       {/* Badge body — acts as drag handle for draft, or select area for placed */}
       {isDraft ? (
-        <g style={{ cursor: "ns-resize" }} onMouseDown={(e) => { console.log(`[Badge] drag mousedown isDraft y=${y.toFixed(1)} label="${label}"`); onDragStart?.(e) }}>
+        <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
           <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -95,7 +95,7 @@ function BuyOrderBadge({
           </text>
         </g>
       )}
-      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { console.log(`[Badge] X mousedown label="${label}"`); e.stopPropagation(); onClose() }}>
+      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={badgeX + labelW} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={badgeX + labelW + CLOSE_W / 2} y={y + 4.5}
@@ -152,7 +152,7 @@ function SellOrderBadge({
           strokeDasharray="3,2" style={{ pointerEvents: "none" }} />
       )}
       {/* Close button */}
-      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { console.log(`[Badge-sell] X mousedown label="${label}"`); e.stopPropagation(); onClose() }}>
+      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={closeX} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={closeX + CLOSE_W / 2} y={y + 4.5}
@@ -165,7 +165,7 @@ function SellOrderBadge({
       </g>}
       {/* Badge body */}
       {isDraft ? (
-        <g style={{ cursor: "ns-resize" }} onMouseDown={(e) => { console.log(`[Badge-sell] drag mousedown isDraft label="${label}"`); onDragStart?.(e) }}>
+        <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
           <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -624,8 +624,7 @@ function GridPreviewOverlay({
 }: GridPreviewOverlayProps) {
   if (!previewOrdersList.length) return null
   return (
-    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}
-      onMouseDown={(e) => console.log(`[SVG-preview] mousedown at (${e.clientX},${e.clientY}) target=${(e.target as SVGElement).tagName}`)}>
+    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
       {previewOrdersList.map((preview) => {
         const isLong = preview.side === "long"
         const chartH = height - padding.top - padding.bottom
@@ -741,39 +740,29 @@ function GridOrderLine({
 
   useEffect(() => {
     if (!registerMove) return
-    console.log(`[GL] registerMove id=${id} price=${price}`)
-    const onMouseUp = () => {
-      if (isDraggingThisRef.current) console.log(`[GL] mouseup → isDragging=false id=${id}`)
-      isDraggingThisRef.current = false
-    }
-    window.addEventListener('mouseup', onMouseUp)
     registerMove(id, (newPrice: number) => {
       const el = groupRef.current
       if (!el) return
       isDraggingThisRef.current = true
       const newY = toYRef.current(newPrice)
       const delta = newY - renderedYRef.current
-      console.log(`[GL] move callback id=${id} newPrice=${newPrice.toFixed(2)} delta=${delta.toFixed(1)}`)
       el.setAttribute("transform", `translate(0, ${delta})`)
     })
-    return () => window.removeEventListener('mouseup', onMouseUp)
   }, [id, registerMove])
 
   useEffect(() => {
+    // Don't reset transform while drag is visually active — the line is being dragged
     if (isDraggingThisRef.current) {
-      console.log(`[GL] render skipped (dragging) id=${id} price=${price}`)
+      isDraggingThisRef.current = false
+      renderedYRef.current = toY(price)
       return
     }
-    console.log(`[GL] render reset transform id=${id} price=${price}`)
     if (groupRef.current) groupRef.current.removeAttribute("transform")
     renderedYRef.current = toY(price)
   })
 
   const outOfRange = price < minPrice || price > maxPrice
-  if (outOfRange && !clampToEdge) {
-    console.log(`[GL] outOfRange hidden id=${id} price=${price} min=${minPrice.toFixed(2)} max=${maxPrice.toFixed(2)}`)
-    return null
-  }
+  if (outOfRange && !clampToEdge) return null
 
   // When out of range and clampToEdge, snap badge to top/bottom edge of chart area
   const chartTop = padding.top
@@ -1148,27 +1137,21 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   const toY = (price: number) => padding.top + ((maxPrice - price) / priceRange) * chartHeight
   const toPrice = (yPx: number) => minPrice + (1 - (yPx - padding.top) / chartHeight) * priceRange
   return (
-    <div style={{ position: "relative", width, height }}
-      onMouseDown={(e) => {
-        const el = document.elementFromPoint(e.clientX, e.clientY)
-        console.log(`[CHART-DIV] mousedown (${e.clientX},${e.clientY}) topEl=${el?.tagName} cls="${el?.className?.toString().slice(0,50)}"`)
-      }}>
+    <div style={{ position: "relative", width, height }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
-        <PlacedTpSlOverlay
-          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding} dragHandlers={dragHandlers}
-          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
-        />
-      )}
-      {activePosition && (
-        <PositionLine
-          position={activePosition}
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
           width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          onClose={onClosePosition ?? (() => {})}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
         />
       )}
       {gridOrdersList && gridOrdersList.length > 0 && (
@@ -1195,19 +1178,21 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding} dragHandlers={dragHandlers}
+          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
+        />
+      )}
+      {activePosition && (
+        <PositionLine
+          position={activePosition}
           width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
+          onClose={onClosePosition ?? (() => {})}
         />
       )}
     </div>
@@ -1296,21 +1281,19 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
   return (
     <div style={{ position: "relative", width, height }}>
       <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
-        <PlacedTpSlOverlay
-          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding} dragHandlers={dragHandlers}
-          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
-        />
-      )}
-      {activePosition && (
-        <PositionLine
-          position={activePosition}
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
           width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          onClose={onClosePosition ?? (() => {})}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
         />
       )}
       {gridOrdersList && gridOrdersList.length > 0 && (
@@ -1337,19 +1320,21 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding} dragHandlers={dragHandlers}
+          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
+        />
+      )}
+      {activePosition && (
+        <PositionLine
+          position={activePosition}
           width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
+          onClose={onClosePosition ?? (() => {})}
         />
       )}
     </div>
@@ -1587,15 +1572,12 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     const order = isPreviewDrag
       ? previewGrid.orders.find((o) => o.id === orderId)
       : placedGrid?.orders.find((o) => o.id === orderId)
-    if (!order) { console.log(`[DragStart] order NOT FOUND consoleId=${consoleId} orderId=${orderId} isPreview=${isPreviewDrag}`); return }
+    if (!order) return
 
     // Drag key matches the id used in registerMove calls
     const dragKey = isPreviewDrag
       ? `preview:${consoleId}:${orderId}`
       : `grid:${consoleId}:${orderId}`
-
-    const handlerExists = localDragHandlers.current.has(dragKey)
-    console.log(`[DragStart] consoleId=${consoleId} orderId=${orderId} isPreview=${isPreviewDrag} dragKey=${dragKey} handlerRegistered=${handlerExists} allKeys=[${[...localDragHandlers.current.keys()].join(',')}]`)
 
     const startPrice = order.price
     const startY = e.clientY
@@ -1608,7 +1590,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) {
         dragStarted = true
         document.body.style.cursor = "grabbing"
-        console.log(`[DragStart] drag threshold reached, calling handler=${localDragHandlers.current.has(dragKey)}`)
       }
       if (!dragStarted) return
       const pricePerPx = (maxP - minP) / chartH
@@ -1621,7 +1602,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       window.removeEventListener("mousemove", onMove)
       window.removeEventListener("mouseup", onUp)
       document.body.style.cursor = ""
-      console.log(`[DragStart] mouseup dragStarted=${dragStarted} finalPrice=${finalPriceRef.current.toFixed(2)}`)
       if (dragStarted) {
         if (isPreviewDrag) {
           updateGridPreviewPrice(consoleId, orderId, finalPriceRef.current)
@@ -1872,7 +1852,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
-                      console.log(`[X] previewEntryClose consoleId=${consoleId} orderId=${orderId} source=${previewOrders[consoleId]?.source}`)
                       if (previewOrders[consoleId]?.source === "order") cancelOrderPreview(consoleId)
                       else removeGridPreviewEntry(consoleId, orderId)
                     }}
@@ -1902,7 +1881,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
-                      console.log(`[X] previewEntryClose consoleId=${consoleId} orderId=${orderId} source=${previewOrders[consoleId]?.source}`)
                       if (previewOrders[consoleId]?.source === "order") cancelOrderPreview(consoleId)
                       else removeGridPreviewEntry(consoleId, orderId)
                     }}
