@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal, useGridOrderEntry, posKey } from "@/contexts/TerminalContext"
+import { useTerminal, useGridPreviewEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -329,7 +329,7 @@ const MOCK_PRICES: Record<string, number> = {
 export function OrderConsoleWidget(_props: { widget: Widget }) {
   const {
     activeTab, activeChartId, setActiveChartId,
-    setDraftOrder, addPlacedOrder, positions: ctxPositions, draftOrders,
+    addPlacedOrder, positions: ctxPositions,
     isDraggingOrder,
     editingOrderId, setEditingOrderId,
     updatePlacedOrder,
@@ -356,8 +356,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const [lastResult, setLastResult] = useState<{ success: boolean; msg: string } | null>(null)
   // True when user has manually edited the form while a placed order is selected (editingOrderId set)
   const [formEditMode, setFormEditMode] = useState(false)
-  // Suppresses draft re-creation immediately after submit
-  const suppressDraftRef = useRef(false)
   const stopProp = (e: React.MouseEvent) => e.stopPropagation()
 
   // ── New Order advanced state ────────────────────────────────────────────────
@@ -406,8 +404,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // Prevents cancelGridPreview immediately after order submit (keep TP/SL visible)
   const noJustPlacedRef = useRef(false)
-  // Prevents noPreviewEffect from re-creating preview after draft X-close on chart
-  const noDraftCancelledRef = useRef(false)
 
   // ── End New Order advanced state ────────────────────────────────────────────
 
@@ -491,75 +487,30 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
   }, [livePrices, symbol, orderType])
 
-  // ---- Push draft order to context whenever form changes ----
-  useEffect(() => {
-    if (!activeChart) return
-    // Don't show New Order draft while Grid tab is active
-    if (tab !== "new") {
-      setDraftOrder(activeChart.id, undefined)
-      return
-    }
-    if (suppressDraftRef.current) return
-    if (isDraggingOrder) return
-    if (settingPriceFromExternalRef.current) return
-    if (editingOrderId) {
-      setDraftOrder(activeChart.id, undefined)
-      return
-    }
-    const qtyNum = parseFloat(qty)
-    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(price) || 0)
-    if (qtyNum > 0 && p > 0) {
-      lastDraftPricePushedRef.current = p
-      setDraftOrder(activeChart.id, { side: effectiveSide, price: p, qty: qtyNum, orderType: orderType === "stop" ? "limit" : orderType })
-    } else {
-      lastDraftPricePushedRef.current = 0
-      setDraftOrder(activeChart.id, undefined)
-    }
-  }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, isDraggingOrder, editingOrderId])
-
-  // ---- Sync form when DRAFT is dragged on the chart ----
-  // Only fires when draftOrders[activeChart.id].price changes due to a real chart drag.
-  // We distinguish drag-originated changes by tracking what we last pushed.
+  // lastDraftPricePushedRef — tracks last preview entry price we pushed (to distinguish our own writes from chart drags)
   const lastDraftPricePushedRef = useRef<number>(0)
-  const prevActiveChartIdRef2 = useRef<string | null | undefined>(null)
+
+  // ---- Sync form when preview entry order is dragged on the chart ----
+  const noPreviewState = useGridPreviewEntry(noConsoleId)
+  const noPreviewEntryPrice = noPreviewState?.orders[0]?.price
+  const prevPreviewChartIdRef = useRef<string | null | undefined>(null)
   useEffect(() => {
     if (!activeChart) return
-    // On chart switch just reset tracking, don't sync form
-    if (prevActiveChartIdRef2.current !== activeChart.id) {
-      prevActiveChartIdRef2.current = activeChart.id
+    if (prevPreviewChartIdRef.current !== activeChart.id) {
+      prevPreviewChartIdRef.current = activeChart.id
       lastDraftPricePushedRef.current = 0
       return
     }
-    const draft = draftOrders[activeChart.id]
-    if (!draft) { lastDraftPricePushedRef.current = 0; return }
-    const contextPrice = draft.price
-    // If the price matches what we last pushed, it's our own update — ignore
-    const threshold = Math.max(contextPrice * 0.00001, 1e-8)
-    if (Math.abs(contextPrice - lastDraftPricePushedRef.current) < threshold) return
-    // External update (drag on chart) — sync form
-    lastDraftPricePushedRef.current = contextPrice
+    if (noPreviewEntryPrice === undefined) { lastDraftPricePushedRef.current = 0; return }
+    const threshold = Math.max(noPreviewEntryPrice * 0.00001, 1e-8)
+    if (Math.abs(noPreviewEntryPrice - lastDraftPricePushedRef.current) < threshold) return
+    lastDraftPricePushedRef.current = noPreviewEntryPrice
     settingPriceFromExternalRef.current = true
-    setPrice(priceToString(contextPrice))
+    setPrice(priceToString(noPreviewEntryPrice))
     const q = parseFloat(qtyRef.current)
-    if (!isNaN(q) && q > 0 && contextPrice > 0) setAmount((q * contextPrice).toFixed(2))
+    if (!isNaN(q) && q > 0 && noPreviewEntryPrice > 0) setAmount((q * noPreviewEntryPrice).toFixed(2))
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
-  }, [draftOrders, activeChart?.id])
-
-  // ---- When draft order is closed via X on chart, suppress one noPreviewEffect re-creation ----
-  const prevDraftExistedRef = useRef(false)
-  useEffect(() => {
-    if (!activeChart || tab !== "new") {
-      prevDraftExistedRef.current = !!draftOrders[activeChart?.id ?? ""]
-      return
-    }
-    const draftExists = !!draftOrders[activeChart.id]
-    const wasExisting = prevDraftExistedRef.current
-    prevDraftExistedRef.current = draftExists
-    if (wasExisting && !draftExists) {
-      noDraftCancelledRef.current = true
-      cancelGridPreview(noConsoleId)
-    }
-  }, [draftOrders, activeChart?.id, tab])
+  }, [noPreviewEntryPrice, activeChart?.id])
 
   // ---- Sync form when a PLACED order is dragged on the chart ----
   const trackedPlacedPricesRef = useRef<Record<string, number>>({})
@@ -594,7 +545,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     setAmount((order.qty * order.price).toFixed(2))
     setSide(order.side)
     setAnchor("qty")
-    setDraftOrder(activeChart.id, undefined)
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
   }, [editingOrderId])
 
@@ -613,32 +563,21 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         wasDraggingPlacedRef.current = false
         resetFormToNew(true)
       }
-      // Draft drag end — do NOT reset form; price already synced via draftOrders effect
+      // Entry drag end — do NOT reset form; price already synced via noPreviewState effect
     }
   }, [isDraggingOrder, editingOrderId])
 
-  // Clear draft from previous chart when active chart changes
-  const prevChartIdRef = useRef<string | null>(null)
+  // ---- New Order: push entry + TP/SL preview lines to chart ----
   useEffect(() => {
-    if (prevChartIdRef.current && prevChartIdRef.current !== activeChart?.id) {
-      setDraftOrder(prevChartIdRef.current, undefined)
-    }
-    prevChartIdRef.current = activeChart?.id ?? null
-  }, [activeChart?.id])
-
-  // ---- New Order: push TP/SL preview lines to chart via grid infrastructure ----
-  useEffect(() => {
-    if (!activeChart || tab !== "new") {
+    if (!activeChart || tab !== "new" || editingOrderId) {
       cancelGridPreview(noConsoleId)
       return
     }
 
     const qtyNum = parseFloat(qty)
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(price) || 0)
-    const hasTpOrSl = noTpSl.tpEnabled || noTpSl.slEnabled
 
-    if (!(qtyNum > 0 && p > 0) || !hasTpOrSl) {
-      // Don't cancel immediately after place — keep TP/SL visible
+    if (!(qtyNum > 0 && p > 0)) {
       if (noJustPlacedRef.current) {
         noJustPlacedRef.current = false
         return
@@ -647,12 +586,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       return
     }
 
-    // Draft was closed via X on chart — skip one re-creation cycle
-    if (noDraftCancelledRef.current) {
-      noDraftCancelledRef.current = false
-      cancelGridPreview(noConsoleId)
-      return
-    }
+    if (settingPriceFromExternalRef.current) return
 
     const gSide = effectiveSide === "buy" ? "long" : "short"
 
@@ -692,11 +626,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     noPreviewWroteSlRef.current = true
     noPreviewWroteTpRef.current = true
 
-    // When noTpSl grid preview is active, clear the simple tpSlOrders to avoid duplicate lines
+    lastDraftPricePushedRef.current = p
+
+    // Clear simple tpSlOrders to avoid duplicate lines
     setTpSl(activeChart.id, { tp: null, sl: null })
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
+      source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
       tpPrice: viz.tpPrice,
@@ -708,7 +645,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       exchangeId,
       marketType,
     })
-  }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
+  }, [tab, editingOrderId, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
 
   // Cleanup New Order preview on unmount
   useEffect(() => {
@@ -716,9 +653,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [noConsoleId])
 
   // ---- Sync noTpSl from chart drag/x-click (New Order grid preview) ----
-  const noGridState = useGridOrderEntry(noConsoleId)
-  const noChartSlPrice = noGridState?.slPrice
-  const noChartTpLevels = noGridState?.tpLevels
+  const noChartSlPrice = noPreviewState?.slPrice
+  const noChartTpLevels = noPreviewState?.tpLevels
 
   // SL x-click: slPrice → null → deactivate slEnabled
   const prevNoSlPriceRef = useRef<number | null | undefined>(undefined)
@@ -987,7 +923,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const resetFormToNew = (_clearQty = false) => {
-    suppressDraftRef.current = true
     settingPriceFromExternalRef.current = true
     userEditedPriceRef.current = false
     setQty("")
@@ -996,7 +931,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     setAnchor("qty")
     setStopPrice("")
     requestAnimationFrame(() => {
-      suppressDraftRef.current = false
       settingPriceFromExternalRef.current = false
     })
   }
@@ -1063,7 +997,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         }, 0)
       }
 
-      setDraftOrder(activeChart.id, undefined)
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
 

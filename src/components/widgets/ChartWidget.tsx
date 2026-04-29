@@ -629,21 +629,27 @@ function GridPreviewOverlay({
         const chartH = height - padding.top - padding.bottom
         return (
           <g key={preview.consoleId}>
-            {preview.orders.map((o, idx) => (
-              <GridOrderLine
-                key={o.id}
-                id={`preview:${preview.consoleId}:${o.id}`}
-                price={o.price}
-                label={`${orderSideLabel(isLong ? "buy" : "sell", preview.marketType)} | ${fmtQty(o.qty)} #${idx + 1} — draft`}
-                side={preview.side}
-                toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-                width={width} padding={padding}
-                isDraft={true} {...DRAFT_COLORS}
-                onClose={() => onEntryClose?.(preview.consoleId, o.id)}
-                onDragStart={(e) => onOrderDragStart?.(preview.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
-                registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
-              />
-            ))}
+            {preview.orders.map((o, idx) => {
+              const isOrderSource = preview.source === "order"
+              const entryLabel = isOrderSource
+                ? `${orderSideLabel(isLong ? "buy" : "sell", preview.marketType)} | ${fmtQty(o.qty)} — draft`
+                : `${orderSideLabel(isLong ? "buy" : "sell", preview.marketType)} | ${fmtQty(o.qty)} #${idx + 1} — draft`
+              return (
+                <GridOrderLine
+                  key={o.id}
+                  id={`preview:${preview.consoleId}:${o.id}`}
+                  price={o.price}
+                  label={entryLabel}
+                  side={preview.side}
+                  toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+                  width={width} padding={padding}
+                  isDraft={true} {...DRAFT_COLORS}
+                  onClose={() => onEntryClose?.(preview.consoleId, o.id)}
+                  onDragStart={(e) => onOrderDragStart?.(preview.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
+                  registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+                />
+              )
+            })}
             {preview.tpLevels.map((tp, idx) => {
               const totalTp = preview.tpLevels.length
               const edgeOffset = isLong ? totalTp - 1 - idx : idx
@@ -1423,8 +1429,6 @@ const LOCAL_DRAFT_ID = "__draft__"
 export function ChartWidget({ widget }: ChartWidgetProps) {
   const {
     activeTab, updateWidget, activeChartId, setActiveChartId,
-    draftOrders,
-    setDraftOrder: ctxSetDraft,
     addPlacedOrder: ctxAddPlaced,
     removePlacedOrder: ctxRemovePlaced, updatePlacedOrderPrice: ctxUpdatePrice,
     updatePlacedOrder: ctxUpdatePlacedOrder,
@@ -1485,17 +1489,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const effectiveEditingOrderId = hasOrderConsole ? editingOrderId : localEditingOrderId
 
   // ---- Compose orders to render ----
-  // Managed mode: read from context
-  // Standalone mode: use local state
-  // Suppress draftOrder when New Order preview is active (avoids duplicate lines)
-  const hasNewOrderPreview = Object.values(previewOrders).some(
-    (g) => g?.chartId === widget.id && g.consoleId.startsWith("no:")
-  )
-  const draftForChart: PlacedOrder | undefined = hasNewOrderPreview
-    ? undefined
-    : hasOrderConsole
-      ? (draftOrders[widget.id] ? { ...draftOrders[widget.id]!, id: LOCAL_DRAFT_ID, isDraft: true } : undefined)
-      : localDraft
+  // Managed mode: read from context; standalone mode: include localDraft
+  const draftForChart: PlacedOrder | undefined = hasOrderConsole ? undefined : localDraft
   // Read placed orders from the position — exclude grid orders (rendered by GridOrdersOverlay)
   const placedForChart: PlacedOrder[] = (ctxPositions[positionKey]?.orders ?? []).filter(
     (o: PlacedOrder) => o.source !== "grid" && o.status !== "filled"
@@ -1514,13 +1509,12 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // ---- Close handler ----
   const handleOrderClose = useCallback((id: string) => {
     if (id === LOCAL_DRAFT_ID) {
-      if (hasOrderConsole) ctxSetDraft(widget.id, undefined)
-      else setLocalDraft(undefined)
+      setLocalDraft(undefined)
     } else {
       ctxRemovePlaced(positionKey, id)
       localDragHandlers.current.delete(id)
     }
-  }, [hasOrderConsole, widget.id, positionKey, ctxSetDraft, ctxRemovePlaced])
+  }, [positionKey, ctxRemovePlaced])
 
   // Tracks whether a drag is currently active (cursor has moved enough to be a drag)
   const isDraggingRef = useRef(false)
@@ -1589,12 +1583,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         // Commit final price to state only once on mouseup
         const finalPrice = finalPriceRef.current
         if (isDraftOrder) {
-          if (hasOrderConsole) {
-            const d = draftOrders[widget.id]
-            if (d) ctxSetDraft(widget.id, { ...d, price: finalPrice })
-          } else {
-            setLocalDraft((d) => d ? { ...d, price: finalPrice } : d)
-          }
+          setLocalDraft((d) => d ? { ...d, price: finalPrice } : d)
         } else {
           ctxUpdatePrice(positionKey, id, finalPrice)
         }
@@ -1614,7 +1603,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, positionKey, draftForChart, draftOrders, ctxPositions, ctxSetDraft, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
+  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {
