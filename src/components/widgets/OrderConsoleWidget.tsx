@@ -722,25 +722,31 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
 
+    // If position already exists, don't render preview TP/SL — they're already placed on chart
+    const existingPosition = ctxPositionsRef.current[activePositionKey]
+    const hasExistingPosition = !!existingPosition
+
     // Guard: mark expected values so drag-sync effects don't echo these writes back
-    noExpectedSlPriceRef.current = viz.slPrice ?? null
-    noExpectedTpLevelsRef.current = viz.tpLevels ? [...viz.tpLevels] : undefined
+    noExpectedSlPriceRef.current = hasExistingPosition ? null : (viz.slPrice ?? null)
+    noExpectedTpLevelsRef.current = hasExistingPosition ? undefined : (viz.tpLevels ? [...viz.tpLevels] : undefined)
     noPreviewWroteSlRef.current = true
     noPreviewWroteTpRef.current = true
 
     lastDraftPricePushedRef.current = p
 
-    // Clear simple tpSlOrders to avoid duplicate lines
-    setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
+    // Clear simple tpSlOrders to avoid duplicate lines (only when no existing position)
+    if (!hasExistingPosition) {
+      setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
+    }
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
       source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
+      tpPrice: hasExistingPosition ? null : viz.tpPrice,
+      slPrice: hasExistingPosition ? null : viz.slPrice,
+      tpLevels: hasExistingPosition ? [] : viz.tpLevels,
       symbol,
       leverage: posSettings.leverage,
       accountId,
@@ -1072,6 +1078,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const handlePctClick = (pct: number) => {
     const availableForOrder = marketType === "futures" ? freeMargin * posSettings.leverage : freeMargin
     if (editingOrderId) setFormEditMode(true)
+    formLoadedFromPlacedRef.current = false
     if (anchor === "qty") {
       // % of max buyable qty
       const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
@@ -1127,6 +1134,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     formLoadedFromPlacedRef.current = false
     settingPriceFromExternalRef.current = true
     userEditedPriceRef.current = false
+    // Clear tracked prices so placed-order price sync doesn't overwrite the reset price
+    trackedPlacedPricesRef.current = {}
     setQty("")
     setAmount("")
     setPrice(priceToString(mockPrice))
