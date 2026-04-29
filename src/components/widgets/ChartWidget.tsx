@@ -740,6 +740,8 @@ function GridOrderLine({
 
   useEffect(() => {
     if (!registerMove) return
+    const onMouseUp = () => { isDraggingThisRef.current = false }
+    window.addEventListener('mouseup', onMouseUp)
     registerMove(id, (newPrice: number) => {
       const el = groupRef.current
       if (!el) return
@@ -748,15 +750,11 @@ function GridOrderLine({
       const delta = newY - renderedYRef.current
       el.setAttribute("transform", `translate(0, ${delta})`)
     })
+    return () => window.removeEventListener('mouseup', onMouseUp)
   }, [id, registerMove])
 
   useEffect(() => {
-    // Don't reset transform while drag is visually active — the line is being dragged
-    if (isDraggingThisRef.current) {
-      isDraggingThisRef.current = false
-      renderedYRef.current = toY(price)
-      return
-    }
+    if (isDraggingThisRef.current) return
     if (groupRef.current) groupRef.current.removeAttribute("transform")
     renderedYRef.current = toY(price)
   })

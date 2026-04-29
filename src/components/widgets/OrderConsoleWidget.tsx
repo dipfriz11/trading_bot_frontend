@@ -663,10 +663,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       cancelGridPreview(noConsoleId)
       return
     }
-    // The form still holds data loaded from a placed order (edit mode just ended or drag just
-    // released). Don't create a draft preview — it would call setTpSl(null) and wipe the
-    // real placed TP/SL lines. The flag is cleared by resetFormToNew() when the form is
-    // explicitly reset, or when the user manually edits qty/price.
     if (formLoadedFromPlacedRef.current) {
       cancelGridPreview(noConsoleId)
       return
