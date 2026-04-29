@@ -455,6 +455,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const settingPriceFromExternalRef = useRef(false)
   // Prevents TP/SL form→context push when we're syncing context→form
   const settingTpSlFromContextRef = useRef(false)
+  // Prevents push-TP/SL effects from re-writing tpSlOrders immediately after clearTpSl
+  const noPreviewJustClearedRef = useRef(false)
   const lastTpPushedRef = useRef<number | null>(null)
   const lastSlPushedRef = useRef<number | null>(null)
 
@@ -701,8 +703,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     prevNoPreviewExistsRef.current = noPreviewExists
     if (wasActive && !noPreviewExists && activeChart) {
       // Preview was just removed externally (chart X-click) — clear TP/SL
+      noPreviewJustClearedRef.current = true
       setNoTpSl((prev) => ({ ...prev, tpEnabled: false, slEnabled: false }))
       clearTpSl(activeChart.id)
+      requestAnimationFrame(() => { noPreviewJustClearedRef.current = false })
     }
   }, [noPreviewExists, activeChart?.id])
 
