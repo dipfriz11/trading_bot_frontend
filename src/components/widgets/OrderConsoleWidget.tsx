@@ -739,10 +739,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastDraftPricePushedRef.current = p
 
-    // Если уже есть реальный (не-grid) ордер в позиции — TP/SL живут с позицией,
-    // не трогаем их и не рисуем draft-линии поверх.
-    const existingPlacedOrder = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).find((o) => o.source !== "grid")
-    if (!existingPlacedOrder) {
+    // Если уже есть реальный ордер в позиции (включая виртуальную grid-позицию) —
+    // TP/SL живут с позицией, не трогаем их и не рисуем draft-линии поверх.
+    const positionOrders = ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []
+    const existingPlacedOrder = positionOrders.find((o) => o.source !== "grid")
+    const hasAnyPositionOrder = positionOrders.length > 0
+    if (!existingPlacedOrder && !hasAnyPositionOrder) {
       setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
     }
 
@@ -751,9 +753,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
-      tpPrice: existingPlacedOrder ? null : viz.tpPrice,
-      slPrice: existingPlacedOrder ? null : viz.slPrice,
-      tpLevels: existingPlacedOrder ? [] : viz.tpLevels,
+      tpPrice: (existingPlacedOrder || hasAnyPositionOrder) ? null : viz.tpPrice,
+      slPrice: (existingPlacedOrder || hasAnyPositionOrder) ? null : viz.slPrice,
+      tpLevels: (existingPlacedOrder || hasAnyPositionOrder) ? [] : viz.tpLevels,
       symbol,
       leverage: posSettings.leverage,
       accountId,
