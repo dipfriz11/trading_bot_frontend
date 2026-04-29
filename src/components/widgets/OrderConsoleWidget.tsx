@@ -546,6 +546,19 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
   }, [draftOrders, activeChart?.id])
 
+  // ---- When draft order is closed via X on chart, cancel the TP/SL preview ----
+  const prevDraftExistedRef = useRef(false)
+  useEffect(() => {
+    if (!activeChart) return
+    const draftExists = !!draftOrders[activeChart.id]
+    const wasExisting = prevDraftExistedRef.current
+    prevDraftExistedRef.current = draftExists
+    if (wasExisting && !draftExists) {
+      cancelGridPreview(noConsoleId)
+      clearTpSl(activeChart.id)
+    }
+  }, [draftOrders, activeChart?.id])
+
   // ---- Sync form when a PLACED order is dragged on the chart ----
   const trackedPlacedPricesRef = useRef<Record<string, number>>({})
   useEffect(() => {
