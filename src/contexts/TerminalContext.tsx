@@ -1070,6 +1070,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const removeGridPreviewTpSl = useCallback((consoleId: string, target: "tp" | "sl", tpIndex?: number) => {
+    console.log("[CTX] removeGridPreviewTpSl:", consoleId, target, tpIndex)
     setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev

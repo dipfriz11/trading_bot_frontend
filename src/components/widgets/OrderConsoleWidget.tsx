@@ -714,11 +714,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const noGridState = useGridPreviewEntry(noConsoleId)
   const noChartSlPrice = noGridState?.slPrice
   const noChartTpLevels = noGridState?.tpLevels
+  console.log("[SYNC] noGridState=", noGridState ? `sl=${noGridState.slPrice} tp=[${noGridState.tpLevels?.join(",")}]` : "undefined", "noChartSlPrice=", noChartSlPrice, "noChartTpLevels=", noChartTpLevels)
 
   // SL x-click: slPrice → null → deactivate slEnabled
   const prevNoSlPriceRef = useRef<number | null | undefined>(undefined)
   useEffect(() => {
+    console.log("[SL-XCLICK-EFFECT] prev=", prevNoSlPriceRef.current, "cur=", noChartSlPrice)
     if (prevNoSlPriceRef.current !== undefined && prevNoSlPriceRef.current !== null && noChartSlPrice === null) {
+      console.log("[SL-XCLICK-EFFECT] => disabling slEnabled")
       noUpd("slEnabled", false)
     }
     prevNoSlPriceRef.current = noChartSlPrice ?? null
@@ -769,11 +772,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   useEffect(() => {
     const prev = prevNoTpLevelsKeyRef.current
     prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
+    console.log("[TP-XCLICK-EFFECT] prev=", prev, "cur=", noChartTpLevelsKey)
     if (prev === undefined) return
     const prevLen = prev ? prev.split(",").length : 0
     const curLen = noChartTpLevels?.length ?? 0
     if (curLen >= prevLen) return
     if (curLen === 0) {
+      console.log("[TP-XCLICK-EFFECT] => disabling tpEnabled")
       noUpd("tpEnabled", false)
       return
     }
