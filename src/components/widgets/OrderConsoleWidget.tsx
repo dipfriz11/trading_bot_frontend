@@ -586,8 +586,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       return
     }
 
-    if (settingPriceFromExternalRef.current) return
-
     const gSide = effectiveSide === "buy" ? "long" : "short"
 
     // Minimal 1-order GridConfig to reuse calcGridVisualization TP/SL math
