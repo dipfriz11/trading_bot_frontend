@@ -1437,7 +1437,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl,
+    previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl, cancelGridPreview,
     tpSlOrders, setTpSl,
     setLivePrice,
   } = useTerminal()
@@ -1896,8 +1896,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
-                      if (previewOrders[consoleId]?.source === "order") return
-                      removeGridPreviewEntry(consoleId, orderId)
+                      if (previewOrders[consoleId]?.source === "order") cancelGridPreview(consoleId)
+                      else removeGridPreviewEntry(consoleId, orderId)
                     }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
                     tpSl={chartTpSl}
@@ -1924,8 +1924,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
-                      if (previewOrders[consoleId]?.source === "order") return
-                      removeGridPreviewEntry(consoleId, orderId)
+                      if (previewOrders[consoleId]?.source === "order") cancelGridPreview(consoleId)
+                      else removeGridPreviewEntry(consoleId, orderId)
                     }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
                     tpSl={chartTpSl}
