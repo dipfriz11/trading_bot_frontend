@@ -5,8 +5,9 @@ import type { GridConfig, GridMultiTpLevel, GridSharedTpSl } from "@/types/termi
 import { DEFAULT_GRID_CONFIG, DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { TemplateBar } from "@/components/terminal/TemplateBar"
 import { useTemplates } from "@/hooks/useTemplates"
-import { useTerminal, useGridOrderEntry, useGridPreviewEntry } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, useGridPreviewEntry, posKey } from "@/contexts/TerminalContext"
 import { calcGridPrices, calcGridVisualization } from "@/lib/grid-math"
+import { getPositionAnchors } from "@/lib/position-anchors"
 import { nanoid } from "@/lib/nanoid"
 
 // ─── Shared style constants ───────────────────────────────────────────────────
@@ -759,7 +760,7 @@ export const GridConfigTab = memo(function GridConfigTab({
   }
 
   // ── Grid chart integration ────────────────────────────────────────────────
-  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrdersRef, markGridPendingUpdate, clearGridPendingUpdate } = useTerminal()
+  const { setGridPreview, placeGridOrders, cancelGridOrders, cancelGridPreview, applyGridTpSl, gridOrdersRef, markGridPendingUpdate, clearGridPendingUpdate, positions } = useTerminal()
   const baseConsoleId = consoleWidgetId ?? "__grid_console__"
   // Each console+chart+side+slot combination is its own independent slot
   const consoleId = `${baseConsoleId}:${activeChartId ?? ""}:${cfg.side}:${activeSlot?.slotId ?? "0"}`
@@ -1504,20 +1505,25 @@ export const GridConfigTab = memo(function GridConfigTab({
             tpLevels: ownerViz.tpLevels,
           }
         } else {
-          // TP: use first order of slot whose first order is closest to TP direction
-          const firstOrders = allSlotPrices.map((p) => p[0])
-          const bestFirstOrder = isLong
-            ? Math.max(...firstOrders)   // LONG: highest first order
-            : Math.min(...firstOrders)   // SHORT: lowest first order
+          // Prefer anchors from the full virtual position (includes single orders + all grids).
+          // Fall back to slot prices only if the position doesn't exist yet.
+          const livePos = accountId && exchangeId && marketType && snapshotCfg.symbol && snapshotSide
+            ? positions[posKey(accountId, exchangeId, marketType, snapshotCfg.symbol, snapshotSide)]
+            : undefined
+          const posAnchors = livePos ? getPositionAnchors(livePos.orders, snapshotSide) : null
 
-          // SL: use extreme order from all slots combined
           const allPrices = allSlotPrices.flat()
-          const extremeForSl = isLong
-            ? Math.min(...allPrices)     // LONG: lowest price overall
-            : Math.max(...allPrices)     // SHORT: highest price overall
+          const firstOrders = allSlotPrices.map((p) => p[0])
 
-          // avg entry across all slots (uniform weight per order for estimate)
-          const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+          const bestFirstOrder = posAnchors?.firstOrder ?? (isLong
+            ? Math.max(...firstOrders)
+            : Math.min(...firstOrders))
+
+          const extremeForSl = posAnchors?.extremeOrder ?? (isLong
+            ? Math.min(...allPrices)
+            : Math.max(...allPrices))
+
+          const avgEntryAll = posAnchors?.avgEntry ?? (allPrices.reduce((s, p) => s + p, 0) / allPrices.length)
 
           // Build TP price(s) from bestFirstOrder
           let tpPrice: number | null = null
