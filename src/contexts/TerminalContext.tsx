@@ -241,7 +241,18 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   positionsRef.current = positions
   balancesRef.current = balances
 
-  const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
+  const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>(() => {
+    try {
+      const raw = localStorage.getItem("tpsl_orders")
+      return raw ? JSON.parse(raw) : {}
+    } catch { return {} }
+  })
+  // Persist tpSlOrders to localStorage on every change
+  const tpSlOrdersRef = useRef(tpSlOrders)
+  tpSlOrdersRef.current = tpSlOrders
+  useEffect(() => {
+    try { localStorage.setItem("tpsl_orders", JSON.stringify(tpSlOrders)) } catch {}
+  }, [tpSlOrders])
   const [livePrices, setLivePricesMap] = useState<Record<string, number>>({})
   const setLivePrice = useCallback((symbol: string, price: number) => {
     setLivePricesMap((prev) => prev[symbol] === price ? prev : { ...prev, [symbol]: price })

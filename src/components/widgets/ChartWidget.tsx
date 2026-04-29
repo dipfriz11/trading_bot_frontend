@@ -789,7 +789,7 @@ function GridOrderLine({
   const badgeRightEdge = axisX - 4  // right edge of sell badge
 
   return (
-    <g ref={groupRef} opacity={opacity}>
+    <g ref={groupRef} opacity={opacity} style={{ pointerEvents: "auto" }}>
       {isShort ? (
         <>
           <line x1={padding.left} y1={y} x2={badgeRightEdge - badgeW_SELL - 1} y2={y}
@@ -918,7 +918,7 @@ function PlacedTpSlOverlay({ tpSl, side, width, height, toY, minPrice, maxPrice,
     : tpSl.tp !== null ? [tpSl.tp] : []
 
   return (
-    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}>
       {tpLevels.map((price, idx) => {
         const totalTp = tpLevels.length
         const edgeOffset = side === "long" ? totalTp - 1 - idx : idx
@@ -1716,7 +1716,11 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   }, [tpSlOrders, widget.id, setTpSl])
 
   const handleTpSlClose = useCallback((key: "tp" | "sl") => {
-    setTpSl(widget.id, { [key]: null })
+    if (key === "tp") {
+      setTpSl(widget.id, { tp: null, tpLevels: undefined })
+    } else {
+      setTpSl(widget.id, { sl: null })
+    }
   }, [widget.id, setTpSl])
 
   const chartTpSl = tpSlOrders[widget.id] ?? null
