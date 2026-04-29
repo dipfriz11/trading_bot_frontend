@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { createPortal } from "react-dom"
-import type { Widget, GridSharedTpSl, GridMultiTpLevel } from "@/types/terminal"
+import type { Widget, GridSharedTpSl, GridMultiTpLevel, ChartPlacedOrder } from "@/types/terminal"
 import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
@@ -329,7 +329,7 @@ const MOCK_PRICES: Record<string, number> = {
 export function OrderConsoleWidget(_props: { widget: Widget }) {
   const {
     activeTab, activeChartId, setActiveChartId,
-    addPlacedOrder, positions: ctxPositions,
+    positions: ctxPositions,
     isDraggingOrder,
     editingOrderId, setEditingOrderId,
     updatePlacedOrder,
@@ -972,7 +972,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const notional = parseFloat(qty) * effectivePrice
       const margin = marketType === "futures" ? notional / posSettings.leverage : notional
 
-      addPlacedOrder(activePositionKey, {
+      // Build order object
+      const posSide = effectiveSide === "buy" ? "long" : "short"
+      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
+      const newOrder: ChartPlacedOrder = {
         id,
         side: effectiveSide,
         price: effectivePrice,
@@ -987,11 +990,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         margin,
         time,
         status: orderType === "market" ? "filled" : "pending",
-      })
+      }
 
-      // Open / merge into live position immediately — virtual position exists as soon as orders are placed
-      const posSide = effectiveSide === "buy" ? "long" : "short"
-      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
+      // Open / merge into live position with the order already included
       openPosition({
         accountId,
         exchangeId,
@@ -1010,7 +1011,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         })(),
         shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
         realSize: 0,
-      })
+      }, [newOrder])
 
       // Market orders execute immediately — simulate fill
       if (orderType === "market") {
