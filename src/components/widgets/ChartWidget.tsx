@@ -644,7 +644,7 @@ function GridPreviewOverlay({
                   toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                   width={width} padding={padding}
                   isDraft={true} {...DRAFT_COLORS}
-                  onClose={preview.source === "order" ? undefined : () => onEntryClose?.(preview.consoleId, o.id)}
+                  onClose={() => onEntryClose?.(preview.consoleId, o.id)}
                   onDragStart={(e) => onOrderDragStart?.(preview.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
                   registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
                 />
@@ -1437,7 +1437,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     setIsDraggingOrder,
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
-    previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl, cancelGridPreview,
+    previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl, cancelOrderPreview,
     tpSlOrders, setTpSl,
     setLivePrice,
   } = useTerminal()
@@ -1896,7 +1896,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
-                      if (previewOrders[consoleId]?.source === "order") cancelGridPreview(consoleId)
+                      if (previewOrders[consoleId]?.source === "order") cancelOrderPreview(consoleId)
                       else removeGridPreviewEntry(consoleId, orderId)
                     }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
@@ -1924,7 +1924,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
-                      if (previewOrders[consoleId]?.source === "order") cancelGridPreview(consoleId)
+                      if (previewOrders[consoleId]?.source === "order") cancelOrderPreview(consoleId)
                       else removeGridPreviewEntry(consoleId, orderId)
                     }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}

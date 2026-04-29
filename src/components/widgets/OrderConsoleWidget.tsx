@@ -338,7 +338,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     deductOrderBalance,
     refundOrderBalance,
     tpSlOrders, setTpSl,
-    setGridPreview, cancelGridPreview,
+    setGridPreview, cancelGridPreview, registerOrderPreviewCancelCb, unregisterOrderPreviewCancelCb,
     openPosition, fillOrder,
     livePrices,
   } = useTerminal()
@@ -404,8 +404,21 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // Prevents cancelGridPreview immediately after order submit (keep TP/SL visible)
   const noJustPlacedRef = useRef(false)
+  // Set when user clicks X on entry line — blocks preview from being recreated
+  const noCancelledRef = useRef(false)
 
   // ── End New Order advanced state ────────────────────────────────────────────
+
+  // Register handler so ChartWidget X-click on entry line clears form instead of flickering
+  useEffect(() => {
+    registerOrderPreviewCancelCb(noConsoleId, () => {
+      noCancelledRef.current = true
+      cancelGridPreview(noConsoleId)
+      setQty("")
+      setAmount("")
+    })
+    return () => { unregisterOrderPreviewCancelCb(noConsoleId) }
+  }, [noConsoleId, registerOrderPreviewCancelCb, unregisterOrderPreviewCancelCb, cancelGridPreview])
 
   // ---- Resolve active chart info ----
   const chartWidgets = activeTab?.widgets.filter((w) => w.type === "chart") ?? []
@@ -582,6 +595,16 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         noJustPlacedRef.current = false
         return
       }
+      if (noCancelledRef.current) {
+        noCancelledRef.current = false
+        return
+      }
+      cancelGridPreview(noConsoleId)
+      return
+    }
+
+    if (noCancelledRef.current) {
+      noCancelledRef.current = false
       cancelGridPreview(noConsoleId)
       return
     }
