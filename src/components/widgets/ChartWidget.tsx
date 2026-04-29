@@ -624,7 +624,8 @@ function GridPreviewOverlay({
 }: GridPreviewOverlayProps) {
   if (!previewOrdersList.length) return null
   return (
-    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}
+      onMouseDown={(e) => console.log(`[SVG-preview] mousedown at (${e.clientX},${e.clientY}) target=${(e.target as SVGElement).tagName}`)}>
       {previewOrdersList.map((preview) => {
         const isLong = preview.side === "long"
         const chartH = height - padding.top - padding.bottom
@@ -769,7 +770,10 @@ function GridOrderLine({
   })
 
   const outOfRange = price < minPrice || price > maxPrice
-  if (outOfRange && !clampToEdge) return null
+  if (outOfRange && !clampToEdge) {
+    console.log(`[GL] outOfRange hidden id=${id} price=${price} min=${minPrice.toFixed(2)} max=${maxPrice.toFixed(2)}`)
+    return null
+  }
 
   // When out of range and clampToEdge, snap badge to top/bottom edge of chart area
   const chartTop = padding.top
