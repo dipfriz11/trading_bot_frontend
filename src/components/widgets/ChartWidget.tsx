@@ -1148,7 +1148,11 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   const toY = (price: number) => padding.top + ((maxPrice - price) / priceRange) * chartHeight
   const toPrice = (yPx: number) => minPrice + (1 - (yPx - padding.top) / chartHeight) * priceRange
   return (
-    <div style={{ position: "relative", width, height }}>
+    <div style={{ position: "relative", width, height }}
+      onMouseDown={(e) => {
+        const el = document.elementFromPoint(e.clientX, e.clientY)
+        console.log(`[CHART-DIV] mousedown (${e.clientX},${e.clientY}) topEl=${el?.tagName} cls="${el?.className?.toString().slice(0,50)}"`)
+      }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
       {previewOrdersList && previewOrdersList.length > 0 && (
         <GridPreviewOverlay
