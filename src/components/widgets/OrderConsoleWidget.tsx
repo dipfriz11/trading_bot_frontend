@@ -1661,7 +1661,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                           <button
                             onMouseDown={stopProp}
                             onClick={() => {
-                              const n = Math.max(1, noTpSl.multiTpCount - 1)
+                              if (noTpSl.multiTpCount <= 1) {
+                                noUpd("tpEnabled", false)
+                                return
+                              }
+                              const n = noTpSl.multiTpCount - 1
                               const lvls = noTpSl.multiTpLevels.slice(0, n)
                               const pcts = _distributeClose(n)
                               noUpd("multiTpCount", n)
@@ -1682,6 +1686,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                               const pcts = _distributeClose(n)
                               noUpd("multiTpCount", n)
                               noUpd("multiTpLevels", lvls.slice(0, n).map((l, i) => ({ ...l, closePercent: pcts[i] })))
+                              if (!noTpSl.tpEnabled) noUpd("tpEnabled", true)
                               if (n > 1) noUpd("multiTpEnabled", true)
                             }}
                             style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}
