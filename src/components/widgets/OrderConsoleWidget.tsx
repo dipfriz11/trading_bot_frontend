@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal, useGridPreviewEntry, posKey } from "@/contexts/TerminalContext"
+import { useTerminal, useGridOrderEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -337,9 +337,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     getBalance,
     deductOrderBalance,
     refundOrderBalance,
-    tpSlOrders, setTpSl, clearTpSl,
+    tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview,
-    previewOrders,
     openPosition, fillOrder,
     livePrices,
   } = useTerminal()
@@ -455,8 +454,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const settingPriceFromExternalRef = useRef(false)
   // Prevents TP/SL form→context push when we're syncing context→form
   const settingTpSlFromContextRef = useRef(false)
-  // Prevents push-TP/SL effects from re-writing tpSlOrders immediately after clearTpSl
-  const noPreviewJustClearedRef = useRef(false)
   const lastTpPushedRef = useRef<number | null>(null)
   const lastSlPushedRef = useRef<number | null>(null)
 
@@ -685,7 +682,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       accountId,
       exchangeId,
       marketType,
-      hideOrders: true,
     })
   }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
 
@@ -694,34 +690,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     return () => { cancelGridPreview(noConsoleId) }
   }, [noConsoleId])
 
-  // When the New Order preview disappears (user closed the order line on chart),
-  // clear tpEnabled/slEnabled so TP/SL lines don't persist via tpSlOrders
-  const noPreviewExists = !!previewOrders[noConsoleId]
-  const prevNoPreviewExistsRef = useRef(false)
-  useEffect(() => {
-    const wasActive = prevNoPreviewExistsRef.current
-    prevNoPreviewExistsRef.current = noPreviewExists
-    if (wasActive && !noPreviewExists && activeChart) {
-      // Preview was just removed externally (chart X-click) — clear TP/SL
-      noPreviewJustClearedRef.current = true
-      setNoTpSl((prev) => ({ ...prev, tpEnabled: false, slEnabled: false }))
-      clearTpSl(activeChart.id)
-      requestAnimationFrame(() => { noPreviewJustClearedRef.current = false })
-    }
-  }, [noPreviewExists, activeChart?.id])
-
   // ---- Sync noTpSl from chart drag/x-click (New Order grid preview) ----
-  const noGridState = useGridPreviewEntry(noConsoleId)
+  const noGridState = useGridOrderEntry(noConsoleId)
   const noChartSlPrice = noGridState?.slPrice
   const noChartTpLevels = noGridState?.tpLevels
-  console.log("[SYNC] noGridState=", noGridState ? `sl=${noGridState.slPrice} tp=[${noGridState.tpLevels?.join(",")}]` : "undefined", "noChartSlPrice=", noChartSlPrice, "noChartTpLevels=", noChartTpLevels)
 
   // SL x-click: slPrice → null → deactivate slEnabled
   const prevNoSlPriceRef = useRef<number | null | undefined>(undefined)
   useEffect(() => {
-    console.log("[SL-XCLICK-EFFECT] prev=", prevNoSlPriceRef.current, "cur=", noChartSlPrice)
     if (prevNoSlPriceRef.current !== undefined && prevNoSlPriceRef.current !== null && noChartSlPrice === null) {
-      console.log("[SL-XCLICK-EFFECT] => disabling slEnabled")
       noUpd("slEnabled", false)
     }
     prevNoSlPriceRef.current = noChartSlPrice ?? null
@@ -772,13 +749,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   useEffect(() => {
     const prev = prevNoTpLevelsKeyRef.current
     prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
-    console.log("[TP-XCLICK-EFFECT] prev=", prev, "cur=", noChartTpLevelsKey)
     if (prev === undefined) return
     const prevLen = prev ? prev.split(",").length : 0
     const curLen = noChartTpLevels?.length ?? 0
     if (curLen >= prevLen) return
     if (curLen === 0) {
-      console.log("[TP-XCLICK-EFFECT] => disabling tpEnabled")
       noUpd("tpEnabled", false)
       return
     }
@@ -1015,7 +990,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const notional = parseFloat(qty) * effectivePrice
       const margin = marketType === "futures" ? notional / posSettings.leverage : notional
 
-      const placedOrder: Parameters<typeof addPlacedOrder>[1] = {
+      addPlacedOrder(activePositionKey, {
         id,
         side: effectiveSide,
         price: effectivePrice,
@@ -1030,9 +1005,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         margin,
         time,
         status: orderType === "market" ? "filled" : "pending",
-      }
+      })
 
-      // Open / merge into live position — pass the order so it's included atomically
+      // Open / merge into live position immediately — virtual position exists as soon as orders are placed
       const posSide = effectiveSide === "buy" ? "long" : "short"
       const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
       openPosition({
@@ -1053,7 +1028,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         })(),
         shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
         realSize: 0,
-      }, placedOrder)
+      })
 
       // Market orders execute immediately — simulate fill
       if (orderType === "market") {

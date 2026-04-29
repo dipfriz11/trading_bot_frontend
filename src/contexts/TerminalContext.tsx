@@ -100,9 +100,6 @@ export interface ChartGridPreview {
   accountId?: string
   exchangeId?: string
   marketType?: "spot" | "futures"
-  /** When true, the entry order lines are not rendered (used by New Order form where the
-   *  draft line is already shown separately — only TP/SL lines should come from this preview) */
-  hideOrders?: boolean
 }
 
 // Placed grid: real orders sent to exchange. Balance locked.
@@ -190,7 +187,7 @@ interface TerminalContextValue {
 
   // Live positions (position manager) — orders live inside each position
   positions: PositionsMap
-  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrder?: ChartPlacedOrder) => void
+  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => void
   closePosition: (posKey: PositionKey) => void
   partialClosePosition: (posKey: PositionKey, closeSize: number) => void
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
@@ -206,7 +203,6 @@ interface TerminalContextValue {
   placeGridOrders: (consoleId: string) => void
   cancelGridOrders: (consoleId: string) => void
   cancelGridPreview: (consoleId: string) => void
-  cancelPreviewsForChart: (chartId: string) => void
   applyGridTpSl: (consoleId: string, patch: { tpPrice?: number | null; slPrice?: number | null; tpLevels?: number[] }) => void
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
   updateGridPlacedPrice: (consoleId: string, orderId: string, newPrice: number) => void
@@ -566,7 +562,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   // ── Position Manager ─────────────────────────────────────────────────────────
 
-  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrder?: ChartPlacedOrder) => {
+  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => {
     const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     setPositionsMap((prev) => {
       const existing = prev[pk]
@@ -589,7 +585,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             unrealizedPnl: rawPnl,
             unrealizedPnlPct: pnlPct,
             markPrice: pos.markPrice,
-            orders: initialOrder ? [...existing.orders, initialOrder] : existing.orders,
           },
         }
       }
@@ -608,7 +603,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           notional,
           unrealizedPnl: rawPnl,
           unrealizedPnlPct: pnlPct,
-          orders: initialOrder ? [initialOrder] : [],
+          orders: [],
           status: "pending",
           realizedPnl: 0,
           realSize: pos.realSize ?? 0,
@@ -973,16 +968,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  const cancelPreviewsForChart = useCallback((chartId: string) => {
-    setPreviewOrdersMap((prev) => {
-      const keys = Object.keys(prev).filter((k) => prev[k]?.chartId === chartId)
-      if (keys.length === 0) return prev
-      const n = { ...prev }
-      keys.forEach((k) => { delete n[k] })
-      return n
-    })
-  }, [])
-
   const removeGridPreviewEntry = useCallback((consoleId: string, orderId: string) => {
     setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -1081,7 +1066,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const removeGridPreviewTpSl = useCallback((consoleId: string, target: "tp" | "sl", tpIndex?: number) => {
-    console.log("[CTX] removeGridPreviewTpSl:", consoleId, target, tpIndex)
     setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
@@ -1195,7 +1179,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         placeGridOrders,
         cancelGridOrders,
         cancelGridPreview,
-        cancelPreviewsForChart,
         applyGridTpSl,
         updateGridPreviewPrice,
         updateGridPlacedPrice,
