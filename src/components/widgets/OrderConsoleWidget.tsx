@@ -565,6 +565,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // wasDraggingPlacedRef — true only when a PLACED order was being dragged (not draft)
   const wasDraggingRef = useRef(false)
   const wasDraggingPlacedRef = useRef(false)
+  // True for one animation frame after a placed-order drag ends — prevents noPreviewEffect
+  // from immediately creating a new draft preview (which would wipe real TP/SL).
+  const noPlacedDragJustEndedRef = useRef(false)
   useEffect(() => {
     if (isDraggingOrder) {
       wasDraggingRef.current = true
@@ -574,6 +577,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       wasDraggingRef.current = false
       if (wasDraggingPlacedRef.current) {
         wasDraggingPlacedRef.current = false
+        noPlacedDragJustEndedRef.current = true
+        requestAnimationFrame(() => { noPlacedDragJustEndedRef.current = false })
         resetFormToNew(true)
       }
       // Entry drag end — do NOT reset form; price already synced via noPreviewState effect
@@ -583,6 +588,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- New Order: push entry + TP/SL preview lines to chart ----
   useEffect(() => {
     if (!activeChart || tab !== "new" || editingOrderId) {
+      cancelGridPreview(noConsoleId)
+      return
+    }
+    // Don't immediately create a draft preview right after a placed-order drag ends.
+    // The form is being reset to market price in the same render cycle — creating a
+    // preview now would call setTpSl(null) and wipe the real placed TP/SL lines.
+    if (noPlacedDragJustEndedRef.current) {
       cancelGridPreview(noConsoleId)
       return
     }
