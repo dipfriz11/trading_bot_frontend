@@ -74,7 +74,7 @@ function BuyOrderBadge({
       )}
       {/* Badge body — acts as drag handle for draft, or select area for placed */}
       {isDraft ? (
-        <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
+        <g style={{ cursor: "ns-resize" }} onMouseDown={(e) => { console.log(`[Badge] drag mousedown isDraft y=${y.toFixed(1)} label="${label}"`); onDragStart?.(e) }}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
           <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -95,7 +95,7 @@ function BuyOrderBadge({
           </text>
         </g>
       )}
-      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
+      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { console.log(`[Badge] X mousedown label="${label}"`); e.stopPropagation(); onClose() }}>
         <rect x={badgeX + labelW} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={badgeX + labelW + CLOSE_W / 2} y={y + 4.5}
@@ -152,7 +152,7 @@ function SellOrderBadge({
           strokeDasharray="3,2" style={{ pointerEvents: "none" }} />
       )}
       {/* Close button */}
-      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
+      {onClose && <g style={{ cursor: "pointer" }} onMouseDown={(e) => { console.log(`[Badge-sell] X mousedown label="${label}"`); e.stopPropagation(); onClose() }}>
         <rect x={closeX} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={closeX + CLOSE_W / 2} y={y + 4.5}
@@ -165,7 +165,7 @@ function SellOrderBadge({
       </g>}
       {/* Badge body */}
       {isDraft ? (
-        <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
+        <g style={{ cursor: "ns-resize" }} onMouseDown={(e) => { console.log(`[Badge-sell] drag mousedown isDraft label="${label}"`); onDragStart?.(e) }}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
           <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
