@@ -1349,6 +1349,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl, cancelOrderPreview,
     tpSlOrders, setTpSl,
     setLivePrice,
+    notifyOrderDragEnd,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1495,6 +1496,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           setLocalDraft((d) => d ? { ...d, price: finalPrice } : d)
         } else {
           ctxUpdatePrice(positionKey, id, finalPrice)
+          notifyOrderDragEnd(id, finalPrice)
         }
         setIsDraggingOrder(false)
         if (isPlacedOrder) setEditingOrderId(null)
@@ -1512,7 +1514,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
+  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId, notifyOrderDragEnd])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {

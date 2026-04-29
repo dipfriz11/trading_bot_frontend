@@ -214,6 +214,12 @@ interface TerminalContextValue {
   removeGridEntry: (consoleId: string, orderId: string) => void
   removeGridPreviewEntry: (consoleId: string, orderId: string) => void
 
+  // Callback fired by ChartWidget when a placed single-order drag ends.
+  // Lets OrderConsoleWidget recalculate TP/SL at the new price.
+  registerOrderDragEndCb: (cb: (orderId: string, newPrice: number) => void) => void
+  unregisterOrderDragEndCb: (cb: (orderId: string, newPrice: number) => void) => void
+  notifyOrderDragEnd: (orderId: string, newPrice: number) => void
+
   // Live prices published by chart widgets (symbol → last close price)
   livePrices: Record<string, number>
   setLivePrice: (symbol: string, price: number) => void
@@ -978,6 +984,17 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   const orderPreviewCancelCbsRef = useRef<Map<string, () => void>>(new Map())
 
+  const orderDragEndCbsRef = useRef<Set<(orderId: string, newPrice: number) => void>>(new Set())
+  const registerOrderDragEndCb = useCallback((cb: (orderId: string, newPrice: number) => void) => {
+    orderDragEndCbsRef.current.add(cb)
+  }, [])
+  const unregisterOrderDragEndCb = useCallback((cb: (orderId: string, newPrice: number) => void) => {
+    orderDragEndCbsRef.current.delete(cb)
+  }, [])
+  const notifyOrderDragEnd = useCallback((orderId: string, newPrice: number) => {
+    orderDragEndCbsRef.current.forEach((cb) => cb(orderId, newPrice))
+  }, [])
+
   const registerOrderPreviewCancelCb = useCallback((consoleId: string, cb: () => void) => {
     orderPreviewCancelCbsRef.current.set(consoleId, cb)
   }, [])
@@ -1204,6 +1221,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         registerOrderPreviewCancelCb,
         unregisterOrderPreviewCancelCb,
         cancelOrderPreview,
+        registerOrderDragEndCb,
+        unregisterOrderDragEndCb,
+        notifyOrderDragEnd,
         applyGridTpSl,
         updateGridPreviewPrice,
         updateGridPlacedPrice,

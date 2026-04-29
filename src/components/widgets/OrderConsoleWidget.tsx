@@ -339,6 +339,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     refundOrderBalance,
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview, registerOrderPreviewCancelCb, unregisterOrderPreviewCancelCb,
+    registerOrderDragEndCb, unregisterOrderDragEndCb,
     openPosition, fillOrder,
     livePrices,
   } = useTerminal()
@@ -459,6 +460,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   orderTypeRef.current = orderType
   const mockPriceRef = useRef(mockPrice)
   mockPriceRef.current = mockPrice
+  const noTpSlRef = useRef(noTpSl)
+  noTpSlRef.current = noTpSl
+  const activeChartRef = useRef(activeChart)
+  activeChartRef.current = activeChart
+  const ctxPositionsRef = useRef(ctxPositions)
+  ctxPositionsRef.current = ctxPositions
 
   // True while we are programmatically updating price (init or drag sync).
   // Prevents push-draft from immediately echoing the change back as a new draft.
@@ -589,6 +596,59 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       // Entry drag end — do NOT reset form; price already synced via noPreviewState effect
     }
   }, [isDraggingOrder, editingOrderId])
+
+  // ---- Recalculate TP/SL when a single placed order is dragged to a new price ----
+  useEffect(() => {
+    const cb = (orderId: string, newPrice: number) => {
+      const chart = activeChartRef.current
+      const cfg = noTpSlRef.current
+      if (!chart || !(cfg.tpEnabled || cfg.slEnabled)) return
+
+      const order = (() => {
+        for (const pos of Object.values(ctxPositionsRef.current)) {
+          const o = pos.orders.find((o) => o.id === orderId)
+          if (o) return o
+        }
+        return null
+      })()
+      if (!order) return
+
+      const posSide = order.side === "buy" ? "long" : "short"
+      const miniCfg = {
+        enabled: true, symbol: order.symbol ?? "", side: posSide,
+        ordersCount: 1, entryPrice: newPrice,
+        topPrice: 0, bottomPrice: 0,
+        totalQuote: order.qty * newPrice, budgetMode: "quote" as const,
+        leverage: order.leverage ?? 1,
+        gridType: "arithmetic" as const, entryType: "limit" as const,
+        placementMode: "step_percent" as const,
+        firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
+        direction: "down" as const, qtyMode: "quote" as const,
+        multiplier: 1, multiplierEnabled: false, density: 1,
+        gridMode: "standard" as const,
+        tpEnabled: cfg.tpEnabled, tpMode: cfg.tpMode,
+        tpPercent: cfg.tpPercent, tpClosePercent: cfg.tpClosePercent,
+        multiTpEnabled: cfg.multiTpEnabled, multiTpCount: cfg.multiTpCount,
+        multiTpLevels: cfg.multiTpLevels,
+        tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
+        slEnabled: cfg.slEnabled, slMode: cfg.slMode,
+        slPercent: cfg.slPercent, slClosePercent: cfg.slClosePercent,
+        trailEnabled: false, trailTriggerPercent: 1,
+        trailLimitPriceEnabled: false, trailLimitPrice: 0,
+        autoEnabled: false, stopOnSl: false, stopNew: false,
+        resetTpEnabled: false, resetTpTriggerLevels: [],
+        defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
+        resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+      }
+      const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
+      const tpLevels = cfg.tpEnabled ? (viz.tpLevels ?? []) : []
+      const tpVal = tpLevels[0] ?? null
+      const slVal = cfg.slEnabled ? (viz.slPrice ?? null) : null
+      setTpSl(chart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
+    }
+    registerOrderDragEndCb(cb)
+    return () => unregisterOrderDragEndCb(cb)
+  }, [registerOrderDragEndCb, unregisterOrderDragEndCb, setTpSl])
 
   // ---- New Order: push entry + TP/SL preview lines to chart ----
   useEffect(() => {
