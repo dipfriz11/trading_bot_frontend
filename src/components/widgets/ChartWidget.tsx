@@ -740,7 +740,11 @@ function GridOrderLine({
 
   useEffect(() => {
     if (!registerMove) return
-    const onMouseUp = () => { isDraggingThisRef.current = false }
+    console.log(`[GL] registerMove id=${id} price=${price}`)
+    const onMouseUp = () => {
+      if (isDraggingThisRef.current) console.log(`[GL] mouseup → isDragging=false id=${id}`)
+      isDraggingThisRef.current = false
+    }
     window.addEventListener('mouseup', onMouseUp)
     registerMove(id, (newPrice: number) => {
       const el = groupRef.current
@@ -748,13 +752,18 @@ function GridOrderLine({
       isDraggingThisRef.current = true
       const newY = toYRef.current(newPrice)
       const delta = newY - renderedYRef.current
+      console.log(`[GL] move callback id=${id} newPrice=${newPrice.toFixed(2)} delta=${delta.toFixed(1)}`)
       el.setAttribute("transform", `translate(0, ${delta})`)
     })
     return () => window.removeEventListener('mouseup', onMouseUp)
   }, [id, registerMove])
 
   useEffect(() => {
-    if (isDraggingThisRef.current) return
+    if (isDraggingThisRef.current) {
+      console.log(`[GL] render skipped (dragging) id=${id} price=${price}`)
+      return
+    }
+    console.log(`[GL] render reset transform id=${id} price=${price}`)
     if (groupRef.current) groupRef.current.removeAttribute("transform")
     renderedYRef.current = toY(price)
   })
@@ -1570,12 +1579,15 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     const order = isPreviewDrag
       ? previewGrid.orders.find((o) => o.id === orderId)
       : placedGrid?.orders.find((o) => o.id === orderId)
-    if (!order) return
+    if (!order) { console.log(`[DragStart] order NOT FOUND consoleId=${consoleId} orderId=${orderId} isPreview=${isPreviewDrag}`); return }
 
     // Drag key matches the id used in registerMove calls
     const dragKey = isPreviewDrag
       ? `preview:${consoleId}:${orderId}`
       : `grid:${consoleId}:${orderId}`
+
+    const handlerExists = localDragHandlers.current.has(dragKey)
+    console.log(`[DragStart] consoleId=${consoleId} orderId=${orderId} isPreview=${isPreviewDrag} dragKey=${dragKey} handlerRegistered=${handlerExists} allKeys=[${[...localDragHandlers.current.keys()].join(',')}]`)
 
     const startPrice = order.price
     const startY = e.clientY
@@ -1588,6 +1600,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (!dragStarted && Math.abs(dy) >= DRAG_THRESHOLD) {
         dragStarted = true
         document.body.style.cursor = "grabbing"
+        console.log(`[DragStart] drag threshold reached, calling handler=${localDragHandlers.current.has(dragKey)}`)
       }
       if (!dragStarted) return
       const pricePerPx = (maxP - minP) / chartH
@@ -1600,6 +1613,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       window.removeEventListener("mousemove", onMove)
       window.removeEventListener("mouseup", onUp)
       document.body.style.cursor = ""
+      console.log(`[DragStart] mouseup dragStarted=${dragStarted} finalPrice=${finalPriceRef.current.toFixed(2)}`)
       if (dragStarted) {
         if (isPreviewDrag) {
           updateGridPreviewPrice(consoleId, orderId, finalPriceRef.current)
@@ -1850,6 +1864,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
+                      console.log(`[X] previewEntryClose consoleId=${consoleId} orderId=${orderId} source=${previewOrders[consoleId]?.source}`)
                       if (previewOrders[consoleId]?.source === "order") cancelOrderPreview(consoleId)
                       else removeGridPreviewEntry(consoleId, orderId)
                     }}
@@ -1879,6 +1894,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
                     onPreviewEntryClose={(consoleId, orderId) => {
+                      console.log(`[X] previewEntryClose consoleId=${consoleId} orderId=${orderId} source=${previewOrders[consoleId]?.source}`)
                       if (previewOrders[consoleId]?.source === "order") cancelOrderPreview(consoleId)
                       else removeGridPreviewEntry(consoleId, orderId)
                     }}

@@ -413,6 +413,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // Register handler so ChartWidget X-click on entry line clears form instead of flickering
   useEffect(() => {
     registerOrderPreviewCancelCb(noConsoleId, () => {
+      console.log(`[OCW-cb] X-cancel callback fired consoleId=${noConsoleId}`)
       noCancelledRef.current = true
       cancelGridPreview(noConsoleId)
       setQty("")
@@ -659,33 +660,41 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // ---- New Order: push entry + TP/SL preview lines to chart ----
   useEffect(() => {
+    console.log(`[NoPE] run tab=${tab} editId=${editingOrderId} formLoaded=${formLoadedFromPlacedRef.current} qty=${qty} noCancelled=${noCancelledRef.current} justPlaced=${noJustPlacedRef.current}`)
     if (!activeChart || tab !== "new" || editingOrderId) {
+      console.log(`[NoPE] early-exit: no activeChart or not new tab or editing`)
       cancelGridPreview(noConsoleId)
       return
     }
     if (formLoadedFromPlacedRef.current) {
+      console.log(`[NoPE] early-exit: formLoadedFromPlaced=true`)
       cancelGridPreview(noConsoleId)
       return
     }
 
     const qtyNum = parseFloat(qty)
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
+    console.log(`[NoPE] qtyNum=${qtyNum} p=${p} priceRef=${priceRef.current}`)
 
     if (!(qtyNum > 0 && p > 0)) {
       if (noJustPlacedRef.current) {
         noJustPlacedRef.current = false
+        console.log(`[NoPE] qty<=0: justPlaced=true, skip cancel`)
         return
       }
       if (noCancelledRef.current) {
         noCancelledRef.current = false
+        console.log(`[NoPE] qty<=0: noCancelled=true, skip cancel`)
         return
       }
+      console.log(`[NoPE] qty<=0: cancelGridPreview`)
       cancelGridPreview(noConsoleId)
       return
     }
 
     if (noCancelledRef.current) {
       noCancelledRef.current = false
+      console.log(`[NoPE] qty>0 but noCancelled=true: cancel+return`)
       cancelGridPreview(noConsoleId)
       return
     }
