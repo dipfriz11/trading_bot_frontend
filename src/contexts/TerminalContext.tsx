@@ -206,6 +206,7 @@ interface TerminalContextValue {
   placeGridOrders: (consoleId: string) => void
   cancelGridOrders: (consoleId: string) => void
   cancelGridPreview: (consoleId: string) => void
+  cancelPreviewsForChart: (chartId: string) => void
   applyGridTpSl: (consoleId: string, patch: { tpPrice?: number | null; slPrice?: number | null; tpLevels?: number[] }) => void
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
   updateGridPlacedPrice: (consoleId: string, orderId: string, newPrice: number) => void
@@ -972,6 +973,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const cancelPreviewsForChart = useCallback((chartId: string) => {
+    setPreviewOrdersMap((prev) => {
+      const keys = Object.keys(prev).filter((k) => prev[k]?.chartId === chartId)
+      if (keys.length === 0) return prev
+      const n = { ...prev }
+      keys.forEach((k) => { delete n[k] })
+      return n
+    })
+  }, [])
+
   const removeGridPreviewEntry = useCallback((consoleId: string, orderId: string) => {
     setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -1184,6 +1195,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         placeGridOrders,
         cancelGridOrders,
         cancelGridPreview,
+        cancelPreviewsForChart,
         applyGridTpSl,
         updateGridPreviewPrice,
         updateGridPlacedPrice,

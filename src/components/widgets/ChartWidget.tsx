@@ -1434,6 +1434,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     editingOrderId, setEditingOrderId,
     deductOrderBalance,
     previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl,
+    cancelPreviewsForChart,
     tpSlOrders, setTpSl,
     setLivePrice,
   } = useTerminal()
@@ -1514,13 +1515,19 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // ---- Close handler ----
   const handleOrderClose = useCallback((id: string) => {
     if (id === LOCAL_DRAFT_ID) {
-      if (hasOrderConsole) ctxSetDraft(widget.id, undefined)
-      else setLocalDraft(undefined)
+      if (hasOrderConsole) {
+        ctxSetDraft(widget.id, undefined)
+        // Cancel all previews (TP/SL draft lines) tied to this chart — they exist only relative to a draft order
+        cancelPreviewsForChart(widget.id)
+        setTpSl(widget.id, { tp: null, sl: null })
+      } else {
+        setLocalDraft(undefined)
+      }
     } else {
       ctxRemovePlaced(positionKey, id)
       localDragHandlers.current.delete(id)
     }
-  }, [hasOrderConsole, widget.id, positionKey, ctxSetDraft, ctxRemovePlaced])
+  }, [hasOrderConsole, widget.id, positionKey, ctxSetDraft, ctxRemovePlaced, cancelPreviewsForChart, setTpSl])
 
   // Tracks whether a drag is currently active (cursor has moved enough to be a drag)
   const isDraggingRef = useRef(false)
