@@ -496,11 +496,18 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const pos = positionsRef.current[positionKey]
     if (!pos) return
     const removed = pos.orders.find((o) => o.id === orderId)
+    const remainingOrders = pos.orders.filter((o) => o.id !== orderId)
 
     setPositionsMap((prev) => {
       const p = prev[positionKey]
       if (!p) return prev
-      return { ...prev, [positionKey]: { ...p, orders: p.orders.filter((o) => o.id !== orderId) } }
+      // Auto-close position when its last order is removed
+      if (remainingOrders.length === 0) {
+        const n = { ...prev }
+        delete n[positionKey]
+        return n
+      }
+      return { ...prev, [positionKey]: { ...p, orders: remainingOrders } }
     })
 
     // Sync grid overlay when a grid order is cancelled individually

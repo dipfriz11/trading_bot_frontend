@@ -474,6 +474,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const settingTpSlFromContextRef = useRef(false)
   const lastTpPushedRef = useRef<number | null>(null)
   const lastSlPushedRef = useRef<number | null>(null)
+  // Prevents noTpSl % ↔ tpSlOrders abs echo-loop for placed orders
+  const settingPlacedTpSlFromDragRef = useRef(false)
+  const settingPlacedTpSlFromFormRef = useRef(false)
 
   // Init price on symbol/activeChart change — runs once per chart focus
   const initialisedKeyRef = useRef<string>("")
@@ -919,6 +922,100 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
     }
   }, [tpSlOrders, activeChart?.id])
+
+  // ---- Placed TP/SL sync: chart drag → % form ----
+  // When user drags a placed TP/SL line, tpSlOrders changes.
+  // Recalculate noTpSl percentages from the new absolute price and entry price.
+  useEffect(() => {
+    if (!activeChart) return
+    if (settingPlacedTpSlFromFormRef.current) return
+    const tpsl = tpSlOrders[activeChart.id]
+    const pos = ctxPositions[activePositionKey]
+    const entryOrder = pos?.orders.find((o) => o.source !== "grid")
+    const entryPrice = entryOrder?.price ?? pos?.avgEntry
+    if (!entryPrice || entryPrice <= 0) return
+    const isLong = futuresSide === "long"
+
+    settingPlacedTpSlFromDragRef.current = true
+
+    if (tpsl?.sl != null && tpsl.sl > 0) {
+      const slPct = isLong
+        ? (1 - tpsl.sl / entryPrice) * 100
+        : (tpsl.sl / entryPrice - 1) * 100
+      const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
+      setNoTpSl((prev) => {
+        if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
+        return { ...prev, slPercent: rounded, slEnabled: true }
+      })
+    }
+
+    if (tpsl?.tp != null && tpsl.tp > 0) {
+      const tpPct = isLong
+        ? (tpsl.tp / entryPrice - 1) * 100
+        : (1 - tpsl.tp / entryPrice) * 100
+      const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
+      setNoTpSl((prev) => {
+        if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
+        return { ...prev, tpPercent: rounded, tpEnabled: true }
+      })
+    }
+
+    if (tpsl?.tpLevels != null && tpsl.tpLevels.length > 0) {
+      const newLevels = tpsl.tpLevels.map((lvlPrice, i) => {
+        const pct = isLong
+          ? (lvlPrice / entryPrice - 1) * 100
+          : (1 - lvlPrice / entryPrice) * 100
+        return {
+          tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+          closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / tpsl.tpLevels!.length),
+        }
+      })
+      setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
+    }
+
+    requestAnimationFrame(() => { settingPlacedTpSlFromDragRef.current = false })
+  }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
+
+  // ---- Placed TP/SL sync: % form → chart ----
+  // When user changes slPercent / tpPercent in the form, push new absolute price to tpSlOrders.
+  // Only runs when a non-grid placed order exists (otherwise noPreviewEffect handles it).
+  useEffect(() => {
+    if (!activeChart) return
+    if (settingPlacedTpSlFromDragRef.current) return
+    const pos = ctxPositions[activePositionKey]
+    const entryOrder = pos?.orders.find((o) => o.source !== "grid")
+    const entryPrice = entryOrder?.price ?? pos?.avgEntry
+    // Only sync when there is an actual placed single order — draft preview has its own flow
+    if (!entryOrder || !entryPrice || entryPrice <= 0) return
+    const isLong = futuresSide === "long"
+
+    settingPlacedTpSlFromFormRef.current = true
+
+    const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
+      ? isLong
+        ? entryPrice * (1 - noTpSl.slPercent / 100)
+        : entryPrice * (1 + noTpSl.slPercent / 100)
+      : null
+
+    const tpLevels = noTpSl.tpEnabled
+      ? (noTpSl.multiTpEnabled ? noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount) : [{ tpPercent: noTpSl.tpPercent }]).map((lvl) =>
+          isLong
+            ? entryPrice * (1 + lvl.tpPercent / 100)
+            : entryPrice * (1 - lvl.tpPercent / 100)
+        )
+      : []
+    const newTp = tpLevels[0] ?? null
+
+    lastTpPushedRef.current = newTp
+    lastSlPushedRef.current = newSl
+    setTpSl(activeChart.id, {
+      tp: newTp,
+      sl: newSl,
+      tpLevels: tpLevels.length > 1 ? tpLevels : undefined,
+    })
+
+    requestAnimationFrame(() => { settingPlacedTpSlFromFormRef.current = false })
+  }, [noTpSl, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
 
   // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {

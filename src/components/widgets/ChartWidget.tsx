@@ -1423,8 +1423,14 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     } else {
       ctxRemovePlaced(positionKey, id)
       localDragHandlers.current.delete(id)
+      // Clear TP/SL lines when the placed order is removed
+      const pos = ctxPositions[positionKey]
+      const remaining = pos?.orders.filter((o) => o.id !== id) ?? []
+      if (remaining.length === 0) {
+        setTpSl(widget.id, { tp: null, sl: null, tpLevels: undefined })
+      }
     }
-  }, [positionKey, ctxRemovePlaced])
+  }, [positionKey, ctxRemovePlaced, ctxPositions, widget.id, setTpSl])
 
   // Tracks whether a drag is currently active (cursor has moved enough to be a drag)
   const isDraggingRef = useRef(false)
