@@ -558,6 +558,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // Prevents noPreviewEffect from treating stale placed-order qty/price as a new draft.
   const formLoadedFromPlacedRef = useRef(false)
 
+  // Always-current ref so noPreviewEffect can read activePositionKey without adding it to deps
+  const activePositionKeyRef = useRef(activePositionKey)
+  activePositionKeyRef.current = activePositionKey
+
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
     if (!editingOrderId || !activeChart) {
@@ -669,7 +673,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
 
     const qtyNum = parseFloat(qty)
-    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(price) || 0)
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
 
     if (!(qtyNum > 0 && p > 0)) {
       if (noJustPlacedRef.current) {
@@ -730,17 +734,21 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastDraftPricePushedRef.current = p
 
-    // Clear simple tpSlOrders to avoid duplicate lines
-    setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
+    // Если уже есть реальный (не-grid) ордер в позиции — TP/SL живут с позицией,
+    // не трогаем их и не рисуем draft-линии поверх.
+    const existingPlacedOrder = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).find((o) => o.source !== "grid")
+    if (!existingPlacedOrder) {
+      setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
+    }
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
       source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
+      tpPrice: existingPlacedOrder ? null : viz.tpPrice,
+      slPrice: existingPlacedOrder ? null : viz.slPrice,
+      tpLevels: existingPlacedOrder ? [] : viz.tpLevels,
       symbol,
       leverage: posSettings.leverage,
       accountId,
@@ -1072,6 +1080,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const handlePctClick = (pct: number) => {
     const availableForOrder = marketType === "futures" ? freeMargin * posSettings.leverage : freeMargin
     if (editingOrderId) setFormEditMode(true)
+    formLoadedFromPlacedRef.current = false
     if (anchor === "qty") {
       // % of max buyable qty
       const maxQty = effectivePrice > 0 ? availableForOrder / effectivePrice : 0
@@ -1127,6 +1136,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     formLoadedFromPlacedRef.current = false
     settingPriceFromExternalRef.current = true
     userEditedPriceRef.current = false
+    // Clear tracked prices so placed-order price sync doesn't overwrite the reset price
+    trackedPlacedPricesRef.current = {}
     setQty("")
     setAmount("")
     setPrice(priceToString(mockPrice))
