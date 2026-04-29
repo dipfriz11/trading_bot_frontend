@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { useTerminal, useGridOrderEntry, posKey } from "@/contexts/TerminalContext"
+import { useTerminal, useGridPreviewEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
 import { GridConfigTab } from "./GridConfigTab"
@@ -707,7 +707,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [noPreviewExists, activeChart?.id])
 
   // ---- Sync noTpSl from chart drag/x-click (New Order grid preview) ----
-  const noGridState = useGridOrderEntry(noConsoleId)
+  const noGridState = useGridPreviewEntry(noConsoleId)
   const noChartSlPrice = noGridState?.slPrice
   const noChartTpLevels = noGridState?.tpLevels
 
