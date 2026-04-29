@@ -673,7 +673,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
 
     const qtyNum = parseFloat(qty)
-    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(price) || 0)
+    const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
 
     if (!(qtyNum > 0 && p > 0)) {
       if (noJustPlacedRef.current) {
