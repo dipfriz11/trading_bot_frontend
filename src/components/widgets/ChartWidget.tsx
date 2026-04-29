@@ -644,7 +644,7 @@ function GridPreviewOverlay({
                   toY={toY} minPrice={minPrice} maxPrice={maxPrice}
                   width={width} padding={padding}
                   isDraft={true} {...DRAFT_COLORS}
-                  onClose={() => onEntryClose?.(preview.consoleId, o.id)}
+                  onClose={preview.source === "order" ? undefined : () => onEntryClose?.(preview.consoleId, o.id)}
                   onDragStart={(e) => onOrderDragStart?.(preview.consoleId, o.id, e, toPrice, minPrice, maxPrice, chartH, padding.top)}
                   registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
                 />
