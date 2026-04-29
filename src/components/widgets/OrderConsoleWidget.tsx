@@ -682,6 +682,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       accountId,
       exchangeId,
       marketType,
+      hideOrders: true,
     })
   }, [tab, effectiveSide, price, qty, orderType, activeChart?.id, noTpSl, symbol, posSettings.leverage, accountId, exchangeId, marketType])
 
@@ -990,7 +991,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const notional = parseFloat(qty) * effectivePrice
       const margin = marketType === "futures" ? notional / posSettings.leverage : notional
 
-      addPlacedOrder(activePositionKey, {
+      const placedOrder: Parameters<typeof addPlacedOrder>[1] = {
         id,
         side: effectiveSide,
         price: effectivePrice,
@@ -1005,9 +1006,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         margin,
         time,
         status: orderType === "market" ? "filled" : "pending",
-      })
+      }
 
-      // Open / merge into live position immediately — virtual position exists as soon as orders are placed
+      // Open / merge into live position — pass the order so it's included atomically
       const posSide = effectiveSide === "buy" ? "long" : "short"
       const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
       openPosition({
@@ -1028,7 +1029,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         })(),
         shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
         realSize: 0,
-      })
+      }, placedOrder)
 
       // Market orders execute immediately — simulate fill
       if (orderType === "market") {

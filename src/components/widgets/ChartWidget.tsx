@@ -74,7 +74,7 @@ function BuyOrderBadge({
       )}
       {/* Badge body — acts as drag handle for draft, or select area for placed */}
       {isDraft ? (
-        <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
+        <g style={{ cursor: "ns-resize", pointerEvents: "all" }} onMouseDown={onDragStart}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
           <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -84,7 +84,7 @@ function BuyOrderBadge({
           </text>
         </g>
       ) : (
-        <g style={{ cursor: isEditing ? "grab" : "pointer" }}
+        <g style={{ cursor: isEditing ? "grab" : "pointer", pointerEvents: "all" }}
           onMouseDown={onDragStart}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
             fill={color} stroke={labelFill ?? color} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
@@ -95,7 +95,7 @@ function BuyOrderBadge({
           </text>
         </g>
       )}
-      <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
+      <g style={{ cursor: "pointer", pointerEvents: "all" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={badgeX + labelW} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={badgeX + labelW + CLOSE_W / 2} y={y + 4.5}
@@ -152,7 +152,7 @@ function SellOrderBadge({
           strokeDasharray="3,2" style={{ pointerEvents: "none" }} />
       )}
       {/* Close button */}
-      <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
+      <g style={{ cursor: "pointer", pointerEvents: "all" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
         <rect x={closeX} y={by} width={CLOSE_W} height={badgeH}
           fill={closeBtnColor} stroke={labelFill ?? closeBtnColor} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
         <text x={closeX + CLOSE_W / 2} y={y + 4.5}
@@ -165,7 +165,7 @@ function SellOrderBadge({
       </g>
       {/* Badge body */}
       {isDraft ? (
-        <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
+        <g style={{ cursor: "ns-resize", pointerEvents: "all" }} onMouseDown={onDragStart}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
             fill={`${color}18`} stroke={color} strokeWidth={1} rx={3} />
           <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -175,7 +175,7 @@ function SellOrderBadge({
           </text>
         </g>
       ) : (
-        <g style={{ cursor: isEditing ? "grab" : "pointer" }}
+        <g style={{ cursor: isEditing ? "grab" : "pointer", pointerEvents: "all" }}
           onMouseDown={onDragStart}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
             fill={color} stroke={labelFill ?? color} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
@@ -623,13 +623,13 @@ function GridPreviewOverlay({
 }: GridPreviewOverlayProps) {
   if (!previewOrdersList.length) return null
   return (
-    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+    <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}>
       {previewOrdersList.map((preview) => {
         const isLong = preview.side === "long"
         const chartH = height - padding.top - padding.bottom
         return (
           <g key={preview.consoleId}>
-            {preview.orders.map((o, idx) => (
+            {!preview.hideOrders && preview.orders.map((o, idx) => (
               <GridOrderLine
                 key={o.id}
                 id={`preview:${preview.consoleId}:${o.id}`}
@@ -1216,21 +1216,6 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   return (
     <div style={{ position: "relative", width, height }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
-          width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
-        />
-      )}
       {gridOrdersList && gridOrdersList.length > 0 && (
         <GridOrdersOverlay
           gridOrdersList={gridOrdersList}
@@ -1255,6 +1240,21 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
+          width={width} height={height}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
+        />
+      )}
       {tpSl && onTpSlDragStart && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null) && (
         <TpSlOverlay
           tpSl={tpSl} width={width} height={height}
@@ -1358,21 +1358,6 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
   return (
     <div style={{ position: "relative", width, height }}>
       <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {previewOrdersList && previewOrdersList.length > 0 && (
-        <GridPreviewOverlay
-          previewOrdersList={previewOrdersList}
-          width={width} height={height}
-          toY={toY} toPrice={toPrice}
-          minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding}
-          dragHandlers={dragHandlers}
-          onOrderDragStart={onPreviewOrderDragStart}
-          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
-          onClose={onPreviewClose}
-          onEntryClose={onPreviewEntryClose}
-          onTpSlClose={onPreviewTpSlClose}
-        />
-      )}
       {gridOrdersList && gridOrdersList.length > 0 && (
         <GridOrdersOverlay
           gridOrdersList={gridOrdersList}
@@ -1397,6 +1382,21 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
+      {previewOrdersList && previewOrdersList.length > 0 && (
+        <GridPreviewOverlay
+          previewOrdersList={previewOrdersList}
+          width={width} height={height}
+          toY={toY} toPrice={toPrice}
+          minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding}
+          dragHandlers={dragHandlers}
+          onOrderDragStart={onPreviewOrderDragStart}
+          onGridTpSlDragStart={onPreviewGridTpSlDragStart}
+          onClose={onPreviewClose}
+          onEntryClose={onPreviewEntryClose}
+          onTpSlClose={onPreviewTpSlClose}
+        />
+      )}
       {tpSl && onTpSlDragStart && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null) && (
         <TpSlOverlay
           tpSl={tpSl} width={width} height={height}
