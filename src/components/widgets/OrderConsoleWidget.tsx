@@ -1064,6 +1064,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       }
       noJustPlacedRef.current = true
     }
+    // Clear preview immediately so draft lines don't persist after placement
+    cancelGridPreview(noConsoleId)
     resetFormToNew()
 
     setTimeout(() => {
