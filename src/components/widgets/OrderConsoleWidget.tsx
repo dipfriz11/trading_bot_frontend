@@ -406,6 +406,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // Prevents cancelGridPreview immediately after order submit (keep TP/SL visible)
   const noJustPlacedRef = useRef(false)
+  // Prevents noPreviewEffect from re-creating preview after draft X-close on chart
+  const noDraftCancelledRef = useRef(false)
 
   // ── End New Order advanced state ────────────────────────────────────────────
 
@@ -543,6 +545,22 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     requestAnimationFrame(() => { settingPriceFromExternalRef.current = false })
   }, [draftOrders, activeChart?.id])
 
+  // ---- When draft order is closed via X on chart, suppress one noPreviewEffect re-creation ----
+  const prevDraftExistedRef = useRef(false)
+  useEffect(() => {
+    if (!activeChart || tab !== "new") {
+      prevDraftExistedRef.current = !!draftOrders[activeChart?.id ?? ""]
+      return
+    }
+    const draftExists = !!draftOrders[activeChart.id]
+    const wasExisting = prevDraftExistedRef.current
+    prevDraftExistedRef.current = draftExists
+    if (wasExisting && !draftExists) {
+      noDraftCancelledRef.current = true
+      cancelGridPreview(noConsoleId)
+    }
+  }, [draftOrders, activeChart?.id, tab])
+
   // ---- Sync form when a PLACED order is dragged on the chart ----
   const trackedPlacedPricesRef = useRef<Record<string, number>>({})
   useEffect(() => {
@@ -625,6 +643,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         noJustPlacedRef.current = false
         return
       }
+      cancelGridPreview(noConsoleId)
+      return
+    }
+
+    // Draft was closed via X on chart — skip one re-creation cycle
+    if (noDraftCancelledRef.current) {
+      noDraftCancelledRef.current = false
       cancelGridPreview(noConsoleId)
       return
     }
