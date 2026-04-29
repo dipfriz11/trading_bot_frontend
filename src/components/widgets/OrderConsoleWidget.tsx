@@ -337,8 +337,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     getBalance,
     deductOrderBalance,
     refundOrderBalance,
-    tpSlOrders, setTpSl,
+    tpSlOrders, setTpSl, clearTpSl,
     setGridPreview, cancelGridPreview,
+    previewOrders,
     openPosition, fillOrder,
     livePrices,
   } = useTerminal()
@@ -690,6 +691,20 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   useEffect(() => {
     return () => { cancelGridPreview(noConsoleId) }
   }, [noConsoleId])
+
+  // When the New Order preview disappears (user closed the order line on chart),
+  // clear tpEnabled/slEnabled so TP/SL lines don't persist via tpSlOrders
+  const noPreviewExists = !!previewOrders[noConsoleId]
+  const prevNoPreviewExistsRef = useRef(false)
+  useEffect(() => {
+    const wasActive = prevNoPreviewExistsRef.current
+    prevNoPreviewExistsRef.current = noPreviewExists
+    if (wasActive && !noPreviewExists && activeChart) {
+      // Preview was just removed externally (chart X-click) — clear TP/SL
+      setNoTpSl((prev) => ({ ...prev, tpEnabled: false, slEnabled: false }))
+      clearTpSl(activeChart.id)
+    }
+  }, [noPreviewExists, activeChart?.id])
 
   // ---- Sync noTpSl from chart drag/x-click (New Order grid preview) ----
   const noGridState = useGridOrderEntry(noConsoleId)
