@@ -922,7 +922,7 @@ function PlacedTpSlOverlay({ tpSl, side, width, height, toY, minPrice, maxPrice,
       {tpLevels.map((price, idx) => {
         const totalTp = tpLevels.length
         const edgeOffset = side === "long" ? totalTp - 1 - idx : idx
-        const label = totalTp > 1 ? `TP ${idx + 1}` : "TAKE PROFIT"
+        const label = `TP ${idx + 1}`
         return (
           <GridOrderLine
             key={`placed-tp${idx}`}
