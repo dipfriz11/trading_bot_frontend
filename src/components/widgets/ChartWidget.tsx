@@ -1895,7 +1895,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewOrderDragStart={handleGridOrderDragStart}
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
-                    onPreviewEntryClose={(consoleId, orderId) => removeGridPreviewEntry(consoleId, orderId)}
+                    onPreviewEntryClose={(consoleId, orderId) => {
+                      if (previewOrders[consoleId]?.source === "order") return
+                      removeGridPreviewEntry(consoleId, orderId)
+                    }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
                     tpSl={chartTpSl}
                     onTpSlDragStart={handleTpSlDragStart}
@@ -1920,7 +1923,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     onPreviewOrderDragStart={handleGridOrderDragStart}
                     onPreviewGridTpSlDragStart={handleGridTpSlDragStart}
                     onPreviewClose={undefined}
-                    onPreviewEntryClose={(consoleId, orderId) => removeGridPreviewEntry(consoleId, orderId)}
+                    onPreviewEntryClose={(consoleId, orderId) => {
+                      if (previewOrders[consoleId]?.source === "order") return
+                      removeGridPreviewEntry(consoleId, orderId)
+                    }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
                     tpSl={chartTpSl}
                     onTpSlDragStart={handleTpSlDragStart}

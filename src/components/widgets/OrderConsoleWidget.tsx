@@ -709,6 +709,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const prev = prevNoTpLevelsKeyRef.current
     prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
     if (prev === undefined) return
+    // If the entire preview was removed (not a user TP x-click), skip
+    if (!noPreviewState) return
     const prevLen = prev ? prev.split(",").length : 0
     const curLen = noChartTpLevels?.length ?? 0
     if (curLen >= prevLen) return
