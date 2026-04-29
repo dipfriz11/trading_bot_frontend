@@ -558,6 +558,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // Prevents noPreviewEffect from treating stale placed-order qty/price as a new draft.
   const formLoadedFromPlacedRef = useRef(false)
 
+  // Always-current ref so noPreviewEffect can read activePositionKey without adding it to deps
+  const activePositionKeyRef = useRef(activePositionKey)
+  activePositionKeyRef.current = activePositionKey
+
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
     if (!editingOrderId || !activeChart) {
@@ -730,8 +734,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastDraftPricePushedRef.current = p
 
-    // Clear simple tpSlOrders to avoid duplicate lines
-    setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
+    // Clear simple tpSlOrders to avoid duplicate lines — but only when there is no
+    // existing placed (non-grid) order, otherwise we'd wipe the position's TP/SL lines.
+    const existingPlacedOrder = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).find((o) => o.source !== "grid")
+    if (!existingPlacedOrder) {
+      setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
+    }
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
