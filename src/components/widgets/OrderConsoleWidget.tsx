@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { createPortal } from "react-dom"
-import type { Widget, GridSharedTpSl, GridMultiTpLevel } from "@/types/terminal"
+import type { Widget, GridSharedTpSl, GridMultiTpLevel, ChartPlacedOrder } from "@/types/terminal"
 import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
@@ -329,7 +329,7 @@ const MOCK_PRICES: Record<string, number> = {
 export function OrderConsoleWidget(_props: { widget: Widget }) {
   const {
     activeTab, activeChartId, setActiveChartId,
-    addPlacedOrder, positions: ctxPositions,
+    positions: ctxPositions,
     isDraggingOrder,
     editingOrderId, setEditingOrderId,
     updatePlacedOrder,
@@ -339,6 +339,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     refundOrderBalance,
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview, registerOrderPreviewCancelCb, unregisterOrderPreviewCancelCb,
+    registerOrderDragEndCb, unregisterOrderDragEndCb,
     openPosition, fillOrder,
     livePrices,
   } = useTerminal()
@@ -459,6 +460,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   orderTypeRef.current = orderType
   const mockPriceRef = useRef(mockPrice)
   mockPriceRef.current = mockPrice
+  const noTpSlRef = useRef(noTpSl)
+  noTpSlRef.current = noTpSl
+  const activeChartRef = useRef(activeChart)
+  activeChartRef.current = activeChart
+  const ctxPositionsRef = useRef(ctxPositions)
+  ctxPositionsRef.current = ctxPositions
 
   // True while we are programmatically updating price (init or drag sync).
   // Prevents push-draft from immediately echoing the change back as a new draft.
@@ -467,6 +474,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const settingTpSlFromContextRef = useRef(false)
   const lastTpPushedRef = useRef<number | null>(null)
   const lastSlPushedRef = useRef<number | null>(null)
+  // Prevents noTpSl % ↔ tpSlOrders abs echo-loop for placed orders
+  const settingPlacedTpSlFromDragRef = useRef(false)
+  const settingPlacedTpSlFromFormRef = useRef(false)
 
   // Init price on symbol/activeChart change — runs once per chart focus
   const initialisedKeyRef = useRef<string>("")
@@ -544,6 +554,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
   }, [ctxPositions, activePositionKey])
 
+  // True while the form holds data loaded from a placed order (edit mode or just-ended drag).
+  // Prevents noPreviewEffect from treating stale placed-order qty/price as a new draft.
+  const formLoadedFromPlacedRef = useRef(false)
+
   // ---- Load placed order data into form when user selects it for editing ----
   useEffect(() => {
     if (!editingOrderId || !activeChart) {
@@ -552,6 +566,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
     const order = (ctxPositions[activePositionKey]?.orders ?? []).find((o: import("@/types/terminal").ChartPlacedOrder) => o.id === editingOrderId)
     if (!order) { setFormEditMode(false); return }
+    formLoadedFromPlacedRef.current = true
     settingPriceFromExternalRef.current = true
     setPrice(priceToString(order.price))
     setQty(order.qty.toString())
@@ -565,6 +580,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // wasDraggingPlacedRef — true only when a PLACED order was being dragged (not draft)
   const wasDraggingRef = useRef(false)
   const wasDraggingPlacedRef = useRef(false)
+  // True for one animation frame after a placed-order drag ends — prevents noPreviewEffect
+  // from immediately creating a new draft preview (which would wipe real TP/SL).
+  const noPlacedDragJustEndedRef = useRef(false)
   useEffect(() => {
     if (isDraggingOrder) {
       wasDraggingRef.current = true
@@ -574,15 +592,78 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       wasDraggingRef.current = false
       if (wasDraggingPlacedRef.current) {
         wasDraggingPlacedRef.current = false
+        noPlacedDragJustEndedRef.current = true
+        requestAnimationFrame(() => { noPlacedDragJustEndedRef.current = false })
         resetFormToNew(true)
       }
       // Entry drag end — do NOT reset form; price already synced via noPreviewState effect
     }
   }, [isDraggingOrder, editingOrderId])
 
+  // ---- Recalculate TP/SL when a single placed order is dragged to a new price ----
+  useEffect(() => {
+    const cb = (orderId: string, newPrice: number) => {
+      const chart = activeChartRef.current
+      const cfg = noTpSlRef.current
+      if (!chart || !(cfg.tpEnabled || cfg.slEnabled)) return
+
+      const order = (() => {
+        for (const pos of Object.values(ctxPositionsRef.current)) {
+          const o = pos.orders.find((o) => o.id === orderId)
+          if (o) return o
+        }
+        return null
+      })()
+      if (!order) return
+
+      const posSide = order.side === "buy" ? "long" : "short"
+      const miniCfg = {
+        enabled: true, symbol: order.symbol ?? "", side: posSide,
+        ordersCount: 1, entryPrice: newPrice,
+        topPrice: 0, bottomPrice: 0,
+        totalQuote: order.qty * newPrice, budgetMode: "quote" as const,
+        leverage: order.leverage ?? 1,
+        gridType: "arithmetic" as const, entryType: "limit" as const,
+        placementMode: "step_percent" as const,
+        firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
+        direction: "down" as const, qtyMode: "quote" as const,
+        multiplier: 1, multiplierEnabled: false, density: 1,
+        gridMode: "standard" as const,
+        tpEnabled: cfg.tpEnabled, tpMode: cfg.tpMode,
+        tpPercent: cfg.tpPercent, tpClosePercent: cfg.tpClosePercent,
+        multiTpEnabled: cfg.multiTpEnabled, multiTpCount: cfg.multiTpCount,
+        multiTpLevels: cfg.multiTpLevels,
+        tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
+        slEnabled: cfg.slEnabled, slMode: cfg.slMode,
+        slPercent: cfg.slPercent, slClosePercent: cfg.slClosePercent,
+        trailEnabled: false, trailTriggerPercent: 1,
+        trailLimitPriceEnabled: false, trailLimitPrice: 0,
+        autoEnabled: false, stopOnSl: false, stopNew: false,
+        resetTpEnabled: false, resetTpTriggerLevels: [],
+        defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
+        resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+      }
+      const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
+      const tpLevels = cfg.tpEnabled ? (viz.tpLevels ?? []) : []
+      const tpVal = tpLevels[0] ?? null
+      const slVal = cfg.slEnabled ? (viz.slPrice ?? null) : null
+      setTpSl(chart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
+    }
+    registerOrderDragEndCb(cb)
+    return () => unregisterOrderDragEndCb(cb)
+  }, [registerOrderDragEndCb, unregisterOrderDragEndCb, setTpSl])
+
   // ---- New Order: push entry + TP/SL preview lines to chart ----
   useEffect(() => {
     if (!activeChart || tab !== "new" || editingOrderId) {
+      cancelGridPreview(noConsoleId)
+      return
+    }
+    // The form still holds data loaded from a placed order (edit mode just ended or drag just
+    // released). Don't create a draft preview — it would call setTpSl(null) and wipe the
+    // real placed TP/SL lines. The flag is cleared by resetFormToNew() when the form is
+    // explicitly reset, or when the user manually edits qty/price.
+    if (formLoadedFromPlacedRef.current) {
       cancelGridPreview(noConsoleId)
       return
     }
@@ -650,7 +731,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     lastDraftPricePushedRef.current = p
 
     // Clear simple tpSlOrders to avoid duplicate lines
-    setTpSl(activeChart.id, { tp: null, sl: null })
+    setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
 
     setGridPreview(noConsoleId, {
       chartId: activeChart.id,
@@ -842,6 +923,100 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
   }, [tpSlOrders, activeChart?.id])
 
+  // ---- Placed TP/SL sync: chart drag → % form ----
+  // When user drags a placed TP/SL line, tpSlOrders changes.
+  // Recalculate noTpSl percentages from the new absolute price and entry price.
+  useEffect(() => {
+    if (!activeChart) return
+    if (settingPlacedTpSlFromFormRef.current) return
+    const tpsl = tpSlOrders[activeChart.id]
+    const pos = ctxPositions[activePositionKey]
+    const entryOrder = pos?.orders.find((o) => o.source !== "grid")
+    const entryPrice = entryOrder?.price ?? pos?.avgEntry
+    if (!entryPrice || entryPrice <= 0) return
+    const isLong = futuresSide === "long"
+
+    settingPlacedTpSlFromDragRef.current = true
+
+    if (tpsl?.sl != null && tpsl.sl > 0) {
+      const slPct = isLong
+        ? (1 - tpsl.sl / entryPrice) * 100
+        : (tpsl.sl / entryPrice - 1) * 100
+      const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
+      setNoTpSl((prev) => {
+        if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
+        return { ...prev, slPercent: rounded, slEnabled: true }
+      })
+    }
+
+    if (tpsl?.tp != null && tpsl.tp > 0) {
+      const tpPct = isLong
+        ? (tpsl.tp / entryPrice - 1) * 100
+        : (1 - tpsl.tp / entryPrice) * 100
+      const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
+      setNoTpSl((prev) => {
+        if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
+        return { ...prev, tpPercent: rounded, tpEnabled: true }
+      })
+    }
+
+    if (tpsl?.tpLevels != null && tpsl.tpLevels.length > 0) {
+      const newLevels = tpsl.tpLevels.map((lvlPrice, i) => {
+        const pct = isLong
+          ? (lvlPrice / entryPrice - 1) * 100
+          : (1 - lvlPrice / entryPrice) * 100
+        return {
+          tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+          closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / tpsl.tpLevels!.length),
+        }
+      })
+      setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
+    }
+
+    requestAnimationFrame(() => { settingPlacedTpSlFromDragRef.current = false })
+  }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
+
+  // ---- Placed TP/SL sync: % form → chart ----
+  // When user changes slPercent / tpPercent in the form, push new absolute price to tpSlOrders.
+  // Only runs when a non-grid placed order exists (otherwise noPreviewEffect handles it).
+  useEffect(() => {
+    if (!activeChart) return
+    if (settingPlacedTpSlFromDragRef.current) return
+    const pos = ctxPositions[activePositionKey]
+    const entryOrder = pos?.orders.find((o) => o.source !== "grid")
+    const entryPrice = entryOrder?.price ?? pos?.avgEntry
+    // Only sync when there is an actual placed single order — draft preview has its own flow
+    if (!entryOrder || !entryPrice || entryPrice <= 0) return
+    const isLong = futuresSide === "long"
+
+    settingPlacedTpSlFromFormRef.current = true
+
+    const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
+      ? isLong
+        ? entryPrice * (1 - noTpSl.slPercent / 100)
+        : entryPrice * (1 + noTpSl.slPercent / 100)
+      : null
+
+    const tpLevels = noTpSl.tpEnabled
+      ? (noTpSl.multiTpEnabled ? noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount) : [{ tpPercent: noTpSl.tpPercent }]).map((lvl) =>
+          isLong
+            ? entryPrice * (1 + lvl.tpPercent / 100)
+            : entryPrice * (1 - lvl.tpPercent / 100)
+        )
+      : []
+    const newTp = tpLevels[0] ?? null
+
+    lastTpPushedRef.current = newTp
+    lastSlPushedRef.current = newSl
+    setTpSl(activeChart.id, {
+      tp: newTp,
+      sl: newSl,
+      tpLevels: tpLevels.length > 1 ? tpLevels : undefined,
+    })
+
+    requestAnimationFrame(() => { settingPlacedTpSlFromFormRef.current = false })
+  }, [noTpSl, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
+
   // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {
 
@@ -859,6 +1034,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [activeChart?.id])
 
   const handlePriceChange = (v: string) => {
+    formLoadedFromPlacedRef.current = false
     userEditedPriceRef.current = true
     setPrice(v)
     if (editingOrderId) setFormEditMode(true)
@@ -874,6 +1050,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const handleQtyChange = (v: string) => {
+    formLoadedFromPlacedRef.current = false
     setAnchor("qty")
     setQty(v)
     if (editingOrderId) setFormEditMode(true)
@@ -883,6 +1060,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const handleAmountChange = (v: string) => {
+    formLoadedFromPlacedRef.current = false
     setAnchor("amount")
     setAmount(v)
     if (editingOrderId) setFormEditMode(true)
@@ -946,6 +1124,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }
 
   const resetFormToNew = (_clearQty = false) => {
+    formLoadedFromPlacedRef.current = false
     settingPriceFromExternalRef.current = true
     userEditedPriceRef.current = false
     setQty("")
@@ -972,7 +1151,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const notional = parseFloat(qty) * effectivePrice
       const margin = marketType === "futures" ? notional / posSettings.leverage : notional
 
-      addPlacedOrder(activePositionKey, {
+      // Build order object
+      const posSide = effectiveSide === "buy" ? "long" : "short"
+      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
+      const newOrder: ChartPlacedOrder = {
         id,
         side: effectiveSide,
         price: effectivePrice,
@@ -987,11 +1169,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         margin,
         time,
         status: orderType === "market" ? "filled" : "pending",
-      })
+      }
 
-      // Open / merge into live position immediately — virtual position exists as soon as orders are placed
-      const posSide = effectiveSide === "buy" ? "long" : "short"
-      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
+      // Open / merge into live position with the order already included
       openPosition({
         accountId,
         exchangeId,
@@ -1010,7 +1190,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         })(),
         shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
         realSize: 0,
-      })
+      }, [newOrder])
 
       // Market orders execute immediately — simulate fill
       if (orderType === "market") {
@@ -1025,10 +1205,46 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
-    // Keep TP/SL lines visible after order is placed
-    if (noTpSl.tpEnabled || noTpSl.slEnabled) {
+    // Transfer TP/SL from preview into the chart's position TP/SL
+    if (activeChart && (noTpSl.tpEnabled || noTpSl.slEnabled)) {
+      const gSide = effectiveSide === "buy" ? "long" : "short"
+      const miniCfg = {
+        enabled: true, symbol, side: gSide,
+        ordersCount: 1, entryPrice: effectivePrice,
+        topPrice: 0, bottomPrice: 0,
+        totalQuote: parseFloat(qty) * effectivePrice, budgetMode: "quote" as const,
+        leverage: posSettings.leverage,
+        gridType: "arithmetic" as const, entryType: "limit" as const,
+        placementMode: "step_percent" as const,
+        firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
+        direction: "down" as const, qtyMode: "quote" as const,
+        multiplier: 1, multiplierEnabled: false, density: 1,
+        gridMode: "standard" as const,
+        tpEnabled: noTpSl.tpEnabled, tpMode: noTpSl.tpMode,
+        tpPercent: noTpSl.tpPercent, tpClosePercent: noTpSl.tpClosePercent,
+        multiTpEnabled: noTpSl.multiTpEnabled, multiTpCount: noTpSl.multiTpCount,
+        multiTpLevels: noTpSl.multiTpLevels,
+        tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
+        slEnabled: noTpSl.slEnabled, slMode: noTpSl.slMode,
+        slPercent: noTpSl.slPercent, slClosePercent: noTpSl.slClosePercent,
+        trailEnabled: false, trailTriggerPercent: 1,
+        trailLimitPriceEnabled: false, trailLimitPrice: 0,
+        autoEnabled: false, stopOnSl: false, stopNew: false,
+        resetTpEnabled: false, resetTpTriggerLevels: [],
+        defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
+        resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+      }
+      const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
+      const tpLevels = noTpSl.tpEnabled ? (viz.tpLevels ?? []) : []
+      const tpVal = tpLevels[0] ?? null
+      const slVal = noTpSl.slEnabled ? (viz.slPrice ?? null) : null
+      if (tpVal !== null || slVal !== null) {
+        setTpSl(activeChart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
+      }
       noJustPlacedRef.current = true
     }
+    // Clear preview immediately so draft lines don't persist after placement
+    cancelGridPreview(noConsoleId)
     resetFormToNew()
 
     setTimeout(() => {
@@ -1445,7 +1661,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                           <button
                             onMouseDown={stopProp}
                             onClick={() => {
-                              const n = Math.max(1, noTpSl.multiTpCount - 1)
+                              if (noTpSl.multiTpCount <= 1) {
+                                noUpd("tpEnabled", false)
+                                return
+                              }
+                              const n = noTpSl.multiTpCount - 1
                               const lvls = noTpSl.multiTpLevels.slice(0, n)
                               const pcts = _distributeClose(n)
                               noUpd("multiTpCount", n)
@@ -1466,6 +1686,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                               const pcts = _distributeClose(n)
                               noUpd("multiTpCount", n)
                               noUpd("multiTpLevels", lvls.slice(0, n).map((l, i) => ({ ...l, closePercent: pcts[i] })))
+                              if (!noTpSl.tpEnabled) noUpd("tpEnabled", true)
                               if (n > 1) noUpd("multiTpEnabled", true)
                             }}
                             style={{ padding: "0 4px", height: 16, background: "rgba(255,255,255,0.04)", border: "none", color: "rgba(200,214,229,0.55)", cursor: "pointer", fontSize: 10, lineHeight: 1 }}

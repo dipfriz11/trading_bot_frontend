@@ -553,8 +553,9 @@ interface ChartProps {
   onPreviewEntryClose?: GridPreviewOverlayProps["onEntryClose"]
   onPreviewTpSlClose?: GridPreviewOverlayProps["onTpSlClose"]
   tpSl?: ChartTpSl | null
-  onTpSlDragStart?: TpSlOverlayProps["onDragStart"]
-  onTpSlClose?: TpSlOverlayProps["onClose"]
+  tpSlSide?: "long" | "short"
+  onTpSlDragStart?: PlacedTpSlOverlayProps["onDragStart"]
+  onTpSlClose?: PlacedTpSlOverlayProps["onClose"]
   activePosition?: LivePosition | null
   onClosePosition?: () => void
 }
@@ -788,7 +789,7 @@ function GridOrderLine({
   const badgeRightEdge = axisX - 4  // right edge of sell badge
 
   return (
-    <g ref={groupRef} opacity={opacity}>
+    <g ref={groupRef} opacity={opacity} style={{ pointerEvents: "auto" }}>
       {isShort ? (
         <>
           <line x1={padding.left} y1={y} x2={badgeRightEdge - badgeW_SELL - 1} y2={y}
@@ -892,11 +893,11 @@ const SL_COLORS = {
   priceTagFg: "#ffaa44",
 }
 
-// ── Standalone TP/SL overlay ──────────────────────────────────────────────────
-// Renders one TP and one SL line that can be dragged independently.
+// ── Placed TP/SL overlay — uses GridOrderLine (matches grid style) ────────────
 
-interface TpSlOverlayProps {
+interface PlacedTpSlOverlayProps {
   tpSl: ChartTpSl
+  side: "long" | "short"
   width: number
   height: number
   toY: (price: number) => number
@@ -904,149 +905,57 @@ interface TpSlOverlayProps {
   maxPrice: number
   padding: { left: number; right: number; top: number; bottom: number }
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
-  onDragStart: (key: "tp" | "sl", e: React.MouseEvent, minP: number, maxP: number, chartH: number, padTop: number) => void
-  onClose: (key: "tp" | "sl") => void
+  onDragStart?: (key: "tp" | "sl", e: React.MouseEvent, minP: number, maxP: number, chartH: number, padTop: number, tpIndex?: number) => void
+  onClose: (key: "tp" | "sl", tpIndex?: number) => void
 }
 
-function TpSlOverlay({ tpSl, width, height, toY, minPrice, maxPrice, padding, dragHandlers, onDragStart, onClose }: TpSlOverlayProps) {
+function PlacedTpSlOverlay({ tpSl, side, width, height, toY, minPrice, maxPrice, padding, dragHandlers, onDragStart, onClose }: PlacedTpSlOverlayProps) {
   const chartH = height - padding.top - padding.bottom
-  const axisX = width - padding.right
-  const padLeft = padding.left
-  const badgeX = padLeft + 4
-  const PAD = 8; const CLOSE_W = 20; const charW = 5.8
+  const tpColors = side === "long" ? LONG_TP_COLORS : SHORT_TP_COLORS
+
+  const tpLevels = tpSl.tpLevels && tpSl.tpLevels.length > 0
+    ? tpSl.tpLevels
+    : tpSl.tp !== null ? [tpSl.tp] : []
 
   return (
     <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}>
-      {tpSl.tp !== null && (() => {
-        const price = tpSl.tp!
-        const TP_LINE_COLORS = {
-          color: "#1a7a5a", textColor: "#00e5a0",
-          closeBtnColor: "#1a7a5a", closeBtnFg: "#00e5a0",
-          priceTagColor: "#1a7a5a", priceTagFg: "#00e5a0",
-        }
-        const outOfRange = price < minPrice || price > maxPrice
-        const chartTop = padding.top
-        const chartBottom = toY(minPrice)
-        const rawY = toY(price)
-        const y = outOfRange ? (price > maxPrice ? chartTop + 2 : chartBottom - 2) : rawY
-        const label = "TAKE PROFIT"
-        const labelW = PAD + label.length * charW + PAD
-        const badgeW = labelW + CLOSE_W
+      {tpLevels.map((price, idx) => {
+        const totalTp = tpLevels.length
+        const edgeOffset = side === "long" ? totalTp - 1 - idx : idx
+        const label = `TP ${idx + 1}`
         return (
-          <TpSlLine
-            price={price} y={y} label={label}
-            axisX={axisX} badgeX={badgeX} padLeft={padLeft}
-            badgeW={badgeW} labelW={labelW} CLOSE_W={CLOSE_W} PAD={PAD}
-            {...TP_LINE_COLORS}
-            onDragStart={(e) => onDragStart("tp", e, minPrice, maxPrice, chartH, padding.top)}
-            onClose={() => onClose("tp")}
-            registerMove={(fn) => { dragHandlers.current.set("__tp__", fn) }}
-            toYFn={toY}
+          <GridOrderLine
+            key={`placed-tp${idx}`}
+            id={`placed-tp${idx}`}
+            price={price}
+            label={label}
+            side={side}
+            toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+            width={width} padding={padding}
+            isDraft={false} clampToEdge edgeOffset={edgeOffset}
+            {...tpColors}
+            onClose={() => onClose("tp", idx)}
+            onDragStart={(e) => onDragStart?.("tp", e, minPrice, maxPrice, chartH, padding.top, idx)}
+            registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
           />
         )
-      })()}
-      {tpSl.sl !== null && (() => {
-        const price = tpSl.sl!
-        const SL_LINE_COLORS = {
-          color: "#8a4800", textColor: "#ffaa44",
-          closeBtnColor: "#8a4800", closeBtnFg: "#ffaa44",
-          priceTagColor: "#8a4800", priceTagFg: "#ffaa44",
-        }
-        const outOfRange = price < minPrice || price > maxPrice
-        const chartTop = padding.top
-        const chartBottom = toY(minPrice)
-        const rawY = toY(price)
-        const y = outOfRange ? (price > maxPrice ? chartTop + 24 : chartBottom - 24) : rawY
-        const label = "STOP LOSS"
-        const labelW = PAD + label.length * charW + PAD
-        const badgeW = labelW + CLOSE_W
-        return (
-          <TpSlLine
-            price={price} y={y} label={label}
-            axisX={axisX} badgeX={badgeX} padLeft={padLeft}
-            badgeW={badgeW} labelW={labelW} CLOSE_W={CLOSE_W} PAD={PAD}
-            {...SL_LINE_COLORS}
-            onDragStart={(e) => onDragStart("sl", e, minPrice, maxPrice, chartH, padding.top)}
-            onClose={() => onClose("sl")}
-            registerMove={(fn) => { dragHandlers.current.set("__sl__", fn) }}
-            toYFn={toY}
-          />
-        )
-      })()}
+      })}
+      {tpSl.sl !== null && (
+        <GridOrderLine
+          id="placed-sl"
+          price={tpSl.sl}
+          label="STOP LOSS"
+          side={side}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          width={width} padding={padding}
+          isDraft={false} clampToEdge
+          {...SL_COLORS}
+          onClose={() => onClose("sl")}
+          onDragStart={(e) => onDragStart?.("sl", e, minPrice, maxPrice, chartH, padding.top)}
+          registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
+        />
+      )}
     </svg>
-  )
-}
-
-function TpSlLine({ price, y, label, axisX, badgeX, padLeft, badgeW, labelW, CLOSE_W, PAD,
-  color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
-  onDragStart, onClose, registerMove, toYFn,
-}: {
-  price: number; y: number; label: string
-  axisX: number; badgeX: number; padLeft: number; badgeW: number; labelW: number; CLOSE_W: number; PAD: number
-  color: string; textColor: string; closeBtnColor: string; closeBtnFg: string
-  priceTagColor: string; priceTagFg: string
-  onDragStart: (e: React.MouseEvent) => void
-  onClose: () => void
-  registerMove: (fn: (p: number) => void) => void
-  toYFn: (p: number) => number
-}) {
-  const groupRef = useRef<SVGGElement>(null)
-  const renderedYRef = useRef(y)
-  const toYRef = useRef(toYFn)
-  toYRef.current = toYFn
-
-  useEffect(() => {
-    registerMove((newPrice: number) => {
-      const el = groupRef.current
-      if (!el) return
-      const newY = toYRef.current(newPrice)
-      const delta = newY - renderedYRef.current
-      el.setAttribute("transform", `translate(0, ${delta})`)
-    })
-  }, [registerMove])
-
-  useEffect(() => {
-    if (groupRef.current) groupRef.current.removeAttribute("transform")
-    renderedYRef.current = y
-  })
-
-  const axisPriceW = 56
-
-  return (
-    <g ref={groupRef} style={{ pointerEvents: "all" }}>
-      <line x1={padLeft} y1={y} x2={badgeX - 1} y2={y}
-        stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={0.9} />
-      <line x1={badgeX + badgeW + 2} y1={y} x2={axisX - 1} y2={y}
-        stroke={color} strokeWidth={1} strokeDasharray="4,3" opacity={0.9} />
-      <g style={{ cursor: "ns-resize" }} onMouseDown={onDragStart}>
-        <rect x={badgeX} y={y - 10} width={labelW} height={20}
-          fill={`${color}22`} stroke={color} strokeWidth={1} rx={3} />
-        <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={textColor}
-          fontFamily="Geist Variable, monospace" fontWeight="600"
-          style={{ pointerEvents: "none" }}>
-          {label}
-        </text>
-      </g>
-      <g style={{ cursor: "pointer" }} onMouseDown={(e) => { e.stopPropagation(); onClose() }}>
-        <rect x={badgeX + labelW} y={y - 10} width={CLOSE_W} height={20}
-          fill={closeBtnColor} stroke={closeBtnColor} strokeWidth={1} rx={3} />
-        <text x={badgeX + labelW + CLOSE_W / 2} y={y + 4.5}
-          textAnchor="middle" dominantBaseline="middle"
-          fontSize={11} fill={closeBtnFg}
-          fontFamily="Geist Variable, monospace" fontWeight="bold"
-          style={{ pointerEvents: "none" }}>
-          ×
-        </text>
-      </g>
-      <rect x={axisX} y={y - 9} width={axisPriceW} height={18}
-        fill={priceTagColor} rx={2} style={{ pointerEvents: "none" }} />
-      <text x={axisX + axisPriceW / 2} y={y + 4} textAnchor="middle" fontSize={9}
-        fill={priceTagFg}
-        fontFamily="Geist Variable, monospace" fontWeight="bold"
-        style={{ pointerEvents: "none" }}>
-        {formatPrice(price)}
-      </text>
-    </g>
   )
 }
 
@@ -1207,7 +1116,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, tpSlSide, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -1261,9 +1170,9 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
-      {tpSl && onTpSlDragStart && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null) && (
-        <TpSlOverlay
-          tpSl={tpSl} width={width} height={height}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
           toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding} dragHandlers={dragHandlers}
           onDragStart={onTpSlDragStart} onClose={onTpSlClose}
@@ -1351,7 +1260,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, tpSlSide, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -1403,9 +1312,9 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
         dragHandlers={dragHandlers}
       />
-      {tpSl && onTpSlDragStart && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null) && (
-        <TpSlOverlay
-          tpSl={tpSl} width={width} height={height}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
           toY={toY} minPrice={minPrice} maxPrice={maxPrice}
           padding={padding} dragHandlers={dragHandlers}
           onDragStart={onTpSlDragStart} onClose={onTpSlClose}
@@ -1440,6 +1349,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     previewOrders, gridOrders, updateGridPreviewPrice, updateGridPlacedPrice, removeGridTpSl, removeGridPreviewTpSl, removeGridEntry, removeGridPreviewEntry, applyGridTpSl, cancelOrderPreview,
     tpSlOrders, setTpSl,
     setLivePrice,
+    notifyOrderDragEnd,
   } = useTerminal()
 
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -1513,8 +1423,14 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     } else {
       ctxRemovePlaced(positionKey, id)
       localDragHandlers.current.delete(id)
+      // Clear TP/SL lines when the placed order is removed
+      const pos = ctxPositions[positionKey]
+      const remaining = pos?.orders.filter((o) => o.id !== id) ?? []
+      if (remaining.length === 0) {
+        setTpSl(widget.id, { tp: null, sl: null, tpLevels: undefined })
+      }
     }
-  }, [positionKey, ctxRemovePlaced])
+  }, [positionKey, ctxRemovePlaced, ctxPositions, widget.id, setTpSl])
 
   // Tracks whether a drag is currently active (cursor has moved enough to be a drag)
   const isDraggingRef = useRef(false)
@@ -1586,6 +1502,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           setLocalDraft((d) => d ? { ...d, price: finalPrice } : d)
         } else {
           ctxUpdatePrice(positionKey, id, finalPrice)
+          notifyOrderDragEnd(id, finalPrice)
         }
         setIsDraggingOrder(false)
         if (isPlacedOrder) setEditingOrderId(null)
@@ -1603,7 +1520,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId])
+  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId, notifyOrderDragEnd])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {
@@ -1767,12 +1684,21 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     maxP: number,
     chartH: number,
     _padTop: number,
+    tpIndex?: number,
   ) => {
     e.stopPropagation()
     e.preventDefault()
-    const dragKey = key === "tp" ? "__tp__" : "__sl__"
+    const dragKey = key === "tp" ? `placed-tp${tpIndex ?? 0}` : "placed-sl"
     const current = tpSlOrders[widget.id]
-    const startPrice = current?.[key] ?? 0
+    let startPrice: number
+    if (key === "tp") {
+      const levels = current?.tpLevels
+      startPrice = levels && levels.length > 0
+        ? (levels[tpIndex ?? 0] ?? levels[0])
+        : (current?.tp ?? 0)
+    } else {
+      startPrice = current?.sl ?? 0
+    }
     if (!startPrice) return
 
     const startY = e.clientY
@@ -1798,7 +1724,19 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       window.removeEventListener("mouseup", onUp)
       document.body.style.cursor = ""
       if (dragStarted) {
-        setTpSl(widget.id, { [key]: finalPriceRef.current })
+        const newPrice = finalPriceRef.current
+        if (key === "sl") {
+          setTpSl(widget.id, { sl: newPrice })
+        } else {
+          const levels = current?.tpLevels
+          if (levels && levels.length > 1) {
+            const idx = tpIndex ?? 0
+            const newLevels = levels.map((p, i) => i === idx ? newPrice : p)
+            setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
+          } else {
+            setTpSl(widget.id, { tp: newPrice, tpLevels: undefined })
+          }
+        }
       }
     }
 
@@ -1806,9 +1744,19 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     window.addEventListener("mouseup", onUp)
   }, [tpSlOrders, widget.id, setTpSl])
 
-  const handleTpSlClose = useCallback((key: "tp" | "sl") => {
-    setTpSl(widget.id, { [key]: null })
-  }, [widget.id, setTpSl])
+  const handleTpSlClose = useCallback((key: "tp" | "sl", tpIndex?: number) => {
+    if (key === "tp") {
+      const levels = tpSlOrders[widget.id]?.tpLevels
+      if (levels && levels.length > 1 && tpIndex !== undefined) {
+        const newLevels = levels.filter((_, i) => i !== tpIndex)
+        setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
+      } else {
+        setTpSl(widget.id, { tp: null, tpLevels: undefined })
+      }
+    } else {
+      setTpSl(widget.id, { sl: null })
+    }
+  }, [widget.id, setTpSl, tpSlOrders])
 
   const chartTpSl = tpSlOrders[widget.id] ?? null
 
@@ -1901,6 +1849,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
                     tpSl={chartTpSl}
+                    tpSlSide={futuresSide}
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
                     activePosition={ctxPositions[positionKey]?.status === "active" ? ctxPositions[positionKey] : null}
@@ -1929,6 +1878,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     }}
                     onPreviewTpSlClose={(consoleId, target, tpIndex) => removeGridPreviewTpSl(consoleId, target, tpIndex)}
                     tpSl={chartTpSl}
+                    tpSlSide={futuresSide}
                     onTpSlDragStart={handleTpSlDragStart}
                     onTpSlClose={handleTpSlClose}
                     activePosition={ctxPositions[positionKey]?.status === "active" ? ctxPositions[positionKey] : null}

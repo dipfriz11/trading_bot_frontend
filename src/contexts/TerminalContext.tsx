@@ -133,6 +133,7 @@ type PositionsMap = Record<PositionKey, LivePosition>
 export interface ChartTpSl {
   tp: number | null
   sl: number | null
+  tpLevels?: number[]
 }
 type TpSlMap = Record<string, ChartTpSl>
 
@@ -184,7 +185,7 @@ interface TerminalContextValue {
 
   // Live positions (position manager) — orders live inside each position
   positions: PositionsMap
-  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => void
+  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrders?: ChartPlacedOrder[]) => void
   closePosition: (posKey: PositionKey) => void
   partialClosePosition: (posKey: PositionKey, closeSize: number) => void
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
@@ -197,7 +198,7 @@ interface TerminalContextValue {
   gridOrders: GridOrderMap
   gridOrdersRef: React.RefObject<GridOrderMap>
   setGridPreview: (consoleId: string, data: Omit<ChartGridPreview, "consoleId"> | null) => void
-  placeGridOrders: (consoleId: string) => void
+  placeGridOrders: (consoleId: string, directData?: Omit<ChartGridPreview, "consoleId">) => void
   cancelGridOrders: (consoleId: string) => void
   cancelGridPreview: (consoleId: string) => void
   registerOrderPreviewCancelCb: (consoleId: string, cb: () => void) => void
@@ -212,6 +213,12 @@ interface TerminalContextValue {
   removeGridPreviewTpSl: (consoleId: string, target: "tp" | "sl", tpIndex?: number) => void
   removeGridEntry: (consoleId: string, orderId: string) => void
   removeGridPreviewEntry: (consoleId: string, orderId: string) => void
+
+  // Callback fired by ChartWidget when a placed single-order drag ends.
+  // Lets OrderConsoleWidget recalculate TP/SL at the new price.
+  registerOrderDragEndCb: (cb: (orderId: string, newPrice: number) => void) => void
+  unregisterOrderDragEndCb: (cb: (orderId: string, newPrice: number) => void) => void
+  notifyOrderDragEnd: (orderId: string, newPrice: number) => void
 
   // Live prices published by chart widgets (symbol → last close price)
   livePrices: Record<string, number>
@@ -240,7 +247,18 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   positionsRef.current = positions
   balancesRef.current = balances
 
-  const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>({})
+  const [tpSlOrders, setTpSlOrders] = useState<TpSlMap>(() => {
+    try {
+      const raw = localStorage.getItem("tpsl_orders")
+      return raw ? JSON.parse(raw) : {}
+    } catch { return {} }
+  })
+  // Persist tpSlOrders to localStorage on every change
+  const tpSlOrdersRef = useRef(tpSlOrders)
+  tpSlOrdersRef.current = tpSlOrders
+  useEffect(() => {
+    try { localStorage.setItem("tpsl_orders", JSON.stringify(tpSlOrders)) } catch {}
+  }, [tpSlOrders])
   const [livePrices, setLivePricesMap] = useState<Record<string, number>>({})
   const setLivePrice = useCallback((symbol: string, price: number) => {
     setLivePricesMap((prev) => prev[symbol] === price ? prev : { ...prev, [symbol]: price })
@@ -478,11 +496,18 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const pos = positionsRef.current[positionKey]
     if (!pos) return
     const removed = pos.orders.find((o) => o.id === orderId)
+    const remainingOrders = pos.orders.filter((o) => o.id !== orderId)
 
     setPositionsMap((prev) => {
       const p = prev[positionKey]
       if (!p) return prev
-      return { ...prev, [positionKey]: { ...p, orders: p.orders.filter((o) => o.id !== orderId) } }
+      // Auto-close position when its last order is removed
+      if (remainingOrders.length === 0) {
+        const n = { ...prev }
+        delete n[positionKey]
+        return n
+      }
+      return { ...prev, [positionKey]: { ...p, orders: remainingOrders } }
     })
 
     // Sync grid overlay when a grid order is cancelled individually
@@ -555,7 +580,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   // ── Position Manager ─────────────────────────────────────────────────────────
 
-  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => {
+  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrders: ChartPlacedOrder[] = []) => {
     const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     setPositionsMap((prev) => {
       const existing = prev[pk]
@@ -578,6 +603,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             unrealizedPnl: rawPnl,
             unrealizedPnlPct: pnlPct,
             markPrice: pos.markPrice,
+            orders: initialOrders.length > 0 ? [...existing.orders, ...initialOrders] : existing.orders,
           },
         }
       }
@@ -596,7 +622,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           notional,
           unrealizedPnl: rawPnl,
           unrealizedPnlPct: pnlPct,
-          orders: [],
+          orders: initialOrders,
           status: "pending",
           realizedPnl: 0,
           realSize: pos.realSize ?? 0,
@@ -773,8 +799,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  const placeGridOrders = useCallback((consoleId: string) => {
-    const preview = previewOrdersRef.current[consoleId]
+  const placeGridOrders = useCallback((consoleId: string, directData?: Omit<ChartGridPreview, "consoleId">) => {
+    const preview: ChartGridPreview | undefined = directData
+      ? { ...directData, consoleId }
+      : previewOrdersRef.current[consoleId]
     if (!preview) return
 
     const ordersWithIndex = preview.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
@@ -962,6 +990,17 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const orderPreviewCancelCbsRef = useRef<Map<string, () => void>>(new Map())
+
+  const orderDragEndCbsRef = useRef<Set<(orderId: string, newPrice: number) => void>>(new Set())
+  const registerOrderDragEndCb = useCallback((cb: (orderId: string, newPrice: number) => void) => {
+    orderDragEndCbsRef.current.add(cb)
+  }, [])
+  const unregisterOrderDragEndCb = useCallback((cb: (orderId: string, newPrice: number) => void) => {
+    orderDragEndCbsRef.current.delete(cb)
+  }, [])
+  const notifyOrderDragEnd = useCallback((orderId: string, newPrice: number) => {
+    orderDragEndCbsRef.current.forEach((cb) => cb(orderId, newPrice))
+  }, [])
 
   const registerOrderPreviewCancelCb = useCallback((consoleId: string, cb: () => void) => {
     orderPreviewCancelCbsRef.current.set(consoleId, cb)
@@ -1189,6 +1228,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         registerOrderPreviewCancelCb,
         unregisterOrderPreviewCancelCb,
         cancelOrderPreview,
+        registerOrderDragEndCb,
+        unregisterOrderDragEndCb,
+        notifyOrderDragEnd,
         applyGridTpSl,
         updateGridPreviewPrice,
         updateGridPlacedPrice,
