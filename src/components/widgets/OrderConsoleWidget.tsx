@@ -734,8 +734,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastDraftPricePushedRef.current = p
 
-    // Clear simple tpSlOrders to avoid duplicate lines — but only when there is no
-    // existing placed (non-grid) order, otherwise we'd wipe the position's TP/SL lines.
+    // Если уже есть реальный (не-grid) ордер в позиции — TP/SL живут с позицией,
+    // не трогаем их и не рисуем draft-линии поверх.
     const existingPlacedOrder = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).find((o) => o.source !== "grid")
     if (!existingPlacedOrder) {
       setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
@@ -746,9 +746,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
-      tpPrice: viz.tpPrice,
-      slPrice: viz.slPrice,
-      tpLevels: viz.tpLevels,
+      tpPrice: existingPlacedOrder ? null : viz.tpPrice,
+      slPrice: existingPlacedOrder ? null : viz.slPrice,
+      tpLevels: existingPlacedOrder ? [] : viz.tpLevels,
       symbol,
       leverage: posSettings.leverage,
       accountId,
