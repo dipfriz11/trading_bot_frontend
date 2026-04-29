@@ -905,8 +905,8 @@ interface PlacedTpSlOverlayProps {
   maxPrice: number
   padding: { left: number; right: number; top: number; bottom: number }
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
-  onDragStart?: (key: "tp" | "sl", e: React.MouseEvent, minP: number, maxP: number, chartH: number, padTop: number) => void
-  onClose: (key: "tp" | "sl") => void
+  onDragStart?: (key: "tp" | "sl", e: React.MouseEvent, minP: number, maxP: number, chartH: number, padTop: number, tpIndex?: number) => void
+  onClose: (key: "tp" | "sl", tpIndex?: number) => void
 }
 
 function PlacedTpSlOverlay({ tpSl, side, width, height, toY, minPrice, maxPrice, padding, dragHandlers, onDragStart, onClose }: PlacedTpSlOverlayProps) {
@@ -934,8 +934,8 @@ function PlacedTpSlOverlay({ tpSl, side, width, height, toY, minPrice, maxPrice,
             width={width} padding={padding}
             isDraft={false} clampToEdge edgeOffset={edgeOffset}
             {...tpColors}
-            onClose={() => onClose("tp")}
-            onDragStart={(e) => onDragStart?.("tp", e, minPrice, maxPrice, chartH, padding.top)}
+            onClose={() => onClose("tp", idx)}
+            onDragStart={(e) => onDragStart?.("tp", e, minPrice, maxPrice, chartH, padding.top, idx)}
             registerMove={(id, fn) => { dragHandlers.current.set(id, fn) }}
           />
         )
@@ -1676,12 +1676,21 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     maxP: number,
     chartH: number,
     _padTop: number,
+    tpIndex?: number,
   ) => {
     e.stopPropagation()
     e.preventDefault()
-    const dragKey = key === "tp" ? "__tp__" : "__sl__"
+    const dragKey = key === "tp" ? `placed-tp${tpIndex ?? 0}` : "placed-sl"
     const current = tpSlOrders[widget.id]
-    const startPrice = current?.[key] ?? 0
+    let startPrice: number
+    if (key === "tp") {
+      const levels = current?.tpLevels
+      startPrice = levels && levels.length > 0
+        ? (levels[tpIndex ?? 0] ?? levels[0])
+        : (current?.tp ?? 0)
+    } else {
+      startPrice = current?.sl ?? 0
+    }
     if (!startPrice) return
 
     const startY = e.clientY
@@ -1707,7 +1716,19 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       window.removeEventListener("mouseup", onUp)
       document.body.style.cursor = ""
       if (dragStarted) {
-        setTpSl(widget.id, { [key]: finalPriceRef.current })
+        const newPrice = finalPriceRef.current
+        if (key === "sl") {
+          setTpSl(widget.id, { sl: newPrice })
+        } else {
+          const levels = current?.tpLevels
+          if (levels && levels.length > 1) {
+            const idx = tpIndex ?? 0
+            const newLevels = levels.map((p, i) => i === idx ? newPrice : p)
+            setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
+          } else {
+            setTpSl(widget.id, { tp: newPrice, tpLevels: undefined })
+          }
+        }
       }
     }
 
@@ -1715,13 +1736,19 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     window.addEventListener("mouseup", onUp)
   }, [tpSlOrders, widget.id, setTpSl])
 
-  const handleTpSlClose = useCallback((key: "tp" | "sl") => {
+  const handleTpSlClose = useCallback((key: "tp" | "sl", tpIndex?: number) => {
     if (key === "tp") {
-      setTpSl(widget.id, { tp: null, tpLevels: undefined })
+      const levels = tpSlOrders[widget.id]?.tpLevels
+      if (levels && levels.length > 1 && tpIndex !== undefined) {
+        const newLevels = levels.filter((_, i) => i !== tpIndex)
+        setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
+      } else {
+        setTpSl(widget.id, { tp: null, tpLevels: undefined })
+      }
     } else {
       setTpSl(widget.id, { sl: null })
     }
-  }, [widget.id, setTpSl])
+  }, [widget.id, setTpSl, tpSlOrders])
 
   const chartTpSl = tpSlOrders[widget.id] ?? null
 

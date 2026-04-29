@@ -808,6 +808,35 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     setTpSl(activeChart.id, { sl: newSl })
   }, [sl, activeChart?.id])
 
+  // ---- Push noTpSl percent changes to chart lines (placed position mode) ----
+  useEffect(() => {
+    if (!activeChart || noPreviewState) return
+    const pos = ctxPositions[activePositionKey]
+    const entryPrice = pos?.avgEntry ?? 0
+    if (entryPrice <= 0) return
+    const isLong = (pos?.side ?? futuresSide) === "long"
+
+    if (noTpSl.slEnabled && noTpSl.slPercent > 0) {
+      const slPrice = isLong
+        ? entryPrice * (1 - noTpSl.slPercent / 100)
+        : entryPrice * (1 + noTpSl.slPercent / 100)
+      lastSlPushedRef.current = slPrice
+      setTpSl(activeChart.id, { sl: slPrice })
+    }
+
+    if (noTpSl.tpEnabled) {
+      const levels = noTpSl.multiTpEnabled && noTpSl.multiTpLevels.length > 0
+        ? noTpSl.multiTpLevels
+        : [{ tpPercent: noTpSl.tpPercent, closePercent: noTpSl.tpClosePercent }]
+      const tpPrices = levels.map(({ tpPercent }) =>
+        isLong ? entryPrice * (1 + tpPercent / 100) : entryPrice * (1 - tpPercent / 100)
+      )
+      const tpFirst = tpPrices[0] ?? null
+      lastTpPushedRef.current = tpFirst
+      setTpSl(activeChart.id, { tp: tpFirst, tpLevels: tpPrices.length > 1 ? tpPrices : undefined })
+    }
+  }, [noTpSl, activeChart?.id])
+
   // ---- Sync TP/SL form from context (chart drag) ----
   useEffect(() => {
     if (!activeChart) return
@@ -839,6 +868,34 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       setSl("")
       lastSlPushedRef.current = null
       requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+    }
+
+    // ---- Sync noTpSl (TP%/SL% form fields) from placed TP/SL drag ----
+    // Only when there is an active position and no new-order preview (placed lines are visible)
+    if (noPreviewState) return
+    const pos = ctxPositions[activePositionKey]
+    const entryPrice = pos?.avgEntry ?? 0
+    if (entryPrice <= 0) return
+    const isLong = (pos?.side ?? futuresSide) === "long"
+
+    if (ctxSl !== null && (lastSlPushedRef.current === null || Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)) > threshold(ctxSl))) {
+      const newPct = isLong ? (1 - ctxSl / entryPrice) * 100 : (ctxSl / entryPrice - 1) * 100
+      noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
+    }
+
+    const ctxTpLevels = tpsl?.tpLevels
+    if (ctxTpLevels && ctxTpLevels.length > 0) {
+      const newLevels = ctxTpLevels.map((price, i) => {
+        const pct = isLong ? (price / entryPrice - 1) * 100 : (1 - price / entryPrice) * 100
+        return {
+          tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+          closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / ctxTpLevels.length),
+        }
+      })
+      setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1, tpEnabled: true }))
+    } else if (ctxTp !== null && (lastTpPushedRef.current === null || Math.abs(ctxTp - (lastTpPushedRef.current ?? 0)) > threshold(ctxTp))) {
+      const pct = isLong ? (ctxTp / entryPrice - 1) * 100 : (1 - ctxTp / entryPrice) * 100
+      noUpd("tpPercent", Math.max(0.01, Math.round(pct * 100) / 100))
     }
   }, [tpSlOrders, activeChart?.id])
 
