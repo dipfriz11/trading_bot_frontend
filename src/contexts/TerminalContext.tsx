@@ -185,7 +185,7 @@ interface TerminalContextValue {
 
   // Live positions (position manager) — orders live inside each position
   positions: PositionsMap
-  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrders?: ChartPlacedOrder[]) => void
+  openPosition: (pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => void
   closePosition: (posKey: PositionKey) => void
   partialClosePosition: (posKey: PositionKey, closeSize: number) => void
   updatePositionMark: (posKey: PositionKey, markPrice: number) => void
@@ -556,7 +556,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   // ── Position Manager ─────────────────────────────────────────────────────────
 
-  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">, initialOrders: ChartPlacedOrder[] = []) => {
+  const openPosition = useCallback((pos: Omit<LivePosition, "unrealizedPnl" | "unrealizedPnlPct" | "notional" | "orders" | "status" | "realizedPnl">) => {
     const pk = posKey(pos.accountId, pos.exchangeId, pos.marketType, pos.symbol, pos.side)
     setPositionsMap((prev) => {
       const existing = prev[pk]
@@ -579,7 +579,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             unrealizedPnl: rawPnl,
             unrealizedPnlPct: pnlPct,
             markPrice: pos.markPrice,
-            orders: initialOrders.length > 0 ? [...existing.orders, ...initialOrders] : existing.orders,
           },
         }
       }
@@ -598,7 +597,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           notional,
           unrealizedPnl: rawPnl,
           unrealizedPnlPct: pnlPct,
-          orders: initialOrders,
+          orders: [],
           status: "pending",
           realizedPnl: 0,
           realSize: pos.realSize ?? 0,
