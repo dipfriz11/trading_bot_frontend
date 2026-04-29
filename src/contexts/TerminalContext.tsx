@@ -200,6 +200,9 @@ interface TerminalContextValue {
   placeGridOrders: (consoleId: string) => void
   cancelGridOrders: (consoleId: string) => void
   cancelGridPreview: (consoleId: string) => void
+  registerOrderPreviewCancelCb: (consoleId: string, cb: () => void) => void
+  unregisterOrderPreviewCancelCb: (consoleId: string) => void
+  cancelOrderPreview: (consoleId: string) => void
   applyGridTpSl: (consoleId: string, patch: { tpPrice?: number | null; slPrice?: number | null; tpLevels?: number[] }) => void
   updateGridPreviewPrice: (consoleId: string, orderId: string, newPrice: number) => void
   updateGridPlacedPrice: (consoleId: string, orderId: string, newPrice: number) => void
@@ -958,6 +961,22 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const orderPreviewCancelCbsRef = useRef<Map<string, () => void>>(new Map())
+
+  const registerOrderPreviewCancelCb = useCallback((consoleId: string, cb: () => void) => {
+    orderPreviewCancelCbsRef.current.set(consoleId, cb)
+  }, [])
+
+  const unregisterOrderPreviewCancelCb = useCallback((consoleId: string) => {
+    orderPreviewCancelCbsRef.current.delete(consoleId)
+  }, [])
+
+  const cancelOrderPreview = useCallback((consoleId: string) => {
+    const cb = orderPreviewCancelCbsRef.current.get(consoleId)
+    if (cb) cb()
+    else cancelGridPreview(consoleId)
+  }, [cancelGridPreview])
+
   const removeGridPreviewEntry = useCallback((consoleId: string, orderId: string) => {
     setPreviewOrdersMap((prev) => {
       const entry = prev[consoleId]
@@ -1167,6 +1186,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         placeGridOrders,
         cancelGridOrders,
         cancelGridPreview,
+        registerOrderPreviewCancelCb,
+        unregisterOrderPreviewCancelCb,
+        cancelOrderPreview,
         applyGridTpSl,
         updateGridPreviewPrice,
         updateGridPlacedPrice,
