@@ -1012,8 +1012,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           return { ...prev, tpPercent: rounded, tpEnabled: true }
         })
       }
-    } else {
-      console.log("[BACK-CALC] TP echo — skip (matches lastPushed)")
     }
   }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
 
