@@ -1001,6 +1001,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const orders = pos?.orders ?? []
     // Key encodes both which orders exist and their prices (drag updates price, not composition)
     const ordersKey = orders.map((o) => `${o.id}:${o.price}`).sort().join(",")
+    if (import.meta.env.DEV) console.log(`[reanchor] ordersKey changed:\n  prev="${prevOrdersKeyRef.current}"\n  new="${ordersKey}"`)
     if (ordersKey === prevOrdersKeyRef.current) return
     prevOrdersKeyRef.current = ordersKey
 
@@ -1024,6 +1025,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       ? isLong ? slBase * (1 - curTpSl.slPercent / 100) : slBase * (1 + curTpSl.slPercent / 100)
       : null
 
+    if (import.meta.env.DEV) console.log(`[reanchor] pushing setTpSl chartId=${activeChart.id} tp=${newTp} sl=${newSl} tpLevels=${JSON.stringify(tpLevels)}`)
     lastTpPushedRef.current = newTp
     lastSlPushedRef.current = newSl
     setTpSl(activeChart.id, { tp: newTp, sl: newSl, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
