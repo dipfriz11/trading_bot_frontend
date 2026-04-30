@@ -1766,7 +1766,14 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     }
   }, [widget.id, setTpSl, tpSlOrders])
 
-  const chartTpSl = tpSlOrders[widget.id] ?? null
+  const rawChartTpSl = tpSlOrders[widget.id] ?? null
+
+  // PlacedTpSlOverlay must be suppressed when the position consists only of grid orders,
+  // because those orders already render their own TP/SL via GridOrdersOverlay.
+  // Only show chartTpSl (PlacedTpSlOverlay) when at least one non-grid order exists.
+  const positionOrders = ctxPositions[positionKey]?.orders ?? []
+  const hasNonGridOrder = positionOrders.some((o) => o.source !== "grid")
+  const chartTpSl = hasNonGridOrder ? rawChartTpSl : null
 
   // DEBUG: log what TP/SL layers are active each render
   if (import.meta.env.DEV) {
