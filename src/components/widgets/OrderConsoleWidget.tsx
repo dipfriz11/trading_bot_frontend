@@ -475,9 +475,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const settingTpSlFromContextRef = useRef(false)
   const lastTpPushedRef = useRef<number | null>(null)
   const lastSlPushedRef = useRef<number | null>(null)
-  // Prevents noTpSl % ↔ tpSlOrders abs echo-loop for placed orders
-  const settingPlacedTpSlFromDragRef = useRef(false)
-  const settingPlacedTpSlFromFormRef = useRef(false)
+  // Key of tpLevels array last pushed by form → chart (JSON string for deep comparison)
+  const lastTpLevelsPushedKeyRef = useRef<string>("")
 
   // Init price on symbol/activeChart change — runs once per chart focus
   const initialisedKeyRef = useRef<string>("")
@@ -934,61 +933,82 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // ---- Placed TP/SL sync: chart drag → % form ----
   // When user drags a placed TP/SL line, tpSlOrders changes.
-  // Recalculate noTpSl percentages using position anchors (all orders, any source).
+  // Uses value-based echo detection: if incoming value matches what we last pushed, skip (our own echo).
+  // If it differs, it's a real drag — update form and clear lastPushed so form can push back correctly.
   useEffect(() => {
     if (!activeChart) return
-    if (settingPlacedTpSlFromFormRef.current) return
     const tpsl = tpSlOrders[activeChart.id]
     const pos = ctxPositions[activePositionKey]
     if (!pos || pos.orders.length === 0) return
 
-    // Use anchors for reference prices — covers both Order and Grid orders
     const anchors = getPositionAnchors(pos.orders, futuresSide)
     if (!anchors) return
 
     const isLong = futuresSide === "long"
-    // For back-calculating SL %: use the same base the form would use to push SL
     const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
     const tpBase = anchors.firstOrder
 
-    settingPlacedTpSlFromDragRef.current = true
-
-    if (tpsl?.sl != null && tpsl.sl > 0 && slBase > 0) {
+    // SL: check if incoming value differs from what we last pushed
+    const incomingSl = tpsl?.sl ?? null
+    if (incomingSl === null || incomingSl === 0) {
+      // Line was removed (X clicked) — clear form if we didn't push null ourselves
+      if (lastSlPushedRef.current !== null && lastSlPushedRef.current !== 0) {
+        lastSlPushedRef.current = null
+        setNoTpSl((prev) => prev.slEnabled ? { ...prev, slEnabled: false } : prev)
+      }
+    } else if (slBase > 0 && Math.abs((incomingSl - (lastSlPushedRef.current ?? 0))) > 0.0001) {
+      // Real drag — update % form
       const slPct = isLong
-        ? (1 - tpsl.sl / slBase) * 100
-        : (tpsl.sl / slBase - 1) * 100
+        ? (1 - incomingSl / slBase) * 100
+        : (incomingSl / slBase - 1) * 100
       const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
+      lastSlPushedRef.current = incomingSl
       setNoTpSl((prev) => {
         if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
         return { ...prev, slPercent: rounded, slEnabled: true }
       })
     }
 
-    if (tpsl?.tp != null && tpsl.tp > 0 && tpBase > 0) {
-      const tpPct = isLong
-        ? (tpsl.tp / tpBase - 1) * 100
-        : (1 - tpsl.tp / tpBase) * 100
-      const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
-      setNoTpSl((prev) => {
-        if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
-        return { ...prev, tpPercent: rounded, tpEnabled: true }
-      })
-    }
+    // TP single: check if incoming value differs from what we last pushed
+    const incomingTp = tpsl?.tp ?? null
+    const incomingTpLevels = tpsl?.tpLevels ?? null
+    if (incomingTp === null || incomingTp === 0) {
+      // Line was removed — clear form if we didn't push null ourselves
+      if (lastTpPushedRef.current !== null && lastTpPushedRef.current !== 0) {
+        lastTpPushedRef.current = null
+        lastTpLevelsPushedKeyRef.current = ""
+        setNoTpSl((prev) => prev.tpEnabled ? { ...prev, tpEnabled: false } : prev)
+      }
+    } else if (tpBase > 0 && Math.abs((incomingTp - (lastTpPushedRef.current ?? 0))) > 0.0001) {
+      // Real drag on TP — update % form
+      lastTpPushedRef.current = incomingTp
 
-    if (tpsl?.tpLevels != null && tpsl.tpLevels.length > 0 && tpBase > 0) {
-      const newLevels = tpsl.tpLevels.map((lvlPrice, i) => {
-        const pct = isLong
-          ? (lvlPrice / tpBase - 1) * 100
-          : (1 - lvlPrice / tpBase) * 100
-        return {
-          tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
-          closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / tpsl.tpLevels!.length),
+      if (incomingTpLevels != null && incomingTpLevels.length > 0) {
+        const newLevelsKey = incomingTpLevels.map((p) => Math.round(p * 100)).join(",")
+        if (newLevelsKey !== lastTpLevelsPushedKeyRef.current) {
+          lastTpLevelsPushedKeyRef.current = newLevelsKey
+          const newLevels = incomingTpLevels.map((lvlPrice, i) => {
+            const pct = isLong
+              ? (lvlPrice / tpBase - 1) * 100
+              : (1 - lvlPrice / tpBase) * 100
+            return {
+              tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
+              closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / incomingTpLevels.length),
+            }
+          })
+          setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
         }
-      })
-      setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
+      } else {
+        const tpPct = isLong
+          ? (incomingTp / tpBase - 1) * 100
+          : (1 - incomingTp / tpBase) * 100
+        const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
+        setNoTpSl((prev) => {
+          if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
+          return { ...prev, tpPercent: rounded, tpEnabled: true }
+        })
+      }
     }
-
-    requestAnimationFrame(() => { settingPlacedTpSlFromDragRef.current = false })
   }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
 
   // ---- Reanchor TP/SL when position order composition changes (add/remove orders) ----
@@ -1031,22 +1051,17 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // ---- Placed TP/SL sync: % form → chart ----
   // When user changes slPercent / tpPercent in the form, push new absolute price to tpSlOrders.
-  // Runs when any orders exist in the position (from Order or Grid tab).
+  // Uses value-based echo detection: computes new values, skips push if nothing changed vs lastPushed.
   useEffect(() => {
     if (!activeChart) return
-    if (settingPlacedTpSlFromDragRef.current) return
     const pos = ctxPositions[activePositionKey]
     if (!pos || pos.orders.length === 0) return
 
-    // Use position anchors — covers all orders regardless of source (Order or Grid)
     const anchors = getPositionAnchors(pos.orders, futuresSide)
     if (!anchors) return
 
     const isLong = futuresSide === "long"
 
-    settingPlacedTpSlFromFormRef.current = true
-
-    // SL reference depends on mode: extreme_order uses furthest price, avg_entry uses avg
     const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
     const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
       ? isLong
@@ -1054,7 +1069,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         : slBase * (1 + noTpSl.slPercent / 100)
       : null
 
-    // TP reference is always firstOrder (best order in TP direction)
     const tpBase = anchors.firstOrder
     const tpLevels = noTpSl.tpEnabled
       ? (noTpSl.multiTpEnabled ? noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount) : [{ tpPercent: noTpSl.tpPercent }]).map((lvl) =>
@@ -1064,16 +1078,24 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         )
       : []
     const newTp = tpLevels[0] ?? null
+    const newTpLevelsKey = tpLevels.length > 1 ? tpLevels.map((p) => Math.round(p * 100)).join(",") : ""
+
+    // Skip if nothing changed vs what was last pushed (avoids echo-looping back from back-calc)
+    const slUnchanged = newSl === lastSlPushedRef.current ||
+      (newSl !== null && lastSlPushedRef.current !== null && Math.abs(newSl - lastSlPushedRef.current) < 0.0001)
+    const tpUnchanged = newTp === lastTpPushedRef.current ||
+      (newTp !== null && lastTpPushedRef.current !== null && Math.abs(newTp - lastTpPushedRef.current) < 0.0001)
+    const tpLevelsUnchanged = newTpLevelsKey === lastTpLevelsPushedKeyRef.current
+    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) return
 
     lastTpPushedRef.current = newTp
     lastSlPushedRef.current = newSl
+    lastTpLevelsPushedKeyRef.current = newTpLevelsKey
     setTpSl(activeChart.id, {
       tp: newTp,
       sl: newSl,
       tpLevels: tpLevels.length > 1 ? tpLevels : undefined,
     })
-
-    requestAnimationFrame(() => { settingPlacedTpSlFromFormRef.current = false })
   }, [noTpSl, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
 
   // Reset TP/SL refs on chart switch and push current form values to new chart immediately
@@ -1081,6 +1103,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastTpPushedRef.current = null
     lastSlPushedRef.current = null
+    lastTpLevelsPushedKeyRef.current = ""
     if (!activeChart?.id) return
     // Immediately push current form values to the new chart to override any stale tpSl stored there
     const tpNum = parseFloat(tp)
