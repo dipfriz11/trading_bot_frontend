@@ -991,6 +991,44 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     requestAnimationFrame(() => { settingPlacedTpSlFromDragRef.current = false })
   }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
 
+  // ---- Reanchor TP/SL when position order composition changes (add/remove orders) ----
+  // Tracks the set of order ids+prices in the position. When it changes (order added or removed),
+  // recalculates TP/SL absolute prices using the updated anchors and current noTpSl percentages.
+  const prevOrdersKeyRef = useRef<string>("")
+  useEffect(() => {
+    if (!activeChart) return
+    const pos = ctxPositions[activePositionKey]
+    const orders = pos?.orders ?? []
+    // Key encodes both which orders exist and their prices (drag updates price, not composition)
+    const ordersKey = orders.map((o) => `${o.id}:${o.price}`).sort().join(",")
+    if (ordersKey === prevOrdersKeyRef.current) return
+    prevOrdersKeyRef.current = ordersKey
+
+    if (orders.length === 0) return
+
+    const anchors = getPositionAnchors(orders, futuresSide)
+    if (!anchors) return
+
+    const isLong = futuresSide === "long"
+    const slBase = noTpSlRef.current.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+    const tpBase = anchors.firstOrder
+    const curTpSl = noTpSlRef.current
+
+    const tpLevels = curTpSl.tpEnabled
+      ? (curTpSl.multiTpEnabled ? curTpSl.multiTpLevels.slice(0, curTpSl.multiTpCount) : [{ tpPercent: curTpSl.tpPercent }]).map((lvl) =>
+          isLong ? tpBase * (1 + lvl.tpPercent / 100) : tpBase * (1 - lvl.tpPercent / 100)
+        )
+      : []
+    const newTp = tpLevels[0] ?? null
+    const newSl = curTpSl.slEnabled && curTpSl.slPercent > 0
+      ? isLong ? slBase * (1 - curTpSl.slPercent / 100) : slBase * (1 + curTpSl.slPercent / 100)
+      : null
+
+    lastTpPushedRef.current = newTp
+    lastSlPushedRef.current = newSl
+    setTpSl(activeChart.id, { tp: newTp, sl: newSl, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
+  }, [ctxPositions, activePositionKey, activeChart?.id, futuresSide])
+
   // ---- Placed TP/SL sync: % form → chart ----
   // When user changes slPercent / tpPercent in the form, push new absolute price to tpSlOrders.
   // Runs when any orders exist in the position (from Order or Grid tab).
