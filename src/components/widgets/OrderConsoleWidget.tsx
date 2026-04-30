@@ -6,6 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
+import { getPositionAnchors } from "@/lib/position-anchors"
 import { useTerminal, useGridPreviewEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
@@ -734,10 +735,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     lastDraftPricePushedRef.current = p
 
-    // Если уже есть реальный (не-grid) ордер в позиции — TP/SL живут с позицией,
-    // не трогаем их и не рисуем draft-линии поверх.
-    const existingPlacedOrder = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).find((o) => o.source !== "grid")
-    if (!existingPlacedOrder) {
+    // Если уже есть виртуальная позиция по этому символу (ордера из любого источника —
+    // Order или Grid) — TP/SL принадлежат позиции целиком, не рисуем draft-линии поверх.
+    const positionHasOrders = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).length > 0
+    if (!positionHasOrders) {
       setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
     }
 
@@ -746,9 +747,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       source: "order",
       side: gSide,
       orders: [{ id: noOrderIdRef.current, price: p, qty: qtyNum }],
-      tpPrice: existingPlacedOrder ? null : viz.tpPrice,
-      slPrice: existingPlacedOrder ? null : viz.slPrice,
-      tpLevels: existingPlacedOrder ? [] : viz.tpLevels,
+      tpPrice: positionHasOrders ? null : viz.tpPrice,
+      slPrice: positionHasOrders ? null : viz.slPrice,
+      tpLevels: positionHasOrders ? [] : viz.tpLevels,
       symbol,
       leverage: posSettings.leverage,
       accountId,
@@ -933,23 +934,29 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // ---- Placed TP/SL sync: chart drag → % form ----
   // When user drags a placed TP/SL line, tpSlOrders changes.
-  // Recalculate noTpSl percentages from the new absolute price and entry price.
+  // Recalculate noTpSl percentages using position anchors (all orders, any source).
   useEffect(() => {
     if (!activeChart) return
     if (settingPlacedTpSlFromFormRef.current) return
     const tpsl = tpSlOrders[activeChart.id]
     const pos = ctxPositions[activePositionKey]
-    const entryOrder = pos?.orders.find((o) => o.source !== "grid")
-    const entryPrice = entryOrder?.price ?? pos?.avgEntry
-    if (!entryPrice || entryPrice <= 0) return
+    if (!pos || pos.orders.length === 0) return
+
+    // Use anchors for reference prices — covers both Order and Grid orders
+    const anchors = getPositionAnchors(pos.orders, futuresSide)
+    if (!anchors) return
+
     const isLong = futuresSide === "long"
+    // For back-calculating SL %: use the same base the form would use to push SL
+    const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+    const tpBase = anchors.firstOrder
 
     settingPlacedTpSlFromDragRef.current = true
 
-    if (tpsl?.sl != null && tpsl.sl > 0) {
+    if (tpsl?.sl != null && tpsl.sl > 0 && slBase > 0) {
       const slPct = isLong
-        ? (1 - tpsl.sl / entryPrice) * 100
-        : (tpsl.sl / entryPrice - 1) * 100
+        ? (1 - tpsl.sl / slBase) * 100
+        : (tpsl.sl / slBase - 1) * 100
       const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
       setNoTpSl((prev) => {
         if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
@@ -957,10 +964,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       })
     }
 
-    if (tpsl?.tp != null && tpsl.tp > 0) {
+    if (tpsl?.tp != null && tpsl.tp > 0 && tpBase > 0) {
       const tpPct = isLong
-        ? (tpsl.tp / entryPrice - 1) * 100
-        : (1 - tpsl.tp / entryPrice) * 100
+        ? (tpsl.tp / tpBase - 1) * 100
+        : (1 - tpsl.tp / tpBase) * 100
       const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
       setNoTpSl((prev) => {
         if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
@@ -968,11 +975,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       })
     }
 
-    if (tpsl?.tpLevels != null && tpsl.tpLevels.length > 0) {
+    if (tpsl?.tpLevels != null && tpsl.tpLevels.length > 0 && tpBase > 0) {
       const newLevels = tpsl.tpLevels.map((lvlPrice, i) => {
         const pct = isLong
-          ? (lvlPrice / entryPrice - 1) * 100
-          : (1 - lvlPrice / entryPrice) * 100
+          ? (lvlPrice / tpBase - 1) * 100
+          : (1 - lvlPrice / tpBase) * 100
         return {
           tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
           closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / tpsl.tpLevels!.length),
@@ -986,30 +993,36 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
   // ---- Placed TP/SL sync: % form → chart ----
   // When user changes slPercent / tpPercent in the form, push new absolute price to tpSlOrders.
-  // Only runs when a non-grid placed order exists (otherwise noPreviewEffect handles it).
+  // Runs when any orders exist in the position (from Order or Grid tab).
   useEffect(() => {
     if (!activeChart) return
     if (settingPlacedTpSlFromDragRef.current) return
     const pos = ctxPositions[activePositionKey]
-    const entryOrder = pos?.orders.find((o) => o.source !== "grid")
-    const entryPrice = entryOrder?.price ?? pos?.avgEntry
-    // Only sync when there is an actual placed single order — draft preview has its own flow
-    if (!entryOrder || !entryPrice || entryPrice <= 0) return
+    if (!pos || pos.orders.length === 0) return
+
+    // Use position anchors — covers all orders regardless of source (Order or Grid)
+    const anchors = getPositionAnchors(pos.orders, futuresSide)
+    if (!anchors) return
+
     const isLong = futuresSide === "long"
 
     settingPlacedTpSlFromFormRef.current = true
 
+    // SL reference depends on mode: extreme_order uses furthest price, avg_entry uses avg
+    const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
     const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
       ? isLong
-        ? entryPrice * (1 - noTpSl.slPercent / 100)
-        : entryPrice * (1 + noTpSl.slPercent / 100)
+        ? slBase * (1 - noTpSl.slPercent / 100)
+        : slBase * (1 + noTpSl.slPercent / 100)
       : null
 
+    // TP reference is always firstOrder (best order in TP direction)
+    const tpBase = anchors.firstOrder
     const tpLevels = noTpSl.tpEnabled
       ? (noTpSl.multiTpEnabled ? noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount) : [{ tpPercent: noTpSl.tpPercent }]).map((lvl) =>
           isLong
-            ? entryPrice * (1 + lvl.tpPercent / 100)
-            : entryPrice * (1 - lvl.tpPercent / 100)
+            ? tpBase * (1 + lvl.tpPercent / 100)
+            : tpBase * (1 - lvl.tpPercent / 100)
         )
       : []
     const newTp = tpLevels[0] ?? null
@@ -1216,39 +1229,53 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
-    // Transfer TP/SL from preview into the chart's position TP/SL
+    // Transfer TP/SL from preview into the chart's position TP/SL.
+    // If the position already has orders, recalculate anchors across all orders + the new one
+    // so that TP/SL reflect the full virtual position, not just this single order.
     if (activeChart && (noTpSl.tpEnabled || noTpSl.slEnabled)) {
       const gSide = effectiveSide === "buy" ? "long" : "short"
-      const miniCfg = {
-        enabled: true, symbol, side: gSide,
-        ordersCount: 1, entryPrice: effectivePrice,
-        topPrice: 0, bottomPrice: 0,
-        totalQuote: parseFloat(qty) * effectivePrice, budgetMode: "quote" as const,
-        leverage: posSettings.leverage,
-        gridType: "arithmetic" as const, entryType: "limit" as const,
-        placementMode: "step_percent" as const,
-        firstOffsetPercent: 0, stepPercent: 1, lastOffsetPercent: 0,
-        direction: "down" as const, qtyMode: "quote" as const,
-        multiplier: 1, multiplierEnabled: false, density: 1,
-        gridMode: "standard" as const,
-        tpEnabled: noTpSl.tpEnabled, tpMode: noTpSl.tpMode,
-        tpPercent: noTpSl.tpPercent, tpClosePercent: noTpSl.tpClosePercent,
-        multiTpEnabled: noTpSl.multiTpEnabled, multiTpCount: noTpSl.multiTpCount,
-        multiTpLevels: noTpSl.multiTpLevels,
-        tpRepositionEnabled: false, perLevelTpEnabled: false, perLevelTpGroups: [],
-        slEnabled: noTpSl.slEnabled, slMode: noTpSl.slMode,
-        slPercent: noTpSl.slPercent, slClosePercent: noTpSl.slClosePercent,
-        trailEnabled: false, trailTriggerPercent: 1,
-        trailLimitPriceEnabled: false, trailLimitPrice: 0,
-        autoEnabled: false, stopOnSl: false, stopNew: false,
-        resetTpEnabled: false, resetTpTriggerLevels: [],
-        defaultResetTpPercent: 1, defaultResetTpClosePercent: 100,
-        resetTpRebuildTail: false, resetTpPerLevelEnabled: false, resetTpPerLevelSettings: [],
+      const isLong = gSide === "long"
+      const existingPos = ctxPositionsRef.current[activePositionKey]
+      const existingOrders = existingPos?.orders ?? []
+
+      // Build combined order list: existing position orders + new order
+      const combinedOrders = [
+        ...existingOrders,
+        { price: effectivePrice, qty: parseFloat(qty) },
+      ]
+      const anchors = getPositionAnchors(combinedOrders, gSide)
+
+      let tpVal: number | null = null
+      let tpLevels: number[] = []
+      let slVal: number | null = null
+
+      if (anchors) {
+        const tpBase = anchors.firstOrder
+        const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+
+        if (noTpSl.tpEnabled) {
+          if (noTpSl.multiTpEnabled && noTpSl.multiTpLevels.length > 0) {
+            tpLevels = noTpSl.multiTpLevels.slice(0, noTpSl.multiTpCount).map((lvl) =>
+              isLong
+                ? tpBase * (1 + lvl.tpPercent / 100)
+                : tpBase * (1 - lvl.tpPercent / 100)
+            )
+          } else {
+            const tpPrice = isLong
+              ? tpBase * (1 + noTpSl.tpPercent / 100)
+              : tpBase * (1 - noTpSl.tpPercent / 100)
+            tpLevels = [tpPrice]
+          }
+          tpVal = tpLevels[0] ?? null
+        }
+
+        if (noTpSl.slEnabled && noTpSl.slPercent > 0) {
+          slVal = isLong
+            ? slBase * (1 - noTpSl.slPercent / 100)
+            : slBase * (1 + noTpSl.slPercent / 100)
+        }
       }
-      const viz = calcGridVisualization(miniCfg as unknown as Parameters<typeof calcGridVisualization>[0])
-      const tpLevels = noTpSl.tpEnabled ? (viz.tpLevels ?? []) : []
-      const tpVal = tpLevels[0] ?? null
-      const slVal = noTpSl.slEnabled ? (viz.slPrice ?? null) : null
+
       if (tpVal !== null || slVal !== null) {
         setTpSl(activeChart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
       }

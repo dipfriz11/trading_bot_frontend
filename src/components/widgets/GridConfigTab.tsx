@@ -1395,11 +1395,18 @@ export const GridConfigTab = memo(function GridConfigTab({
         return
       }
 
+      // Prefer anchors from the full virtual position (includes single orders + all grids).
+      const livePos = accountId && exchangeId && marketType && mergedCfg.symbol && side
+        ? positions[posKey(accountId, exchangeId, marketType, mergedCfg.symbol, side)]
+        : undefined
+      const posAnchors = livePos ? getPositionAnchors(livePos.orders, side) : null
+
       const firstOrders = allSlotPrices.map((p) => p[0])
-      const bestFirstOrder = isLong ? Math.max(...firstOrders) : Math.min(...firstOrders)
       const allPrices = allSlotPrices.flat()
-      const extremeForSl = isLong ? Math.min(...allPrices) : Math.max(...allPrices)
-      const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+
+      const bestFirstOrder = posAnchors?.firstOrder ?? (isLong ? Math.max(...firstOrders) : Math.min(...firstOrders))
+      const extremeForSl = posAnchors?.extremeOrder ?? (isLong ? Math.min(...allPrices) : Math.max(...allPrices))
+      const avgEntryAll = posAnchors?.avgEntry ?? (allPrices.reduce((s, p) => s + p, 0) / allPrices.length)
 
       let tpPrice: number | null = null
       let tpLevels: number[] = []
