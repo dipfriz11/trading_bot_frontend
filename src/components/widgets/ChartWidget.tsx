@@ -1139,14 +1139,6 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
   return (
     <div style={{ position: "relative", width, height }}>
       <CandlestickChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
-        <PlacedTpSlOverlay
-          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding} dragHandlers={dragHandlers}
-          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
-        />
-      )}
       {activePosition && (
         <PositionLine
           position={activePosition}
@@ -1193,6 +1185,14 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
           onClose={onPreviewClose}
           onEntryClose={onPreviewEntryClose}
           onTpSlClose={onPreviewTpSlClose}
+        />
+      )}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding} dragHandlers={dragHandlers}
+          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
         />
       )}
     </div>
@@ -1281,14 +1281,6 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
   return (
     <div style={{ position: "relative", width, height }}>
       <LineChartBody candles={candles} width={width} height={height} onBackgroundClick={onBackgroundClick} />
-      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
-        <PlacedTpSlOverlay
-          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
-          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
-          padding={padding} dragHandlers={dragHandlers}
-          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
-        />
-      )}
       {activePosition && (
         <PositionLine
           position={activePosition}
@@ -1335,6 +1327,14 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
           onClose={onPreviewClose}
           onEntryClose={onPreviewEntryClose}
           onTpSlClose={onPreviewTpSlClose}
+        />
+      )}
+      {tpSl && onTpSlClose && (tpSl.tp !== null || tpSl.sl !== null || (tpSl.tpLevels && tpSl.tpLevels.length > 0)) && (
+        <PlacedTpSlOverlay
+          tpSl={tpSl} side={tpSlSide ?? "long"} width={width} height={height}
+          toY={toY} minPrice={minPrice} maxPrice={maxPrice}
+          padding={padding} dragHandlers={dragHandlers}
+          onDragStart={onTpSlDragStart} onClose={onTpSlClose}
         />
       )}
     </div>

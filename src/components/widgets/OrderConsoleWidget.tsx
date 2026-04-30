@@ -974,7 +974,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       } else {
         console.log("[BACK-CALC] SL null — we pushed it, skip")
       }
-    } else if (slBase > 0 && Math.abs((incomingSl - (lastPlacedSlPushedRef.current ?? 0))) > 0.0001) {
+    } else if (slBase > 0 && Math.abs((incomingSl - (lastPlacedSlPushedRef.current ?? 0))) > 0.01) {
       // Real drag — update % form
       const slPct = isLong
         ? (1 - incomingSl / slBase) * 100
@@ -1004,7 +1004,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       } else {
         console.log("[BACK-CALC] TP null — we pushed it, skip")
       }
-    } else if (tpBase > 0 && Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.0001) {
+    } else if (tpBase > 0 && Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.01) {
       // Real drag on TP — update % form
       console.log("[BACK-CALC] TP drag detected → updating tpPercent")
       lastPlacedTpPushedRef.current = incomingTp
@@ -1111,9 +1111,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     // Skip if nothing changed vs what was last pushed (avoids echo-looping back from back-calc)
     const slUnchanged = newSl === lastPlacedSlPushedRef.current ||
-      (newSl !== null && lastPlacedSlPushedRef.current !== null && Math.abs(newSl - lastPlacedSlPushedRef.current) < 0.0001)
+      (newSl !== null && lastPlacedSlPushedRef.current !== null && Math.abs(newSl - lastPlacedSlPushedRef.current) < 0.01)
     const tpUnchanged = newTp === lastPlacedTpPushedRef.current ||
-      (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.0001)
+      (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.01)
     const tpLevelsUnchanged = newTpLevelsKey === lastTpLevelsPushedKeyRef.current
 
     console.log("[PUSH-FORM] newTp:", newTp, "| newSl:", newSl, "| lastPlacedTp:", lastPlacedTpPushedRef.current, "| lastPlacedSl:", lastPlacedSlPushedRef.current, "| tpUnchanged:", tpUnchanged, "| slUnchanged:", slUnchanged, "| lvlsUnchanged:", tpLevelsUnchanged)
