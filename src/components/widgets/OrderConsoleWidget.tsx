@@ -1298,13 +1298,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     setLastResult({ success: true, msg: `${effectiveSide.toUpperCase()} ${qty} ${symbol} ${orderType === "market" ? "@ MKT" : `@ ${price}`}` })
 
     // Transfer TP/SL from preview into the chart's position TP/SL.
-    // If the position already has orders, recalculate anchors across all orders + the new one
-    // so that TP/SL reflect the full virtual position, not just this single order.
-    if (activeChart && (noTpSl.tpEnabled || noTpSl.slEnabled)) {
+    // Only set TP/SL when the position had no orders before this placement —
+    // if orders already existed the position already owns TP/SL (possibly from a grid),
+    // and the reanchor effect will re-calc absolute prices for any changed anchors.
+    const existingPosForTpSl = ctxPositionsRef.current[activePositionKey]
+    const existingOrdersForTpSl = existingPosForTpSl?.orders ?? []
+    if (activeChart && (noTpSl.tpEnabled || noTpSl.slEnabled) && existingOrdersForTpSl.length === 0) {
       const gSide = effectiveSide === "buy" ? "long" : "short"
       const isLong = gSide === "long"
-      const existingPos = ctxPositionsRef.current[activePositionKey]
-      const existingOrders = existingPos?.orders ?? []
+      const existingOrders = existingOrdersForTpSl
 
       // Build combined order list: existing position orders + new order
       const combinedOrders = [
@@ -1347,8 +1349,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       if (tpVal !== null || slVal !== null) {
         setTpSl(activeChart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
       }
-      noJustPlacedRef.current = true
     }
+    if (activeChart) noJustPlacedRef.current = true
     // Clear preview immediately so draft lines don't persist after placement
     cancelGridPreview(noConsoleId)
     resetFormToNew()
