@@ -1410,7 +1410,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // Managed mode: read from context; standalone mode: include localDraft
   const draftForChart: PlacedOrder | undefined = hasOrderConsole ? undefined : localDraft
   // Read placed orders from the position — exclude grid orders (rendered by GridOrdersOverlay)
-  const placedForChart: PlacedOrder[] = (ctxPositions[positionKey]?.orders ?? []).filter(
+  const positionOrders = ctxPositions[positionKey]?.orders ?? []
+  const hasNonGridOrder = positionOrders.some((o: PlacedOrder) => o.source !== "grid")
+  const placedForChart: PlacedOrder[] = positionOrders.filter(
     (o: PlacedOrder) => o.source !== "grid" && o.status !== "filled"
   )
   const allOrders: PlacedOrder[] = [...(draftForChart ? [draftForChart] : []), ...placedForChart]
@@ -1770,11 +1772,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
   const rawChartTpSl = tpSlOrders[widget.id] ?? null
 
-  // PlacedTpSlOverlay must be suppressed when the position consists only of grid orders,
-  // because those orders already render their own TP/SL via GridOrdersOverlay.
   // Only show chartTpSl (PlacedTpSlOverlay) when at least one non-grid order exists.
-  const positionOrders = ctxPositions[positionKey]?.orders ?? []
-  const hasNonGridOrder = positionOrders.some((o) => o.source !== "grid")
+  // hasNonGridOrder is computed above alongside gridOrdersList.
   const chartTpSl = hasNonGridOrder ? rawChartTpSl : null
 
   // Use widget rect height as fallback when size hasn't been measured yet
