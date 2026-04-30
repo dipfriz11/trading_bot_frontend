@@ -942,22 +942,37 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!activeChart) return
     const tpsl = tpSlOrders[activeChart.id]
     const pos = ctxPositions[activePositionKey]
-    if (!pos || pos.orders.length === 0) return
+
+    console.log("[BACK-CALC] fired | tpsl:", JSON.stringify(tpsl), "| pos orders:", pos?.orders.length ?? 0, "| lastPlacedTp:", lastPlacedTpPushedRef.current, "| lastPlacedSl:", lastPlacedSlPushedRef.current)
+
+    if (!pos || pos.orders.length === 0) {
+      console.log("[BACK-CALC] skip — no pos or no orders")
+      return
+    }
 
     const anchors = getPositionAnchors(pos.orders, futuresSide)
-    if (!anchors) return
+    if (!anchors) {
+      console.log("[BACK-CALC] skip — no anchors")
+      return
+    }
 
     const isLong = futuresSide === "long"
     const slBase = noTpSlRef.current.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
     const tpBase = anchors.firstOrder
 
+    console.log("[BACK-CALC] tpBase:", tpBase, "| slBase:", slBase, "| isLong:", isLong)
+
     // SL: check if incoming value differs from what we last pushed via placed-form
     const incomingSl = tpsl?.sl ?? null
+    console.log("[BACK-CALC] SL | incoming:", incomingSl, "| lastPushed:", lastPlacedSlPushedRef.current, "| diff:", incomingSl != null ? Math.abs(incomingSl - (lastPlacedSlPushedRef.current ?? 0)) : "n/a")
     if (incomingSl === null || incomingSl === 0) {
       // Line was removed (X clicked) — clear form if we didn't push null ourselves
       if (lastPlacedSlPushedRef.current !== null && lastPlacedSlPushedRef.current !== 0) {
+        console.log("[BACK-CALC] SL removed externally → disabling slEnabled")
         lastPlacedSlPushedRef.current = null
         setNoTpSl((prev) => prev.slEnabled ? { ...prev, slEnabled: false } : prev)
+      } else {
+        console.log("[BACK-CALC] SL null — we pushed it, skip")
       }
     } else if (slBase > 0 && Math.abs((incomingSl - (lastPlacedSlPushedRef.current ?? 0))) > 0.0001) {
       // Real drag — update % form
@@ -965,25 +980,33 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         ? (1 - incomingSl / slBase) * 100
         : (incomingSl / slBase - 1) * 100
       const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
+      console.log("[BACK-CALC] SL drag detected → updating slPercent to", rounded)
       lastPlacedSlPushedRef.current = incomingSl
       setNoTpSl((prev) => {
         if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
         return { ...prev, slPercent: rounded, slEnabled: true }
       })
+    } else {
+      console.log("[BACK-CALC] SL echo — skip (matches lastPushed)")
     }
 
     // TP: check if incoming value differs from what we last pushed via placed-form
     const incomingTp = tpsl?.tp ?? null
     const incomingTpLevels = tpsl?.tpLevels ?? null
+    console.log("[BACK-CALC] TP | incoming:", incomingTp, "| lastPushed:", lastPlacedTpPushedRef.current, "| diff:", incomingTp != null ? Math.abs(incomingTp - (lastPlacedTpPushedRef.current ?? 0)) : "n/a")
     if (incomingTp === null || incomingTp === 0) {
       // Line was removed — clear form if we didn't push null ourselves
       if (lastPlacedTpPushedRef.current !== null && lastPlacedTpPushedRef.current !== 0) {
+        console.log("[BACK-CALC] TP removed externally → disabling tpEnabled")
         lastPlacedTpPushedRef.current = null
         lastTpLevelsPushedKeyRef.current = ""
         setNoTpSl((prev) => prev.tpEnabled ? { ...prev, tpEnabled: false } : prev)
+      } else {
+        console.log("[BACK-CALC] TP null — we pushed it, skip")
       }
     } else if (tpBase > 0 && Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.0001) {
       // Real drag on TP — update % form
+      console.log("[BACK-CALC] TP drag detected → updating tpPercent")
       lastPlacedTpPushedRef.current = incomingTp
 
       if (incomingTpLevels != null && incomingTpLevels.length > 0) {
@@ -1011,6 +1034,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           return { ...prev, tpPercent: rounded, tpEnabled: true }
         })
       }
+    } else {
+      console.log("[BACK-CALC] TP echo — skip (matches lastPushed)")
     }
   }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
 
@@ -1090,8 +1115,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const tpUnchanged = newTp === lastPlacedTpPushedRef.current ||
       (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.0001)
     const tpLevelsUnchanged = newTpLevelsKey === lastTpLevelsPushedKeyRef.current
-    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) return
 
+    console.log("[PUSH-FORM] newTp:", newTp, "| newSl:", newSl, "| lastPlacedTp:", lastPlacedTpPushedRef.current, "| lastPlacedSl:", lastPlacedSlPushedRef.current, "| tpUnchanged:", tpUnchanged, "| slUnchanged:", slUnchanged, "| lvlsUnchanged:", tpLevelsUnchanged)
+
+    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) {
+      console.log("[PUSH-FORM] skip — nothing changed")
+      return
+    }
+
+    console.log("[PUSH-FORM] pushing to tpSlOrders")
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl
     lastTpLevelsPushedKeyRef.current = newTpLevelsKey

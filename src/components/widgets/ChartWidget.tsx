@@ -1733,6 +1733,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       document.body.style.cursor = ""
       if (dragStarted) {
         const newPrice = finalPriceRef.current
+        console.log("[CHART-DRAG] mouseup | key:", key, "| newPrice:", newPrice, "| widget.id:", widget.id)
         if (key === "sl") {
           setTpSl(widget.id, { sl: newPrice })
         } else {
@@ -1740,8 +1741,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           if (levels && levels.length > 1) {
             const idx = tpIndex ?? 0
             const newLevels = levels.map((p, i) => i === idx ? newPrice : p)
+            console.log("[CHART-DRAG] TP multi-level push:", newLevels)
             setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
           } else {
+            console.log("[CHART-DRAG] TP single push:", newPrice)
             setTpSl(widget.id, { tp: newPrice, tpLevels: undefined })
           }
         }
@@ -1753,15 +1756,18 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   }, [tpSlOrders, widget.id, setTpSl])
 
   const handleTpSlClose = useCallback((key: "tp" | "sl", tpIndex?: number) => {
+    console.log("[CHART-CLOSE] X clicked | key:", key, "| tpIndex:", tpIndex, "| widget.id:", widget.id)
     if (key === "tp") {
       const levels = tpSlOrders[widget.id]?.tpLevels
       if (levels && levels.length > 1 && tpIndex !== undefined) {
         const newLevels = levels.filter((_, i) => i !== tpIndex)
         setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
       } else {
+        console.log("[CHART-CLOSE] TP → null")
         setTpSl(widget.id, { tp: null, tpLevels: undefined })
       }
     } else {
+      console.log("[CHART-CLOSE] SL → null")
       setTpSl(widget.id, { sl: null })
     }
   }, [widget.id, setTpSl, tpSlOrders])
