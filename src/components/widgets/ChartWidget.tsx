@@ -1775,20 +1775,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const hasNonGridOrder = positionOrders.some((o) => o.source !== "grid")
   const chartTpSl = hasNonGridOrder ? rawChartTpSl : null
 
-  // DEBUG: log what TP/SL layers are active each render
-  if (import.meta.env.DEV) {
-    const gridTpSlSummary = gridOrdersList.map(g => ({
-      consoleId: g.consoleId,
-      tpLevels: g.tpLevels,
-      slPrice: g.slPrice,
-    }))
-    console.log(
-      `[ChartWidget render] id=${widget.id}`,
-      "\n  chartTpSl=", JSON.stringify(chartTpSl),
-      "\n  gridOrdersList TP/SL=", JSON.stringify(gridTpSlSummary),
-    )
-  }
-
   // Use widget rect height as fallback when size hasn't been measured yet
   const containerHeight = size.height || widget.rect.height - 60
   const chartAreaHeight = widget.showOrderForm ? containerHeight * 0.6 : containerHeight

@@ -1440,7 +1440,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       applyGridTpSl(slotId, { tpPrice, slPrice, tpLevels })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots])
+  }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots, positions])
 
   const handlePlaceGrid = () => {
     if (!activeChartId) return
@@ -1514,11 +1514,23 @@ export const GridConfigTab = memo(function GridConfigTab({
           }
         } else {
           // Prefer anchors from the full virtual position (includes single orders + all grids).
+          // Include the new grid orders being placed now so anchors reflect the post-placement state.
           // Fall back to slot prices only if the position doesn't exist yet.
           const livePos = accountId && exchangeId && marketType && snapshotCfg.symbol && snapshotSide
             ? positions[posKey(accountId, exchangeId, marketType, snapshotCfg.symbol, snapshotSide)]
             : undefined
-          const posAnchors = livePos ? getPositionAnchors(livePos.orders, snapshotSide) : null
+          const newGridOrdersAsPlaced = newData.orders.map((o) => ({
+            id: o.id, price: o.price, qty: o.qty,
+            side: snapshotSide === "long" ? "buy" as const : "sell" as const,
+            source: "grid" as const,
+          }))
+          const existingWithoutNew = livePos
+            ? livePos.orders.filter((o) => o.gridConsoleId !== snapshotConsoleId)
+            : []
+          const combinedOrders = [...existingWithoutNew, ...newGridOrdersAsPlaced]
+          const posAnchors = combinedOrders.length > 0
+            ? getPositionAnchors(combinedOrders, snapshotSide)
+            : null
 
           const allPrices = allSlotPrices.flat()
           const firstOrders = allSlotPrices.map((p) => p[0])
