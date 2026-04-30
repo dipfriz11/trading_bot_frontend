@@ -1305,19 +1305,24 @@ export const GridConfigTab = memo(function GridConfigTab({
     // In non-multipos mode only slot 0 of each side shows TP/SL on chart
     const showTpSl = isSharedTpSlOwner()
 
+    // If a virtual position already exists, suppress draft TP/SL lines (same logic as Order tab)
+    const positionHasOrders = accountId && exchangeId && marketType && cfg.symbol && cfg.side
+      ? (positions[posKey(accountId, exchangeId, marketType, cfg.symbol, cfg.side)]?.orders ?? []).length > 0
+      : false
+
     // Record expected prices so drag-sync effects can ignore form-driven updates
     const ordersForPreview = viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty }))
     expectedFirstPriceRef.current = ordersForPreview[0]?.price
     expectedLastPriceRef.current = ordersForPreview[ordersForPreview.length - 1]?.price
-    expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
+    expectedSlPriceRef.current = (showTpSl && !positionHasOrders) ? viz.slPrice : null
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
       side: cfg.side,
       orders: ordersForPreview,
-      tpPrice: showTpSl ? viz.tpPrice : null,
-      slPrice: showTpSl ? viz.slPrice : null,
-      tpLevels: showTpSl ? viz.tpLevels : [],
+      tpPrice: (showTpSl && !positionHasOrders) ? viz.tpPrice : null,
+      slPrice: (showTpSl && !positionHasOrders) ? viz.slPrice : null,
+      tpLevels: (showTpSl && !positionHasOrders) ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
       entryPrice: cfg.entryPrice,
