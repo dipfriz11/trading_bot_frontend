@@ -1465,6 +1465,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: snapshotCfg.symbol,
       leverage: snapshotCfg.leverage,
+      entryPrice: snapshotCfg.entryPrice,
       accountId,
       exchangeId,
       marketType,
