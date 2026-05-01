@@ -480,6 +480,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   const lastPlacedTpPushedRef = useRef<number | null>(null)
   const lastPlacedSlPushedRef = useRef<number | null>(null)
   const lastTpLevelsPushedKeyRef = useRef<string>("")
+  // Guard: set to true by REANCHOR after firing setTpSl, cleared next frame.
+  // Prevents TPSL_DRAG_SYNC from treating the REANCHOR write as a real user drag.
+  const reanchorJustFiredRef = useRef(false)
 
   // Init price on symbol/activeChart change — runs once per chart focus
   const initialisedKeyRef = useRef<string>("")
@@ -608,30 +611,35 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   }, [isDraggingOrder, editingOrderId])
 
   // ---- Recalculate TP/SL when a single placed order is dragged to a new price ----
+  // Only handles the single-order case — multi-order positions are handled by REANCHOR
+  // which already reacts to price changes in ordersKey. This avoids the conflict where
+  // DRAG_ORDER_END writes incorrect miniCfg-based values that REANCHOR then overwrites,
+  // triggering a TPSL_DRAG_SYNC loop.
   useEffect(() => {
     const cb = (orderId: string, newPrice: number) => {
       const chart = activeChartRef.current
       const cfg = noTpSlRef.current
-      console.log("[DRAG_ORDER_END] orderId:", orderId, "newPrice:", newPrice, "chartId:", chart?.id, "tpEnabled:", cfg.tpEnabled, "slEnabled:", cfg.slEnabled)
-      if (!chart || !(cfg.tpEnabled || cfg.slEnabled)) {
-        console.log("[DRAG_ORDER_END] skipped — no chart or tp/sl disabled")
-        return
-      }
+      if (!chart || !(cfg.tpEnabled || cfg.slEnabled)) return
 
+      // Find the order and its position
+      let foundPosOrders: { id: string }[] = []
       const order = (() => {
         for (const pos of Object.values(ctxPositionsRef.current)) {
           const o = pos.orders.find((o) => o.id === orderId)
-          if (o) return o
+          if (o) { foundPosOrders = pos.orders; return o }
         }
         return null
       })()
-      if (!order) {
-        console.log("[DRAG_ORDER_END] order not found in any position")
+      if (!order) return
+
+      // If the position has more than one order, REANCHOR will handle the recalculation
+      // via ordersKey change (price is part of the key). Skip here to avoid conflict.
+      if (foundPosOrders.length > 1) {
+        console.log("[DRAG_ORDER_END] skipped — position has", foundPosOrders.length, "orders, REANCHOR will handle")
         return
       }
 
-      console.log("[DRAG_ORDER_END] found order:", { id: order.id, source: order.source, price: order.price, qty: order.qty, side: order.side })
-
+      // Single-order position: use miniCfg path (only one anchor = this order)
       const posSide = order.side === "buy" ? "long" : "short"
       const miniCfg = {
         enabled: true, symbol: order.symbol ?? "", side: posSide,
@@ -663,8 +671,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const tpLevels = cfg.tpEnabled ? (viz.tpLevels ?? []) : []
       const tpVal = tpLevels[0] ?? null
       const slVal = cfg.slEnabled ? (viz.slPrice ?? null) : null
-      console.log("[DRAG_ORDER_END] WARNING: using single-order miniCfg (NOT position anchors). This may be wrong when position has multiple orders.")
-      console.log("[DRAG_ORDER_END] result tp:", tpVal, "sl:", slVal)
+      console.log("[DRAG_ORDER_END] single-order result tp:", tpVal, "sl:", slVal)
+      lastPlacedTpPushedRef.current = tpVal
+      lastPlacedSlPushedRef.current = slVal
       setTpSl(chart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
     }
     registerOrderDragEndCb(cb)
@@ -951,8 +960,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // If it differs, it's a real drag — update form and clear lastPushed so form can push back correctly.
   useEffect(() => {
     if (!activeChart) return
+    // Guard: REANCHOR just fired setTpSl — this is our own echo, not a user drag.
+    // The lastPushed refs are already set, but this catches the frame where both
+    // ctxPositions change and tpSlOrders update arrive simultaneously.
+    if (reanchorJustFiredRef.current) return
+
     const tpsl = tpSlOrders[activeChart.id]
-    const pos = ctxPositions[activePositionKey]
+    // Read position from ref to avoid ctxPositions as a dependency (prevents double-firing
+    // when REANCHOR changes both tpSlOrders and ctxPositions in the same cycle).
+    const pos = ctxPositionsRef.current[activePositionKey]
 
     console.log("[TPSL_DRAG_SYNC] chartId:", activeChart.id, "posKey:", activePositionKey, "posOrdersCount:", pos?.orders?.length ?? 0, "ctxTp:", tpsl?.tp, "ctxSl:", tpsl?.sl)
 
@@ -1032,7 +1048,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         })
       }
     }
-  }, [tpSlOrders, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
+  }, [tpSlOrders, activeChart?.id, activePositionKey, futuresSide])
 
   // ---- Reanchor TP/SL when position order composition changes (add/remove orders) ----
   // Tracks the set of order ids+prices in the position. When it changes (order added or removed),
@@ -1089,6 +1105,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl
     lastTpLevelsPushedKeyRef.current = tpLevels.length > 1 ? tpLevels.map((p) => Math.round(p * 100)).join(",") : ""
+    reanchorJustFiredRef.current = true
+    requestAnimationFrame(() => { reanchorJustFiredRef.current = false })
     setTpSl(activeChart.id, { tp: newTp, sl: newSl, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
   }, [ctxPositions, activePositionKey, activeChart?.id, futuresSide])
 
