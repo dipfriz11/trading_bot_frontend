@@ -44,7 +44,7 @@ const CHART_COLORS = {
 // Badge for BUY (long) orders — anchored to the LEFT edge
 function BuyOrderBadge({
   y, label, color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
-  priceTag, onClose, onDragStart, axisX, padLeft, isEditing, isDraft,
+  priceTag, onClose, onDragStart, onDoubleClick, axisX, padLeft, isEditing, isDraft,
 }: {
   y: number; label: string; color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
@@ -52,6 +52,7 @@ function BuyOrderBadge({
   priceTag: string; isEditing: boolean; isDraft?: boolean
   onClose?: () => void
   onDragStart: (e: React.MouseEvent) => void
+  onDoubleClick?: (e: React.MouseEvent) => void
   axisX: number; padLeft: number
 }) {
   const PAD = 8
@@ -84,8 +85,9 @@ function BuyOrderBadge({
           </text>
         </g>
       ) : (
-        <g style={{ cursor: isEditing ? "grab" : "pointer", pointerEvents: "auto" }}
-          onMouseDown={onDragStart}>
+        <g style={{ cursor: "grab", pointerEvents: "auto" }}
+          onMouseDown={onDragStart}
+          onDoubleClick={onDoubleClick}>
           <rect x={badgeX} y={by} width={labelW} height={badgeH}
             fill={color} stroke={labelFill ?? color} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
           <text x={badgeX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -122,7 +124,7 @@ function BuyOrderBadge({
 // Badge for SELL (short) orders — anchored to the RIGHT edge (just before price axis)
 function SellOrderBadge({
   y, label, color, textColor, closeBtnColor, closeBtnFg, priceTagColor, priceTagFg,
-  priceTag, onClose, onDragStart, axisX, isEditing, isDraft,
+  priceTag, onClose, onDragStart, onDoubleClick, axisX, isEditing, isDraft,
 }: {
   y: number; label: string; color: string; textColor?: string
   closeBtnColor: string; closeBtnFg: string
@@ -130,6 +132,7 @@ function SellOrderBadge({
   priceTag: string; isEditing: boolean; isDraft?: boolean
   onClose?: () => void
   onDragStart: (e: React.MouseEvent) => void
+  onDoubleClick?: (e: React.MouseEvent) => void
   axisX: number
 }) {
   const PAD = 8
@@ -175,8 +178,9 @@ function SellOrderBadge({
           </text>
         </g>
       ) : (
-        <g style={{ cursor: isEditing ? "grab" : "pointer", pointerEvents: "auto" }}
-          onMouseDown={onDragStart}>
+        <g style={{ cursor: "grab", pointerEvents: "auto" }}
+          onMouseDown={onDragStart}
+          onDoubleClick={onDoubleClick}>
           <rect x={labelX} y={by} width={labelW} height={badgeH}
             fill={color} stroke={labelFill ?? color} strokeWidth={isEditing ? 1.5 : 1} rx={3} />
           <text x={labelX + PAD} y={y + 4} fontSize={9.5} fill={labelFill}
@@ -210,6 +214,7 @@ interface OrderLineProps {
   isEditing: boolean
   onClose: () => void
   onDragStart: (e: React.MouseEvent) => void
+  onDoubleClick?: (e: React.MouseEvent) => void
   // Called once on mount so the drag handler can move the element imperatively
   registerImperativeMove?: (id: string, fn: (newY: number) => void) => void
 }
@@ -246,7 +251,7 @@ function getOrderColors(order: PlacedOrder, isEditing: boolean) {
   }
 }
 
-function OrderLine({ order, orderPrice, toY, minPrice, maxPrice, padding, width, isEditing, onClose, onDragStart, registerImperativeMove }: OrderLineProps) {
+function OrderLine({ order, orderPrice, toY, minPrice, maxPrice, padding, width, isEditing, onClose, onDragStart, onDoubleClick, registerImperativeMove }: OrderLineProps) {
   const groupRef = useRef<SVGGElement>(null)
   const renderedYRef = useRef(toY(orderPrice))
   // Keep toY stable reference for imperative handler
@@ -301,7 +306,7 @@ function OrderLine({ order, orderPrice, toY, minPrice, maxPrice, padding, width,
           closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
           priceTagColor={priceTagColor} priceTagFg={priceTagFg}
           priceTag={formatPrice(orderPrice)}
-          onClose={onClose} onDragStart={onDragStart}
+          onClose={onClose} onDragStart={onDragStart} onDoubleClick={onDoubleClick}
           axisX={axisX} padLeft={padLeft} isEditing={isEditing}
           isDraft={order.isDraft}
         />
@@ -324,7 +329,7 @@ function OrderLine({ order, orderPrice, toY, minPrice, maxPrice, padding, width,
           closeBtnColor={closeBtnColor} closeBtnFg={closeBtnFg}
           priceTagColor={priceTagColor} priceTagFg={priceTagFg}
           priceTag={formatPrice(orderPrice)}
-          onClose={onClose} onDragStart={onDragStart}
+          onClose={onClose} onDragStart={onDragStart} onDoubleClick={onDoubleClick}
           axisX={axisX} isEditing={isEditing}
           isDraft={order.isDraft}
         />
@@ -346,6 +351,7 @@ function renderOrderLine(
   onDragStart: (e: React.MouseEvent) => void,
   registerImperativeMove?: (id: string, fn: (newY: number) => void) => void,
   isEditing?: boolean,
+  onDoubleClick?: (e: React.MouseEvent) => void,
 ) {
   return (
     <OrderLine
@@ -354,7 +360,7 @@ function renderOrderLine(
       toY={toY} minPrice={minPrice} maxPrice={maxPrice}
       padding={padding} width={width}
       isEditing={isEditing ?? false}
-      onClose={onClose} onDragStart={onDragStart}
+      onClose={onClose} onDragStart={onDragStart} onDoubleClick={onDoubleClick}
       registerImperativeMove={registerImperativeMove}
     />
   )
@@ -539,6 +545,7 @@ interface ChartProps {
   editingOrderId: string | null
   onOrderClose: (id: string) => void
   onOrderDragStart: (id: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+  onOrderDoubleClick?: (id: string, e: React.MouseEvent) => void
   onBackgroundClick?: () => void
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
   previewOrdersList?: ChartGridPreview[]
@@ -574,11 +581,12 @@ interface OrdersOverlayProps {
   padding: { left: number; right: number; top: number; bottom: number }
   onOrderClose: (id: string) => void
   onOrderDragStart: (id: string, e: React.MouseEvent, toPrice: (y: number) => number, minP: number, maxP: number, chartH: number, padTop: number) => void
+  onOrderDoubleClick?: (id: string, e: React.MouseEvent) => void
   // Shared map: ChartWidget registers imperative move handlers here; OrderLine writes to it
   dragHandlers: React.MutableRefObject<Map<string, (p: number) => void>>
 }
 
-function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice, minPrice, maxPrice, chartHeight, padTop, padding, onOrderClose, onOrderDragStart, dragHandlers }: OrdersOverlayProps) {
+function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice, minPrice, maxPrice, chartHeight, padTop, padding, onOrderClose, onOrderDragStart, onOrderDoubleClick, dragHandlers }: OrdersOverlayProps) {
   const registerImperativeMove = useCallback((id: string, fn: (newY: number) => void) => {
     dragHandlers.current.set(id, fn)
   }, [dragHandlers])
@@ -594,6 +602,7 @@ function OrdersOverlay({ allOrders, editingOrderId, width, height, toY, toPrice,
           (e) => onOrderDragStart(order.id, e, toPrice, minPrice, maxPrice, chartHeight, padTop),
           registerImperativeMove,
           editingOrderId === order.id,
+          onOrderDoubleClick ? (e) => onOrderDoubleClick(order.id, e) : undefined,
         )
       })}
     </svg>
@@ -1124,7 +1133,7 @@ const CandlestickChartBody = React.memo(function CandlestickChartBody({ candles,
   )
 })
 
-function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, tpSlSide, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
+function CandlestickChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onOrderDoubleClick, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, tpSlSide, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const chartHeight = height * 0.72
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
@@ -1169,7 +1178,7 @@ function CandlestickChart({ candles, width, height, allOrders, editingOrderId, o
         minPrice={minPrice} maxPrice={maxPrice}
         chartHeight={chartHeight} padTop={padding.top}
         padding={padding}
-        onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
+        onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart} onOrderDoubleClick={onOrderDoubleClick}
         dragHandlers={dragHandlers}
       />
       {previewOrdersList && previewOrdersList.length > 0 && (
@@ -1268,7 +1277,7 @@ const LineChartBody = React.memo(function LineChartBody({ candles, width, height
   )
 })
 
-function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, tpSlSide, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
+function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderClose, onOrderDragStart, onOrderDoubleClick, onBackgroundClick, dragHandlers, previewOrdersList, gridOrdersList, onGridOrderDragStart, onGridTpSlDragStart, onGridClose, onGridEntryClose, onPreviewOrderDragStart, onPreviewGridTpSlDragStart, onPreviewClose, onPreviewEntryClose, onPreviewTpSlClose, tpSl, tpSlSide, onTpSlDragStart, onTpSlClose, activePosition, onClosePosition }: ChartProps) {
   if (!candles.length || width < 2 || height < 2) return null
   const padding = { left: 52, right: 56, top: 10, bottom: 20 }
   const chartHeight = height - padding.top - padding.bottom
@@ -1311,7 +1320,7 @@ function LineChart({ candles, width, height, allOrders, editingOrderId, onOrderC
         minPrice={minPrice} maxPrice={maxPrice}
         chartHeight={chartHeight} padTop={padding.top}
         padding={padding}
-        onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart}
+        onOrderClose={onOrderClose} onOrderDragStart={onOrderDragStart} onOrderDoubleClick={onOrderDoubleClick}
         dragHandlers={dragHandlers}
       />
       {previewOrdersList && previewOrdersList.length > 0 && (
@@ -1463,7 +1472,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     e.preventDefault()
 
     const isDraftOrder = id === LOCAL_DRAFT_ID
-    const isPlacedOrder = !isDraftOrder
 
     let startPrice = 0
     if (isDraftOrder) {
@@ -1482,7 +1490,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       dragStarted = true
       isDraggingRef.current = true
       document.body.style.cursor = "grabbing"
-      if (isPlacedOrder) setEditingOrderId(id)
     }
 
     // Track final price during drag without triggering React re-renders
@@ -1517,22 +1524,23 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           notifyOrderDragEnd(id, finalPrice)
         }
         setIsDraggingOrder(false)
-        if (isPlacedOrder) setEditingOrderId(null)
-      } else {
-        // Was a click — toggle edit mode for placed orders
-        if (isPlacedOrder) {
-          if (hasOrderConsole) {
-            setEditingOrderId(editingOrderId === id ? null : id)
-          } else {
-            setLocalEditingOrderId((prev) => prev === id ? null : id)
-          }
-        }
       }
+      // Single click does nothing — edit mode is triggered by double click (handleOrderDoubleClick)
     }
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setEditingOrderId, setIsDraggingOrder, editingOrderId, notifyOrderDragEnd])
+  }, [hasOrderConsole, widget.id, positionKey, draftForChart, ctxPositions, ctxUpdatePrice, setIsDraggingOrder, notifyOrderDragEnd])
+
+  // ---- Double-click on placed order → enter edit mode ----
+  const handleOrderDoubleClick = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (hasOrderConsole) {
+      setEditingOrderId(editingOrderId === id ? null : id)
+    } else {
+      setLocalEditingOrderId((prev) => prev === id ? null : id)
+    }
+  }, [hasOrderConsole, editingOrderId, setEditingOrderId])
 
   // ---- Cancel edit when clicking chart background ----
   const handleBackgroundClick = useCallback(() => {
@@ -1848,6 +1856,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     editingOrderId={effectiveEditingOrderId}
                     onOrderClose={handleOrderClose}
                     onOrderDragStart={handleOrderDragStart}
+                    onOrderDoubleClick={handleOrderDoubleClick}
                     onBackgroundClick={handleBackgroundClick}
                     dragHandlers={localDragHandlers}
                     previewOrdersList={previewOrdersList}
@@ -1877,6 +1886,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
                     editingOrderId={effectiveEditingOrderId}
                     onOrderClose={handleOrderClose}
                     onOrderDragStart={handleOrderDragStart}
+                    onOrderDoubleClick={handleOrderDoubleClick}
                     onBackgroundClick={handleBackgroundClick}
                     dragHandlers={localDragHandlers}
                     previewOrdersList={previewOrdersList}
