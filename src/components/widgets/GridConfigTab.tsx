@@ -1305,19 +1305,24 @@ export const GridConfigTab = memo(function GridConfigTab({
     // In non-multipos mode only slot 0 of each side shows TP/SL on chart
     const showTpSl = isSharedTpSlOwner()
 
+    // If a virtual position already exists, suppress draft TP/SL lines (same logic as Order tab)
+    const positionHasOrders = accountId && exchangeId && marketType && cfg.symbol && cfg.side
+      ? (positions[posKey(accountId, exchangeId, marketType, cfg.symbol, cfg.side)]?.orders ?? []).length > 0
+      : false
+
     // Record expected prices so drag-sync effects can ignore form-driven updates
     const ordersForPreview = viz.orders.map((o, i) => ({ id: orderIdRefs.current[i], price: o.price, qty: o.qty }))
     expectedFirstPriceRef.current = ordersForPreview[0]?.price
     expectedLastPriceRef.current = ordersForPreview[ordersForPreview.length - 1]?.price
-    expectedSlPriceRef.current = showTpSl ? viz.slPrice : null
+    expectedSlPriceRef.current = (showTpSl && !positionHasOrders) ? viz.slPrice : null
 
     setGridPreview(consoleId, {
       chartId: activeChartId,
       side: cfg.side,
       orders: ordersForPreview,
-      tpPrice: showTpSl ? viz.tpPrice : null,
-      slPrice: showTpSl ? viz.slPrice : null,
-      tpLevels: showTpSl ? viz.tpLevels : [],
+      tpPrice: (showTpSl && !positionHasOrders) ? viz.tpPrice : null,
+      slPrice: (showTpSl && !positionHasOrders) ? viz.slPrice : null,
+      tpLevels: (showTpSl && !positionHasOrders) ? viz.tpLevels : [],
       symbol: cfg.symbol,
       leverage: cfg.leverage,
       entryPrice: cfg.entryPrice,
@@ -1395,11 +1400,18 @@ export const GridConfigTab = memo(function GridConfigTab({
         return
       }
 
+      // Prefer anchors from the full virtual position (includes single orders + all grids).
+      const livePos = accountId && exchangeId && marketType && mergedCfg.symbol && side
+        ? positions[posKey(accountId, exchangeId, marketType, mergedCfg.symbol, side)]
+        : undefined
+      const posAnchors = livePos ? getPositionAnchors(livePos.orders, side) : null
+
       const firstOrders = allSlotPrices.map((p) => p[0])
-      const bestFirstOrder = isLong ? Math.max(...firstOrders) : Math.min(...firstOrders)
       const allPrices = allSlotPrices.flat()
-      const extremeForSl = isLong ? Math.min(...allPrices) : Math.max(...allPrices)
-      const avgEntryAll = allPrices.reduce((s, p) => s + p, 0) / allPrices.length
+
+      const bestFirstOrder = posAnchors?.firstOrder ?? (isLong ? Math.max(...firstOrders) : Math.min(...firstOrders))
+      const extremeForSl = posAnchors?.extremeOrder ?? (isLong ? Math.min(...allPrices) : Math.max(...allPrices))
+      const avgEntryAll = posAnchors?.avgEntry ?? (allPrices.reduce((s, p) => s + p, 0) / allPrices.length)
 
       let tpPrice: number | null = null
       let tpLevels: number[] = []
@@ -1433,7 +1445,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       applyGridTpSl(slotId, { tpPrice, slPrice, tpLevels })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots])
+  }, [activeSideSharedTpSl, multiPositionMode, activeChartId, longSlots, shortSlots, positions])
 
   const handlePlaceGrid = () => {
     if (!activeChartId) return
@@ -1465,6 +1477,7 @@ export const GridConfigTab = memo(function GridConfigTab({
       tpLevels: showTpSl ? viz.tpLevels : [],
       symbol: snapshotCfg.symbol,
       leverage: snapshotCfg.leverage,
+      entryPrice: snapshotCfg.entryPrice,
       accountId,
       exchangeId,
       marketType,
@@ -1506,11 +1519,23 @@ export const GridConfigTab = memo(function GridConfigTab({
           }
         } else {
           // Prefer anchors from the full virtual position (includes single orders + all grids).
+          // Include the new grid orders being placed now so anchors reflect the post-placement state.
           // Fall back to slot prices only if the position doesn't exist yet.
           const livePos = accountId && exchangeId && marketType && snapshotCfg.symbol && snapshotSide
             ? positions[posKey(accountId, exchangeId, marketType, snapshotCfg.symbol, snapshotSide)]
             : undefined
-          const posAnchors = livePos ? getPositionAnchors(livePos.orders, snapshotSide) : null
+          const newGridOrdersAsPlaced = newData.orders.map((o) => ({
+            id: o.id, price: o.price, qty: o.qty,
+            side: snapshotSide === "long" ? "buy" as const : "sell" as const,
+            source: "grid" as const,
+          }))
+          const existingWithoutNew = livePos
+            ? livePos.orders.filter((o) => o.gridConsoleId !== snapshotConsoleId)
+            : []
+          const combinedOrders = [...existingWithoutNew, ...newGridOrdersAsPlaced]
+          const posAnchors = combinedOrders.length > 0
+            ? getPositionAnchors(combinedOrders, snapshotSide)
+            : null
 
           const allPrices = allSlotPrices.flat()
           const firstOrders = allSlotPrices.map((p) => p[0])
