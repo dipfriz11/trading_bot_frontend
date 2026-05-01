@@ -417,9 +417,10 @@ function PositionLine({
   const priceStr = priceToString(price)
   const realSizeStr = position.realSize > 0 ? position.realSize.toFixed(4) : position.size.toFixed(4)
 
-  // Badge sits at the left axis edge, vertically centered on the line
+  // Badge: LONG → left side with extra offset, SHORT → right side with extra offset
+  // Extra offset (16px) ensures preview/draft order badges don't hide under the position badge
+  const BADGE_EXTRA_OFFSET = 16
   const badgeTop = clampedY
-  const badgeLeft = padding.left
 
   return (
     <>
@@ -462,11 +463,13 @@ function PositionLine({
         </g>
       </svg>
 
-      {/* HTML badge on LEFT side — same style as the top "Close Position" badge */}
+      {/* HTML badge: LONG on left, SHORT on right */}
       <div
         style={{
           position: "absolute",
-          left: badgeLeft,
+          ...(isLong
+            ? { left: padding.left + BADGE_EXTRA_OFFSET }
+            : { right: padding.right + BADGE_EXTRA_OFFSET }),
           top: badgeTop,
           transform: "translateY(-50%)",
           zIndex: 10,
