@@ -1576,25 +1576,45 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             </div>
           </div>
 
-          {/* Order type */}
-          <div className="flex gap-1">
-            {(["market", "limit", "stop"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setOrderType(t)}
-                className="text-xs font-mono px-2 py-0.5 rounded capitalize transition-colors flex-1"
-                style={{
-                  background: orderType === t ? "rgba(30,111,239,0.15)" : "transparent",
-                  color: orderType === t ? "#1e6fef" : "rgba(255,255,255,0.35)",
-                  border: "1px solid",
-                  borderColor: orderType === t ? "rgba(30,111,239,0.3)" : "rgba(255,255,255,0.07)",
-                  fontSize: 10,
-                }}
-                onMouseDown={stopProp}
-              >
-                {t}
-              </button>
-            ))}
+          {/* Symbol + Price + Order type */}
+          <div
+            style={{
+              background: "rgba(30,111,239,0.05)",
+              border: "1px solid rgba(30,111,239,0.12)",
+              borderRadius: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 6,
+              padding: "3px 6px",
+            }}
+            onMouseDown={stopProp}
+          >
+            <span style={{ fontSize: 9, opacity: 0.4, whiteSpace: "nowrap", fontFamily: "monospace" }}>{symbol}</span>
+            <span style={{ fontWeight: 700, color: "#00e5a0", fontSize: 11, flex: 1, textAlign: "right", marginRight: 6 }}>
+              {mockPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
+              {(["market", "limit", "stop"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setOrderType(t)}
+                  title={t === "market" ? "Execute at current market price" : t === "limit" ? "Enter at a specific limit price" : "Enter with a stop order"}
+                  style={{
+                    flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 7px",
+                    background: orderType === t ? "rgba(30,111,239,0.18)" : "transparent",
+                    color: orderType === t ? "#1e6fef" : "rgba(255,255,255,0.35)",
+                    border: "none", cursor: "pointer",
+                    fontWeight: orderType === t ? 700 : 400, letterSpacing: "0.04em",
+                    whiteSpace: "nowrap",
+                    textTransform: "capitalize",
+                  }}
+                  onMouseDown={stopProp}
+                >
+                  {t === "market" ? "Market" : t === "limit" ? "Limit" : "Stop"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Stop Price */}
