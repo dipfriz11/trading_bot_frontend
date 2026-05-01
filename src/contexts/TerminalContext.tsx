@@ -640,6 +640,23 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         },
       }
     })
+
+    // Auto-fill orders that cross the market price (unified logic for single and grid orders)
+    // For LONG (buy): order placed at or above current price → fills immediately
+    // For SHORT (sell): order placed at or below current price → fills immediately
+    const crossingOrders = initialOrders.filter((o) =>
+      o.orderType === "market" || (
+        pos.side === "long" ? o.price >= pos.markPrice : o.price <= pos.markPrice
+      ),
+    )
+    if (crossingOrders.length > 0) {
+      console.log("[OPEN_POSITION] auto-filling", crossingOrders.length, "crossing order(s) at markPrice:", pos.markPrice)
+      setTimeout(() => {
+        for (const o of crossingOrders) {
+          fillOrder(pk, o.id, o.price)
+        }
+      }, 0)
+    }
   }, [])
 
   const closePosition = useCallback((pk: PositionKey) => {

@@ -341,7 +341,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview, registerOrderPreviewCancelCb, unregisterOrderPreviewCancelCb,
     registerOrderDragEndCb, unregisterOrderDragEndCb,
-    openPosition, fillOrder,
+    openPosition,
     livePrices,
   } = useTerminal()
 
@@ -1307,7 +1307,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
       // Build order object
       const posSide = effectiveSide === "buy" ? "long" : "short"
-      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
       const newOrder: ChartPlacedOrder = {
         id,
         side: effectiveSide,
@@ -1345,14 +1344,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
         realSize: 0,
       }, [newOrder])
-
-      // Market orders execute immediately — simulate fill
-      if (orderType === "market") {
-        // Use setTimeout(0) so openPosition state update settles first
-        setTimeout(() => {
-          fillOrder(activePositionKeyForFill, id, effectivePrice)
-        }, 0)
-      }
 
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
