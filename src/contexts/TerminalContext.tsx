@@ -485,10 +485,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
 
   // Order bridge setters — orders live inside positions[pk].orders
   const addPlacedOrder = useCallback((positionKey: PositionKey, order: ChartPlacedOrder) => {
+    console.log("[ADD_PLACED_ORDER] posKey:", positionKey, "order:", { id: order.id.slice(-6), source: order.source, price: order.price, qty: order.qty, side: order.side })
     setPositionsMap((prev) => {
       const pos = prev[positionKey]
-      if (!pos) return prev
-      return { ...prev, [positionKey]: { ...pos, orders: [...pos.orders, order] } }
+      if (!pos) {
+        console.log("[ADD_PLACED_ORDER] position not found for key:", positionKey)
+        return prev
+      }
+      const newOrders = [...pos.orders, order]
+      console.log("[ADD_PLACED_ORDER] position now has", newOrders.length, "orders:", newOrders.map((o) => ({ id: o.id.slice(-6), source: o.source, price: o.price })))
+      return { ...prev, [positionKey]: { ...pos, orders: newOrders } }
     })
   }, [])
 
@@ -497,6 +503,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     if (!pos) return
     const removed = pos.orders.find((o) => o.id === orderId)
     const remainingOrders = pos.orders.filter((o) => o.id !== orderId)
+    console.log("[REMOVE_PLACED_ORDER] posKey:", positionKey, "orderId:", orderId.slice(-6), "removed:", removed ? { source: removed.source, price: removed.price } : "not found", "remaining:", remainingOrders.length)
 
     setPositionsMap((prev) => {
       const p = prev[positionKey]
@@ -541,6 +548,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     if (!pos) return
     const order = pos.orders.find((o) => o.id === orderId)
     if (!order) return
+    console.log("[UPDATE_PLACED_ORDER_PRICE] posKey:", positionKey, "orderId:", orderId.slice(-6), "oldPrice:", order.price, "newPrice:", price, "source:", order.source)
 
     const newNotional = order.qty * price
     const newMargin = order.marketType === "futures" && order.leverage
@@ -804,6 +812,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       ? { ...directData, consoleId }
       : previewOrdersRef.current[consoleId]
     if (!preview) return
+    console.log("[PLACE_GRID_ORDERS] consoleId:", consoleId, "symbol:", preview.symbol, "side:", preview.side, "ordersCount:", preview.orders.length, "orders:", preview.orders.map((o) => ({ id: o.id.slice(-6), price: o.price, qty: o.qty })))
 
     const ordersWithIndex = preview.orders.map((o, i) => ({ ...o, gridIndex: i + 1 }))
     // Move from preview → placed grid
@@ -944,6 +953,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const cancelGridOrders = useCallback((consoleId: string) => {
     const prev = gridOrdersRef.current
     const entry = prev[consoleId]
+    console.log("[CANCEL_GRID_ORDERS] consoleId:", consoleId, "entry:", entry ? { symbol: entry.symbol, side: entry.side, ordersCount: entry.orders.length } : "not found")
     const n = { ...prev }
     delete n[consoleId]
     setGridOrdersMap(n)
@@ -1040,6 +1050,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const updateGridPlacedPrice = useCallback((consoleId: string, orderId: string, newPrice: number) => {
+    console.log("[UPDATE_GRID_PLACED_PRICE] consoleId:", consoleId, "orderId:", orderId.slice(-6), "newPrice:", newPrice)
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
@@ -1049,14 +1060,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setPositionsMap((prev) => {
       const result: PositionsMap = {}
       for (const [pk, pos] of Object.entries(prev)) {
-        result[pk] = {
-          ...pos,
-          orders: pos.orders.map((o) =>
-            o.id === orderId && o.source === "grid" && o.gridConsoleId === consoleId
-              ? { ...o, price: newPrice }
-              : o
-          ),
+        const updated = pos.orders.map((o) =>
+          o.id === orderId && o.source === "grid" && o.gridConsoleId === consoleId
+            ? { ...o, price: newPrice }
+            : o
+        )
+        const changed = updated !== pos.orders
+        if (changed) {
+          console.log("[UPDATE_GRID_PLACED_PRICE] updating position:", pk, "orders after update:", updated.map((o) => ({ id: o.id.slice(-6), price: o.price, source: o.source })))
         }
+        result[pk] = { ...pos, orders: updated }
       }
       return result
     })

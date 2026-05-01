@@ -612,7 +612,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const cb = (orderId: string, newPrice: number) => {
       const chart = activeChartRef.current
       const cfg = noTpSlRef.current
-      if (!chart || !(cfg.tpEnabled || cfg.slEnabled)) return
+      console.log("[DRAG_ORDER_END] orderId:", orderId, "newPrice:", newPrice, "chartId:", chart?.id, "tpEnabled:", cfg.tpEnabled, "slEnabled:", cfg.slEnabled)
+      if (!chart || !(cfg.tpEnabled || cfg.slEnabled)) {
+        console.log("[DRAG_ORDER_END] skipped — no chart or tp/sl disabled")
+        return
+      }
 
       const order = (() => {
         for (const pos of Object.values(ctxPositionsRef.current)) {
@@ -621,7 +625,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         }
         return null
       })()
-      if (!order) return
+      if (!order) {
+        console.log("[DRAG_ORDER_END] order not found in any position")
+        return
+      }
+
+      console.log("[DRAG_ORDER_END] found order:", { id: order.id, source: order.source, price: order.price, qty: order.qty, side: order.side })
 
       const posSide = order.side === "buy" ? "long" : "short"
       const miniCfg = {
@@ -654,6 +663,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const tpLevels = cfg.tpEnabled ? (viz.tpLevels ?? []) : []
       const tpVal = tpLevels[0] ?? null
       const slVal = cfg.slEnabled ? (viz.slPrice ?? null) : null
+      console.log("[DRAG_ORDER_END] WARNING: using single-order miniCfg (NOT position anchors). This may be wrong when position has multiple orders.")
+      console.log("[DRAG_ORDER_END] result tp:", tpVal, "sl:", slVal)
       setTpSl(chart.id, { tp: tpVal, sl: slVal, tpLevels: tpLevels.length > 1 ? tpLevels : undefined })
     }
     registerOrderDragEndCb(cb)
@@ -943,9 +954,17 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const tpsl = tpSlOrders[activeChart.id]
     const pos = ctxPositions[activePositionKey]
 
-    if (!pos || pos.orders.length === 0) return
+    console.log("[TPSL_DRAG_SYNC] chartId:", activeChart.id, "posKey:", activePositionKey, "posOrdersCount:", pos?.orders?.length ?? 0, "ctxTp:", tpsl?.tp, "ctxSl:", tpsl?.sl)
+
+    if (!pos || pos.orders.length === 0) {
+      console.log("[TPSL_DRAG_SYNC] skipped — no position or no orders")
+      return
+    }
+
+    console.log("[TPSL_DRAG_SYNC] pos.orders:", pos.orders.map((o) => ({ id: o.id.slice(-6), source: o.source, price: o.price, qty: o.qty })))
 
     const anchors = getPositionAnchors(pos.orders, futuresSide)
+    console.log("[TPSL_DRAG_SYNC] anchors:", anchors)
     if (!anchors) return
 
     const isLong = futuresSide === "long"
@@ -1025,18 +1044,35 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const orders = pos?.orders ?? []
     // Key encodes both which orders exist and their prices (drag updates price, not composition)
     const ordersKey = orders.map((o) => `${o.id}:${o.price}`).sort().join(",")
-    if (ordersKey === prevOrdersKeyRef.current) return
+
+    console.log("[REANCHOR] posKey:", activePositionKey, "ordersCount:", orders.length, "ordersKey:", ordersKey, "prevKey:", prevOrdersKeyRef.current)
+    console.log("[REANCHOR] orders:", orders.map((o) => ({ id: o.id.slice(-6), source: o.source, price: o.price, qty: o.qty, status: o.status })))
+
+    if (ordersKey === prevOrdersKeyRef.current) {
+      console.log("[REANCHOR] skipped — ordersKey unchanged")
+      return
+    }
     prevOrdersKeyRef.current = ordersKey
 
-    if (orders.length === 0) return
+    if (orders.length === 0) {
+      console.log("[REANCHOR] skipped — no orders in position")
+      return
+    }
 
     const anchors = getPositionAnchors(orders, futuresSide)
-    if (!anchors) return
+    if (!anchors) {
+      console.log("[REANCHOR] skipped — getPositionAnchors returned null")
+      return
+    }
 
     const isLong = futuresSide === "long"
-    const slBase = noTpSlRef.current.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
-    const tpBase = anchors.firstOrder
     const curTpSl = noTpSlRef.current
+    const slBase = curTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+    const tpBase = anchors.firstOrder
+
+    console.log("[REANCHOR] anchors:", { firstOrder: anchors.firstOrder, extremeOrder: anchors.extremeOrder, avgEntry: anchors.avgEntry })
+    console.log("[REANCHOR] tpBase:", tpBase, "slBase:", slBase, "slMode:", curTpSl.slMode, "isLong:", isLong)
+    console.log("[REANCHOR] cfg: tpEnabled:", curTpSl.tpEnabled, "tpPercent:", curTpSl.tpPercent, "slEnabled:", curTpSl.slEnabled, "slPercent:", curTpSl.slPercent)
 
     const tpLevels = curTpSl.tpEnabled
       ? (curTpSl.multiTpEnabled ? curTpSl.multiTpLevels.slice(0, curTpSl.multiTpCount) : [{ tpPercent: curTpSl.tpPercent }]).map((lvl) =>
@@ -1047,6 +1083,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const newSl = curTpSl.slEnabled && curTpSl.slPercent > 0
       ? isLong ? slBase * (1 - curTpSl.slPercent / 100) : slBase * (1 + curTpSl.slPercent / 100)
       : null
+
+    console.log("[REANCHOR] result tp:", newTp, "sl:", newSl, "→ setTpSl chartId:", activeChart.id)
 
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl

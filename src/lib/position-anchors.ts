@@ -27,5 +27,7 @@ export function getPositionAnchors(
   const totalQty = active.reduce((s, o) => s + o.qty, 0)
   const avgEntry = active.reduce((s, o) => s + o.price * o.qty, 0) / totalQty
 
-  return { firstOrder, extremeOrder, avgEntry }
+  const result = { firstOrder, extremeOrder, avgEntry }
+  console.log("[GET_POSITION_ANCHORS] side:", side, "inputOrders:", active.length, "prices:", prices, "→", result)
+  return result
 }
