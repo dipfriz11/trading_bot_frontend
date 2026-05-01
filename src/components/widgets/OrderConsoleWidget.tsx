@@ -1335,7 +1335,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         avgEntry: effectivePrice,
         leverage: posSettings.leverage,
         marginMode: posSettings.marginMode ?? "cross",
-        markPrice: effectivePrice,
+        markPrice: livePrices[symbol] ?? effectivePrice,
         openedAt: time,
         openedDate: (() => {
           const n = new Date()

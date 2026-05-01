@@ -242,6 +242,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const gridOrdersRef = React.useRef<GridOrderMap>({})
   const positionsRef = React.useRef<PositionsMap>({})
   const balancesRef = React.useRef<BalanceStore>(buildInitialBalances())
+  const livePricesRef = React.useRef<Record<string, number>>({})
   previewOrdersRef.current = previewOrders
   gridOrdersRef.current = gridOrders
   positionsRef.current = positions
@@ -260,6 +261,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem("tpsl_orders", JSON.stringify(tpSlOrders)) } catch {}
   }, [tpSlOrders])
   const [livePrices, setLivePricesMap] = useState<Record<string, number>>({})
+  livePricesRef.current = livePrices
   const setLivePrice = useCallback((symbol: string, price: number) => {
     setLivePricesMap((prev) => prev[symbol] === price ? prev : { ...prev, [symbol]: price })
   }, [])
@@ -923,7 +925,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             avgEntry: weightedAvg,
             leverage: entry.leverage,
             marginMode: "cross" as const,
-            markPrice: weightedAvg,
+            markPrice: livePricesRef.current[entry.symbol] ?? weightedAvg,
             notional,
             unrealizedPnl: 0,
             unrealizedPnlPct: 0,
@@ -938,10 +940,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      // Auto-fill orders that cross the market price (negative first offset scenario)
-      // For LONG (buy): order placed at or above current price → fills immediately
-      // For SHORT (sell): order placed at or below current price → fills immediately
-      const marketPrice = entry.entryPrice ?? weightedAvg
+      // Auto-fill orders that cross the market price
+      // For LONG (buy): ордер выше рынка → уже пересёк цену, заполняется сразу
+      // For SHORT (sell): ордер ниже рынка → уже пересёк цену, заполняется сразу
+      const marketPrice = livePricesRef.current[entry.symbol] ?? entry.entryPrice ?? weightedAvg
       const autoFillOrders = newOrders.filter((o) =>
         entry.side === "long" ? o.price >= marketPrice : o.price <= marketPrice,
       )
