@@ -6,7 +6,7 @@ import { DEFAULT_GRID_SHARED_TP_SL } from "@/types/terminal"
 import { SYMBOLS } from "@/lib/mock-data"
 import { nanoid } from "@/lib/nanoid"
 import { calcGridVisualization } from "@/lib/grid-math"
-import { getPositionAnchors } from "@/lib/position-anchors"
+import { getPositionAnchors, getSlBase } from "@/lib/position-anchors"
 import { useTerminal, useGridPreviewEntry, posKey } from "@/contexts/TerminalContext"
 import { PositionBar } from "./PositionBar"
 import { usePositionSettings } from "@/hooks/usePositionSettings"
@@ -984,8 +984,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!anchors) return
 
     const isLong = futuresSide === "long"
-    const slBase = noTpSlRef.current.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+    const slMode = noTpSlRef.current.slMode ?? null
+    const slBase = getSlBase(anchors, slMode)
     const tpBase = anchors.firstOrder
+    console.log("[TPSL_DRAG_SYNC] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
     // SL: check if incoming value differs from what we last pushed via placed-form
     const incomingSl = tpsl?.sl ?? null
@@ -1001,6 +1003,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         ? (1 - incomingSl / slBase) * 100
         : (incomingSl / slBase - 1) * 100
       const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
+      console.log("[TPSL_DRAG_SYNC] SL real drag: incomingSl:", incomingSl, "slBase:", slBase, "→ slPct:", rounded, "(mode:", slMode ?? "null=firstOrder", ")")
       lastPlacedSlPushedRef.current = incomingSl
       setNoTpSl((prev) => {
         if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
@@ -1083,11 +1086,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     const isLong = futuresSide === "long"
     const curTpSl = noTpSlRef.current
-    const slBase = curTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+    const slMode = curTpSl.slMode ?? null
+    const slBase = getSlBase(anchors, slMode)
     const tpBase = anchors.firstOrder
 
     console.log("[REANCHOR] anchors:", { firstOrder: anchors.firstOrder, extremeOrder: anchors.extremeOrder, avgEntry: anchors.avgEntry })
-    console.log("[REANCHOR] tpBase:", tpBase, "slBase:", slBase, "slMode:", curTpSl.slMode, "isLong:", isLong)
+    console.log("[REANCHOR] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "isLong:", isLong)
     console.log("[REANCHOR] cfg: tpEnabled:", curTpSl.tpEnabled, "tpPercent:", curTpSl.tpPercent, "slEnabled:", curTpSl.slEnabled, "slPercent:", curTpSl.slPercent)
 
     const tpLevels = curTpSl.tpEnabled
@@ -1122,8 +1126,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!anchors) return
 
     const isLong = futuresSide === "long"
+    const slMode = noTpSl.slMode ?? null
+    const slBase = getSlBase(anchors, slMode)
+    console.log("[FORM→CHART] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", anchors.firstOrder, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
-    const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
     const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
       ? isLong
         ? slBase * (1 - noTpSl.slPercent / 100)
@@ -1377,7 +1383,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
       if (anchors) {
         const tpBase = anchors.firstOrder
-        const slBase = noTpSl.slMode === "avg_entry" ? anchors.avgEntry : anchors.extremeOrder
+        const slMode = noTpSl.slMode ?? null
+        const slBase = getSlBase(anchors, slMode)
+        console.log("[NEW_ORDER_PREVIEW] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
         if (noTpSl.tpEnabled) {
           if (noTpSl.multiTpEnabled && noTpSl.multiTpLevels.length > 0) {
