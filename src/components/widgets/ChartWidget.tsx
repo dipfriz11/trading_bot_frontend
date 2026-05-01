@@ -419,7 +419,7 @@ function PositionLine({
 
   // Badge: LONG → left side with extra offset, SHORT → right side with extra offset
   // Extra offset (16px) ensures preview/draft order badges don't hide under the position badge
-  const BADGE_EXTRA_OFFSET = 16
+  const BADGE_EXTRA_OFFSET = 32
   const badgeTop = clampedY
 
   return (
