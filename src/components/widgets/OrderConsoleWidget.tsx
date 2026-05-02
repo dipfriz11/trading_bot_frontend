@@ -954,6 +954,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       console.log("[PUSH-TP] skipped — settingTpSlFromContextRef guard. tp:", tp)
       return
     }
+    // When position has orders, FORM→CHART owns tpSlOrders — don't let string form interfere
+    if ((ctxPositionsRef.current[activePositionKey]?.orders.length ?? 0) > 0) {
+      console.log("[PUSH-TP] skipped — position has orders, FORM→CHART owns tpSlOrders")
+      return
+    }
     const tpNum = parseFloat(tp)
     const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
     console.log("[PUSH-TP] tp string changed →", newTp, "(lastPushed:", lastTpPushedRef.current, ")")
@@ -968,6 +973,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       console.log("[PUSH-SL] skipped — settingTpSlFromContextRef guard. sl:", sl)
       return
     }
+    // When position has orders, FORM→CHART owns tpSlOrders — don't let string form interfere
+    if ((ctxPositionsRef.current[activePositionKey]?.orders.length ?? 0) > 0) {
+      console.log("[PUSH-SL] skipped — position has orders, FORM→CHART owns tpSlOrders")
+      return
+    }
     const slNum = parseFloat(sl)
     const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
     console.log("[PUSH-SL] sl string changed →", newSl, "(lastPushed:", lastSlPushedRef.current, ")")
@@ -978,6 +988,11 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- Sync TP/SL form from context (chart drag) ----
   useEffect(() => {
     if (!activeChart) return
+    // When position has orders, TPSL_DRAG_SYNC owns the sync path — string form sync would conflict
+    if ((ctxPositionsRef.current[activePositionKey]?.orders.length ?? 0) > 0) {
+      console.log("[CTX→FORM-STRING] skipped — position has orders, TPSL_DRAG_SYNC owns sync")
+      return
+    }
     const tpsl = tpSlOrders[activeChart.id]
     const ctxTp = tpsl?.tp ?? null
     const ctxSl = tpsl?.sl ?? null
