@@ -1321,8 +1321,16 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         leverage: posSettings.leverage,
         margin,
         time,
-        status: orderType === "market" ? "filled" : "pending",
+        // Always start as "pending" — fillOrder will mark it "filled" and update realSize/avgEntry.
+        // Setting "filled" here would cause fillOrder's guard to skip it, leaving realSize=0 and status="pending".
+        status: "pending",
       }
+
+      console.log(
+        `[HANDLE_SUBMIT] orderType=${orderType} side=${effectiveSide} qty=${qty} effectivePrice=${effectivePrice}` +
+        ` markPrice=${livePrices[symbol] ?? effectivePrice} symbol=${symbol}` +
+        ` isMarketCrossing=${orderType === "market" || (posSide === "long" ? effectivePrice >= (livePrices[symbol] ?? effectivePrice) : effectivePrice <= (livePrices[symbol] ?? effectivePrice))}`
+      )
 
       // Open / merge into live position with the order already included
       openPosition({

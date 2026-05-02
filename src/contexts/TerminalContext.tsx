@@ -644,18 +644,27 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     })
 
     // Auto-fill orders that cross the market price (unified logic for single and grid orders)
-    // For LONG (buy): order placed at or above current price → fills immediately
-    // For SHORT (sell): order placed at or below current price → fills immediately
+    // For LONG (buy): order placed at or above current price → fills immediately at markPrice
+    // For SHORT (sell): order placed at or below current price → fills immediately at markPrice
+    // Fill price = markPrice (actual execution price), NOT order.price (limit price)
+    const markPx = pos.markPrice
     const crossingOrders = initialOrders.filter((o) =>
       o.orderType === "market" || (
-        pos.side === "long" ? o.price >= pos.markPrice : o.price <= pos.markPrice
+        pos.side === "long" ? o.price >= markPx : o.price <= markPx
       ),
     )
     if (crossingOrders.length > 0) {
-      console.log("[OPEN_POSITION] auto-filling", crossingOrders.length, "crossing order(s) at markPrice:", pos.markPrice)
+      console.log(
+        `[OPEN_POSITION] auto-filling ${crossingOrders.length} crossing order(s).` +
+        ` markPrice=${markPx} side=${pos.side}`,
+        crossingOrders.map((o) => ({
+          id: o.id.slice(-6), orderType: o.orderType,
+          orderPrice: o.price, fillAt: markPx,
+        }))
+      )
       setTimeout(() => {
         for (const o of crossingOrders) {
-          fillOrder(pk, o.id, o.price)
+          fillOrder(pk, o.id, markPx)
         }
       }, 0)
     }
@@ -736,12 +745,24 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
+    console.log(`[FILL_ORDER] pk=${pk.split(":").slice(-2).join(":")} orderId=${orderId.slice(-6)} fillPrice=${fillPrice}`)
+
     setPositionsMap((prev) => {
       const pos = prev[pk]
-      if (!pos) return prev
+      if (!pos) {
+        console.warn(`[FILL_ORDER] position not found for pk=${pk}`)
+        return prev
+      }
 
       const order = pos.orders.find((o) => o.id === orderId)
-      if (!order || order.status === "filled") return prev
+      if (!order) {
+        console.warn(`[FILL_ORDER] order ${orderId.slice(-6)} not found in position ${pk.split(":").slice(-2).join(":")}`)
+        return prev
+      }
+      if (order.status === "filled") {
+        console.warn(`[FILL_ORDER] order ${orderId.slice(-6)} already filled — skipping (orderType=${order.orderType} orderPrice=${order.price})`)
+        return prev
+      }
 
       const price = fillPrice ?? order.price
       const qty = order.qty
@@ -758,6 +779,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         ? (pos.markPrice - newAvgEntry) * pos.size
         : (newAvgEntry - pos.markPrice) * pos.size
       const pnlPct = notional > 0 ? (rawPnl / notional) * pos.leverage * 100 : 0
+
+      console.log(
+        `[FILL_ORDER] filled: orderType=${order.orderType} orderPrice=${order.price} fillPrice=${price}` +
+        ` prevRealSize=${prevRealSize} newRealSize=${newRealSize} newAvgEntry=${newAvgEntry.toFixed(4)}` +
+        ` markPrice=${pos.markPrice} pnl=${rawPnl.toFixed(2)}`
+      )
 
       const updatedOrders = pos.orders.map((o) =>
         o.id === orderId
@@ -940,17 +967,21 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      // Auto-fill orders that cross the market price
-      // For LONG (buy): ордер выше рынка → уже пересёк цену, заполняется сразу
-      // For SHORT (sell): ордер ниже рынка → уже пересёк цену, заполняется сразу
+      // Auto-fill grid orders that cross the market price
+      // Fill at marketPrice, NOT at order.price (limit price) — actual execution price
       const marketPrice = livePricesRef.current[entry.symbol] ?? entry.entryPrice ?? weightedAvg
       const autoFillOrders = newOrders.filter((o) =>
         entry.side === "long" ? o.price >= marketPrice : o.price <= marketPrice,
       )
       if (autoFillOrders.length > 0) {
+        console.log(
+          `[PLACE_GRID_ORDERS] auto-filling ${autoFillOrders.length} crossing order(s).` +
+          ` marketPrice=${marketPrice} side=${entry.side}`,
+          autoFillOrders.map((o) => ({ id: o.id.slice(-6), orderPrice: o.price, fillAt: marketPrice }))
+        )
         setTimeout(() => {
           for (const o of autoFillOrders) {
-            fillOrder(posPk, o.id, o.price)
+            fillOrder(posPk, o.id, marketPrice)
           }
         }, 0)
       }
