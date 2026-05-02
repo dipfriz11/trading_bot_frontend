@@ -1260,6 +1260,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setTpSl = useCallback((chartId: string, patch: Partial<ChartTpSl>) => {
+    if (import.meta.env.DEV) {
+      const caller = new Error().stack?.split("\n").slice(2, 4).join(" | ") ?? ""
+      console.log("[SET_TPSL] chartId:", chartId, "patch:", patch, "| from:", caller)
+    }
     setTpSlOrders((prev) => {
       const existing: ChartTpSl = prev[chartId] ?? { tp: null, sl: null }
       return { ...prev, [chartId]: { ...existing, ...patch } }

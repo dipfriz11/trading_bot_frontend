@@ -1690,17 +1690,21 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (target === "sl") {
         console.log(`[CHART-DRAG ${phase}] SL drag end. consoleId:`, consoleId, "finalPrice:", finalPrice, "startPrice:", startPrice)
         applyGridTpSl(consoleId, { slPrice: finalPrice })
+        // For P2: also update tpSlOrders so TPSL_DRAG_SYNC can sync noTpSl % (used by REANCHOR)
+        if (!isPreview) setTpSl(widget.id, { sl: finalPrice })
       } else {
         const newLevels = [...(grid.tpLevels ?? [])]
         newLevels[tpIndex] = finalPrice
         console.log(`[CHART-DRAG ${phase}] TP drag end. consoleId:`, consoleId, "tpIndex:", tpIndex, "finalPrice:", finalPrice, "startPrice:", startPrice, "newLevels:", newLevels)
         applyGridTpSl(consoleId, { tpLevels: newLevels, tpPrice: newLevels[0] ?? null })
+        // For P2: also update tpSlOrders so TPSL_DRAG_SYNC can sync noTpSl % (used by REANCHOR)
+        if (!isPreview) setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] ?? null })
       }
     }
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [gridOrders, previewOrders, applyGridTpSl])
+  }, [gridOrders, previewOrders, applyGridTpSl, setTpSl, widget.id])
 
   // ---- TP/SL drag handler ----
   const handleTpSlDragStart = useCallback((
