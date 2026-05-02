@@ -527,9 +527,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (entry) {
         const orders = entry.orders.filter((o) => o.id !== orderId)
         if (orders.length === 0) {
-          const n = { ...prevGrid }
-          delete n[consoleId]
-          setGridOrdersMap(n)
+          // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart
+          const posOrders = positionsRef.current[positionKey]?.orders ?? []
+          const slotHasFills = posOrders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+          if (slotHasFills) {
+            setGridOrdersMap({ ...prevGrid, [consoleId]: { ...entry, orders: [] } })
+          } else {
+            const n = { ...prevGrid }
+            delete n[consoleId]
+            setGridOrdersMap(n)
+          }
         } else {
           setGridOrdersMap({ ...prevGrid, [consoleId]: { ...entry, orders } })
         }
@@ -586,6 +593,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (!p) return prev
       return { ...prev, [positionKey]: { ...p, orders: p.orders.map((o) => o.id === orderId ? { ...o, ...updates } : o) } }
     })
+    // Sync grid overlay so chart lines update when price/qty are edited via portfolio
+    const order = positionsRef.current[positionKey]?.orders.find((o) => o.id === orderId)
+    if (order?.gridConsoleId && (updates.price != null || updates.qty != null)) {
+      const cid = order.gridConsoleId
+      setGridOrdersMap((prev) => {
+        const entry = prev[cid]
+        if (!entry) return prev
+        return { ...prev, [cid]: { ...entry, orders: entry.orders.map((o) => o.id === orderId ? { ...o, ...updates } : o) } }
+      })
+    }
   }, [])
 
   // ── Position Manager ─────────────────────────────────────────────────────────
@@ -1009,9 +1026,26 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const prev = gridOrdersRef.current
     const entry = prev[consoleId]
     console.log("[CANCEL_GRID_ORDERS] consoleId:", consoleId, "entry:", entry ? { symbol: entry.symbol, side: entry.side, ordersCount: entry.orders.length } : "not found")
-    const n = { ...prev }
-    delete n[consoleId]
-    setGridOrdersMap(n)
+
+    // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart
+    if (entry) {
+      const checkPk = entry.accountId && entry.exchangeId && entry.marketType
+        ? posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
+        : null
+      const posOrders = checkPk ? (positionsRef.current[checkPk]?.orders ?? []) : []
+      const slotHasFills = posOrders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+      if (slotHasFills) {
+        setGridOrdersMap({ ...prev, [consoleId]: { ...entry, orders: [] } })
+      } else {
+        const n = { ...prev }
+        delete n[consoleId]
+        setGridOrdersMap(n)
+      }
+    } else {
+      const n = { ...prev }
+      delete n[consoleId]
+      setGridOrdersMap(n)
+    }
 
     if (entry && entry.accountId && entry.exchangeId && entry.marketType) {
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")

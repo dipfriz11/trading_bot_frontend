@@ -1122,7 +1122,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // Uses value-based echo detection: computes new values, skips push if nothing changed vs lastPushed.
   useEffect(() => {
     if (!activeChart) return
-    const pos = ctxPositions[activePositionKey]
+    // Use ref — not ctxPositions — to break the cycle:
+    // positions update → setTpSl → TPSL_DRAG_SYNC → setNoTpSl → this effect → repeat
+    const pos = ctxPositionsRef.current[activePositionKey]
     if (!pos || pos.orders.length === 0) return
 
     const anchors = getPositionAnchors(pos.orders, futuresSide)
@@ -1166,7 +1168,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       sl: newSl,
       tpLevels: tpLevels.length > 1 ? tpLevels : undefined,
     })
-  }, [noTpSl, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
+  }, [noTpSl, activeChart?.id, activePositionKey, futuresSide])
 
   // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {

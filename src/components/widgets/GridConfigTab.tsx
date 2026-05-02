@@ -770,11 +770,13 @@ export const GridConfigTab = memo(function GridConfigTab({
   const isPlaced = !!currentGridState
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
 
-  // If any order in this position has been filled (realSize > 0), structural grid editing
-  // is mathematically impossible — hide "Apply Changes" to prevent breaking the live position.
+  // Lock grid editing only if THIS slot has fills — not the whole position —
+  // so a second grid slot isn't blocked by fills from the first slot.
   const activePositionKey = posKey(accountId ?? "", exchangeId ?? "", marketType ?? "futures", cfg.symbol, cfg.side)
   const activePosition = positions[activePositionKey]
-  const positionHasFills = (activePosition?.realSize ?? 0) > 0
+  const positionHasFills = (activePosition?.orders ?? []).some(
+    (o) => o.gridConsoleId === consoleId && o.status === "filled"
+  )
   // For drag-sync: use placed state when placed, otherwise use preview state
   const currentDragState = currentGridState ?? currentPreviewState
 
@@ -1534,6 +1536,7 @@ export const GridConfigTab = memo(function GridConfigTab({
             id: o.id, price: o.price, qty: o.qty,
             side: snapshotSide === "long" ? "buy" as const : "sell" as const,
             source: "grid" as const,
+            status: "pending" as const,
           }))
           const existingWithoutNew = livePos
             ? livePos.orders.filter((o) => o.gridConsoleId !== snapshotConsoleId)
