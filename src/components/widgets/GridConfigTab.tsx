@@ -1441,12 +1441,11 @@ export const GridConfigTab = memo(function GridConfigTab({
       let slPrice: number | null = null
       if (mergedCfg.slEnabled) {
         const slPct = Math.max(0.01, mergedCfg.slPercent) / 100
-        if (mergedCfg.slMode === "extreme_order") {
-          slPrice = isLong ? extremeForSl * (1 - slPct) : extremeForSl * (1 + slPct)
-        } else if (mergedCfg.slMode === "avg_entry") {
+        if (mergedCfg.slMode === "avg_entry") {
           slPrice = isLong ? avgEntryAll * (1 - slPct) : avgEntryAll * (1 + slPct)
         } else {
-          slPrice = isLong ? bestFirstOrder * (1 - slPct) : bestFirstOrder * (1 + slPct)
+          // extreme_order mode (default)
+          slPrice = isLong ? extremeForSl * (1 - slPct) : extremeForSl * (1 + slPct)
         }
       }
 
@@ -1581,19 +1580,15 @@ export const GridConfigTab = memo(function GridConfigTab({
           let slPrice: number | null = null
           if (mergedCfg.slEnabled) {
             const slPct = Math.max(0.01, mergedCfg.slPercent) / 100
-            if (mergedCfg.slMode === "extreme_order") {
-              slPrice = isLong
-                ? extremeForSl * (1 - slPct)
-                : extremeForSl * (1 + slPct)
-            } else if (mergedCfg.slMode === "avg_entry") {
+            if (mergedCfg.slMode === "avg_entry") {
               slPrice = isLong
                 ? avgEntryAll * (1 - slPct)
                 : avgEntryAll * (1 + slPct)
             } else {
-              // first_order mode: same logic as TP — best first order
+              // extreme_order mode (default)
               slPrice = isLong
-                ? bestFirstOrder * (1 - slPct)
-                : bestFirstOrder * (1 + slPct)
+                ? extremeForSl * (1 - slPct)
+                : extremeForSl * (1 + slPct)
             }
           }
 
@@ -2535,7 +2530,7 @@ export const GridConfigTab = memo(function GridConfigTab({
                   borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.1)" : undefined,
                 }}>
                   <button
-                    onClick={() => upd("slMode", tpSl.slMode === o.v ? null : o.v)}
+                    onClick={() => upd("slMode", o.v)}
                     onMouseDown={(e) => e.stopPropagation()}
                     style={{
                       flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px",

@@ -6,13 +6,11 @@ export interface PositionAnchors {
   avgEntry: number     // volume-weighted average entry price across all orders
 }
 
-// slMode: null = "first order" (default), "extreme_order" = furthest, "avg_entry" = VWAP
-export type SlMode = "extreme_order" | "avg_entry" | null
+export type SlMode = "extreme_order" | "avg_entry"
 
 export function getSlBase(anchors: PositionAnchors, slMode: SlMode): number {
   if (slMode === "avg_entry") return anchors.avgEntry
-  if (slMode === "extreme_order") return anchors.extremeOrder
-  return anchors.firstOrder
+  return anchors.extremeOrder
 }
 
 export function getPositionAnchors(

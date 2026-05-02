@@ -331,7 +331,7 @@ export type GridDirection = "below_price" | "above_price"
 export type GridType = "simple" | "custom"
 export type GridEntryType = "market" | "limit"
 export type GridTpMode = "avg_entry" | "breakeven_offset"
-export type GridSlMode = "avg_entry" | "extreme_order" | null
+export type GridSlMode = "avg_entry" | "extreme_order"
 
 export interface GridMultiTpLevel {
   tpPercent: number
@@ -518,7 +518,7 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   ],
 
   slEnabled: true,
-  slMode: null,
+  slMode: "extreme_order",
   slPercent: 2.5,
   slClosePercent: 100,
 
@@ -563,7 +563,7 @@ export const DEFAULT_GRID_SHARED_TP_SL: GridSharedTpSl = {
     { afterLevel: 1, tpCount: 1, levels: [{ tpPercent: 1.2, closePercent: 100 }], resetTpEnabled: false },
   ],
   slEnabled: true,
-  slMode: null,
+  slMode: "extreme_order",
   slPercent: 2.5,
   slClosePercent: 100,
   resetTpEnabled: false,

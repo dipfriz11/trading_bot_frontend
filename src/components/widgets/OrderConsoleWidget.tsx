@@ -987,10 +987,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!anchors) return
 
     const isLong = futuresSide === "long"
-    const slMode = noTpSlRef.current.slMode ?? null
+    const slMode = noTpSlRef.current.slMode
     const slBase = getSlBase(anchors, slMode)
     const tpBase = anchors.firstOrder
-    console.log("[TPSL_DRAG_SYNC] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
+    console.log("[TPSL_DRAG_SYNC] slMode:", slMode, "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
     // SL: check if incoming value differs from what we last pushed via placed-form
     const incomingSl = tpsl?.sl ?? null
@@ -1089,12 +1089,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     const isLong = futuresSide === "long"
     const curTpSl = noTpSlRef.current
-    const slMode = curTpSl.slMode ?? null
+    const slMode = curTpSl.slMode
     const slBase = getSlBase(anchors, slMode)
     const tpBase = anchors.firstOrder
 
     console.log("[REANCHOR] anchors:", { firstOrder: anchors.firstOrder, extremeOrder: anchors.extremeOrder, avgEntry: anchors.avgEntry })
-    console.log("[REANCHOR] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "isLong:", isLong)
+    console.log("[REANCHOR] slMode:", slMode, "slBase:", slBase, "tpBase:", tpBase, "isLong:", isLong)
     console.log("[REANCHOR] cfg: tpEnabled:", curTpSl.tpEnabled, "tpPercent:", curTpSl.tpPercent, "slEnabled:", curTpSl.slEnabled, "slPercent:", curTpSl.slPercent)
 
     const tpLevels = curTpSl.tpEnabled
@@ -1131,9 +1131,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!anchors) return
 
     const isLong = futuresSide === "long"
-    const slMode = noTpSl.slMode ?? null
+    const slMode = noTpSl.slMode
     const slBase = getSlBase(anchors, slMode)
-    console.log("[FORM→CHART] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", anchors.firstOrder, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
+    console.log("[FORM→CHART] slMode:", slMode, "slBase:", slBase, "tpBase:", anchors.firstOrder, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
     const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
       ? isLong
@@ -1387,9 +1387,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
       if (anchors) {
         const tpBase = anchors.firstOrder
-        const slMode = noTpSl.slMode ?? null
+        const slMode = noTpSl.slMode
         const slBase = getSlBase(anchors, slMode)
-        console.log("[NEW_ORDER_PREVIEW] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
+        console.log("[NEW_ORDER_PREVIEW] slMode:", slMode, "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
         if (noTpSl.tpEnabled) {
           if (noTpSl.multiTpEnabled && noTpSl.multiTpLevels.length > 0) {
@@ -1941,7 +1941,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                   ] as const).map((o, i, arr) => (
                     <div key={o.v} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: noTpSl.slMode === o.v ? "rgba(30,111,239,0.18)" : "transparent", borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.1)" : undefined }}>
                       <button
-                        onClick={() => noUpd("slMode", noTpSl.slMode === o.v ? null : o.v)}
+                        onClick={() => noUpd("slMode", o.v)}
                         onMouseDown={(e) => e.stopPropagation()}
                         style={{ flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px", background: "transparent", border: "none", cursor: "pointer", color: noTpSl.slMode === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)", fontWeight: noTpSl.slMode === o.v ? 700 : 400, letterSpacing: "0.04em" }}
                       >{o.label}</button>
