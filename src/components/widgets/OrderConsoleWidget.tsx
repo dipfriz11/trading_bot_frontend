@@ -966,14 +966,18 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Guard: REANCHOR just fired setTpSl — this is our own echo, not a user drag.
     // The lastPushed refs are already set, but this catches the frame where both
     // ctxPositions change and tpSlOrders update arrive simultaneously.
-    if (reanchorJustFiredRef.current) return
+    console.log("[TPSL_DRAG_SYNC] reanchorJustFiredRef:", reanchorJustFiredRef.current)
+    if (reanchorJustFiredRef.current) {
+      console.log("[TPSL_DRAG_SYNC] skipped — reanchorJustFired guard")
+      return
+    }
 
     const tpsl = tpSlOrders[activeChart.id]
     // Read position from ref to avoid ctxPositions as a dependency (prevents double-firing
     // when REANCHOR changes both tpSlOrders and ctxPositions in the same cycle).
     const pos = ctxPositionsRef.current[activePositionKey]
 
-    console.log("[TPSL_DRAG_SYNC] chartId:", activeChart.id, "posKey:", activePositionKey, "posOrdersCount:", pos?.orders?.length ?? 0, "ctxTp:", tpsl?.tp, "ctxSl:", tpsl?.sl)
+    console.log("[TPSL_DRAG_SYNC] chartId:", activeChart.id, "posKey:", activePositionKey, "posOrdersCount:", pos?.orders?.length ?? 0, "ctxTp:", tpsl?.tp, "ctxSl:", tpsl?.sl, "lastPlacedSl:", lastPlacedSlPushedRef.current, "lastPlacedTp:", lastPlacedTpPushedRef.current)
 
     if (!pos || pos.orders.length === 0) {
       console.log("[TPSL_DRAG_SYNC] skipped — no position or no orders")
@@ -994,6 +998,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     // SL: check if incoming value differs from what we last pushed via placed-form
     const incomingSl = tpsl?.sl ?? null
+    console.log("[TPSL_DRAG_SYNC] incomingSl:", incomingSl, "diff:", incomingSl !== null ? Math.abs(incomingSl - (lastPlacedSlPushedRef.current ?? 0)) : "n/a", "threshold: 0.01")
     if (incomingSl === null || incomingSl === 0) {
       // Line was removed (X clicked) — clear form if we didn't push null ourselves
       if (lastPlacedSlPushedRef.current !== null && lastPlacedSlPushedRef.current !== 0) {
@@ -1017,6 +1022,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // TP: check if incoming value differs from what we last pushed via placed-form
     const incomingTp = tpsl?.tp ?? null
     const incomingTpLevels = tpsl?.tpLevels ?? null
+    console.log("[TPSL_DRAG_SYNC] incomingTp:", incomingTp, "incomingTpLevels:", incomingTpLevels, "diff:", incomingTp !== null ? Math.abs(incomingTp - (lastPlacedTpPushedRef.current ?? 0)) : "n/a", "lastTpLevelsKey:", lastTpLevelsPushedKeyRef.current)
     if (incomingTp === null || incomingTp === 0) {
       // Line was removed — clear form if we didn't push null ourselves
       if (lastPlacedTpPushedRef.current !== null && lastPlacedTpPushedRef.current !== 0) {
@@ -1030,6 +1036,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
       if (incomingTpLevels != null && incomingTpLevels.length > 0) {
         const newLevelsKey = incomingTpLevels.map((p) => Math.round(p * 100)).join(",")
+        console.log("[TPSL_DRAG_SYNC] TP levels drag. newLevelsKey:", newLevelsKey, "lastKey:", lastTpLevelsPushedKeyRef.current, "tpBase:", tpBase, "incomingTpLevels:", incomingTpLevels)
         if (newLevelsKey !== lastTpLevelsPushedKeyRef.current) {
           lastTpLevelsPushedKeyRef.current = newLevelsKey
           const newLevels = incomingTpLevels.map((lvlPrice, i) => {
@@ -1067,7 +1074,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Key encodes both which orders exist and their prices (drag updates price, not composition)
     const ordersKey = orders.map((o) => `${o.id}:${o.price}`).sort().join(",")
 
-    console.log("[REANCHOR] posKey:", activePositionKey, "ordersCount:", orders.length, "ordersKey:", ordersKey, "prevKey:", prevOrdersKeyRef.current)
+    console.log("[REANCHOR] posKey:", activePositionKey, "ordersCount:", orders.length)
+    console.log("[REANCHOR] ordersKey NEW:", ordersKey)
+    console.log("[REANCHOR] ordersKey OLD:", prevOrdersKeyRef.current)
     console.log("[REANCHOR] orders:", orders.map((o) => ({ id: o.id.slice(-6), source: o.source, price: o.price, qty: o.qty, status: o.status })))
 
     if (ordersKey === prevOrdersKeyRef.current) {
@@ -1107,7 +1116,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       ? isLong ? slBase * (1 - curTpSl.slPercent / 100) : slBase * (1 + curTpSl.slPercent / 100)
       : null
 
-    console.log("[REANCHOR] result tp:", newTp, "sl:", newSl, "→ setTpSl chartId:", activeChart.id)
+    console.log("[REANCHOR] result tp:", newTp, "sl:", newSl, "tpLevels:", tpLevels, "→ setTpSl chartId:", activeChart.id)
+    console.log("[REANCHOR] lastPlacedTp was:", lastPlacedTpPushedRef.current, "lastPlacedSl was:", lastPlacedSlPushedRef.current)
 
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl
@@ -1133,6 +1143,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const isLong = futuresSide === "long"
     const slMode = noTpSl.slMode
     const slBase = getSlBase(anchors, slMode)
+    console.log("[FORM→CHART] triggered. slEnabled:", noTpSl.slEnabled, "slPercent:", noTpSl.slPercent, "tpEnabled:", noTpSl.tpEnabled, "tpPercent:", noTpSl.tpPercent, "multiTpLevels:", noTpSl.multiTpLevels)
     console.log("[FORM→CHART] slMode:", slMode, "slBase:", slBase, "tpBase:", anchors.firstOrder, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
     const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
@@ -1159,10 +1170,15 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.01)
     const tpLevelsUnchanged = newTpLevelsKey === lastTpLevelsPushedKeyRef.current
 
-    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) return
+    console.log("[FORM→CHART] slUnchanged:", slUnchanged, "tpUnchanged:", tpUnchanged, "tpLevelsUnchanged:", tpLevelsUnchanged, "newSl:", newSl, "newTp:", newTp, "newTpLevels:", tpLevels)
+    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) {
+      console.log("[FORM→CHART] skipped — nothing changed")
+      return
+    }
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl
     lastTpLevelsPushedKeyRef.current = newTpLevelsKey
+    console.log("[FORM→CHART] firing setTpSl: tp:", newTp, "sl:", newSl, "tpLevels:", tpLevels)
     setTpSl(activeChart.id, {
       tp: newTp,
       sl: newSl,
