@@ -933,24 +933,27 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       settingTpSlFromContextRef.current = true
       setTp(priceToString(ctxTp))
       lastTpPushedRef.current = ctxTp
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      // Use setTimeout(0) instead of requestAnimationFrame: rAF fires after the next paint,
+      // which is after the next render, meaning the push-to-context effects already re-run
+      // with the new tp/sl state before the guard clears — causing an infinite loop.
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     } else if (ctxTp === null && lastTpPushedRef.current !== null && lastTpPushedRef.current !== 0) {
       settingTpSlFromContextRef.current = true
       setTp("")
       lastTpPushedRef.current = null
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     }
 
     if (ctxSl !== null && (lastSlPushedRef.current === null || Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)) > threshold(ctxSl))) {
       settingTpSlFromContextRef.current = true
       setSl(priceToString(ctxSl))
       lastSlPushedRef.current = ctxSl
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     } else if (ctxSl === null && lastSlPushedRef.current !== null && lastSlPushedRef.current !== 0) {
       settingTpSlFromContextRef.current = true
       setSl("")
       lastSlPushedRef.current = null
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     }
   }, [tpSlOrders, activeChart?.id])
 

@@ -595,20 +595,25 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setPositionsMap((prev) => {
       const existing = prev[pk]
       if (existing) {
-        // Merge into existing position (add to size, recalculate avg entry)
+        // Merge new pending orders into existing position.
+        // Do NOT touch avgEntry/realSize here — fillOrder will update them when the order is actually filled.
+        // Only update the total declared size and append the new orders.
         const totalSize = existing.size + pos.size
-        const newAvgEntry = (existing.avgEntry * existing.size + pos.avgEntry * pos.size) / totalSize
-        const notional = totalSize * newAvgEntry
+        const notional = totalSize * existing.avgEntry
         const rawPnl = pos.side === "long"
-          ? (pos.markPrice - newAvgEntry) * totalSize
-          : (newAvgEntry - pos.markPrice) * totalSize
-        const pnlPct = (rawPnl / notional) * pos.leverage * 100
+          ? (existing.markPrice - existing.avgEntry) * totalSize
+          : (existing.avgEntry - existing.markPrice) * totalSize
+        const pnlPct = notional > 0 ? (rawPnl / notional) * existing.leverage * 100 : 0
+        console.log(
+          `[OPEN_POSITION] merging into existing pos pk=${pk.split(":").slice(-2).join(":")}` +
+          ` existingSize=${existing.size} addSize=${pos.size} existingAvgEntry=${existing.avgEntry}` +
+          ` existingRealSize=${existing.realSize} (avgEntry NOT changed — fillOrder will update it)`
+        )
         return {
           ...prev,
           [pk]: {
             ...existing,
             size: totalSize,
-            avgEntry: newAvgEntry,
             notional,
             unrealizedPnl: rawPnl,
             unrealizedPnlPct: pnlPct,
@@ -1017,11 +1022,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         const pos = prev[cancelPk]
         if (!pos) return prev
         const remainingOrders = pos.orders.filter((o) => o.gridConsoleId !== consoleId)
-        // If no orders remain, delete the position entirely
-        if (remainingOrders.length === 0) {
+        // Only delete position if no filled volume AND no remaining orders.
+        // If realSize > 0 the position has executed trades and must stay active (e.g. grid edit save).
+        if (remainingOrders.length === 0 && (pos.realSize ?? 0) === 0) {
+          console.log(`[CANCEL_GRID_ORDERS] deleting position ${cancelPk.split(":").slice(-2).join(":")} — no orders and realSize=0`)
           const n = { ...prev }
           delete n[cancelPk]
           return n
+        }
+        if (remainingOrders.length === 0) {
+          console.log(`[CANCEL_GRID_ORDERS] keeping position ${cancelPk.split(":").slice(-2).join(":")} — realSize=${pos.realSize}, clearing orders temporarily (grid edit)`)
         }
         return { ...prev, [cancelPk]: { ...pos, orders: remainingOrders } }
       })
