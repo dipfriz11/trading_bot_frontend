@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { EXCHANGES } from "@/lib/mock-data"
 import type { Widget, LivePosition, ChartPlacedOrder } from "@/types/terminal"
-import type { ChartTpSl } from "@/contexts/TerminalContext"
 import { useTerminal, posKey } from "@/contexts/TerminalContext"
 import { X, ChevronDown, ChevronRight, Pencil, Check, CircleCheck as CheckCircle2, Circle, CircleAlert as AlertCircle } from "lucide-react"
 
@@ -183,14 +182,10 @@ function PositionOrderRow({
   order,
   positionKey,
   onCancel,
-  isSynthetic = false,
-  syntheticLabel,
 }: {
   order: ChartPlacedOrder
   positionKey: string
   onCancel: () => void
-  isSynthetic?: boolean
-  syntheticLabel?: string
 }) {
   const { updatePlacedOrder } = useTerminal()
   const isBuy = order.side === "buy"
@@ -205,7 +200,7 @@ function PositionOrderRow({
   }
 
   const isSlOrder = order.orderType === "market" && order.side === "sell" && order.source === "grid"
-  const typeDisplay = syntheticLabel ?? (isSlOrder ? "SL Market" : typeLabel)
+  const typeDisplay = isSlOrder ? "SL Market" : typeLabel
 
   const fillPct = order.filledPct ?? (isFilled ? 100 : 0)
 
@@ -354,23 +349,15 @@ function PositionOrderRow({
   }
 
   // ── Normal row ─────────────────────────────────────────────────────────────
-  const isTpSynthetic = isSynthetic && syntheticLabel?.startsWith("TP")
-  const isSlSynthetic = isSynthetic && syntheticLabel?.startsWith("SL")
-  const syntheticBorderColor = isTpSynthetic ? "rgba(0,229,160,0.35)" : isSlSynthetic ? "rgba(255,71,87,0.35)" : undefined
-
   return (
     <div
       className="group flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.02]"
-      style={{
-        borderBottom: `1px solid ${C.border}`,
-        ...(syntheticBorderColor ? { borderLeft: `2px solid ${syntheticBorderColor}`, paddingLeft: 10 } : {}),
-        ...(isSynthetic ? { background: isTpSynthetic ? "rgba(0,229,160,0.025)" : "rgba(255,71,87,0.025)" } : {}),
-      }}
+      style={{ borderBottom: `1px solid ${C.border}` }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Order ID */}
       <span className="font-mono" style={{ fontSize: 8, color: C.dimmer, minWidth: 66, flexShrink: 0 }}>
-        {isSynthetic ? (isTpSynthetic ? "Take Profit" : "Stop Loss").slice(0, 10) : order.id.slice(0, 10)}
+        {order.id.slice(0, 10)}
       </span>
 
       {/* BUY/SELL badge */}
@@ -428,7 +415,7 @@ function PositionOrderRow({
         <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>
           {fmtPrice(order.price)}
         </span>
-        {isPending && !isSynthetic && (
+        {isPending && (
           <button
             className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
             style={{ color: C.accent }}
@@ -465,7 +452,7 @@ function PositionOrderRow({
       </div>
 
       {/* Cancel button */}
-      {isPending && !isSynthetic && (
+      {isPending && (
         <button
           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded flex-shrink-0"
           style={{ color: "rgba(255,71,87,0.65)" }}
@@ -484,12 +471,10 @@ function PositionOrderRow({
 function ExpandedPosition({
   pos,
   positionKey,
-  tpSl,
   onClose,
 }: {
   pos: LivePosition
   positionKey: string
-  tpSl?: ChartTpSl
   onClose: (size: number) => void
 }) {
   const { removePlacedOrder } = useTerminal()
@@ -502,41 +487,6 @@ function ExpandedPosition({
     const rank = (o: ChartPlacedOrder) => o.status === "filled" ? 0 : o.status === "pending" ? 1 : 2
     return rank(a) - rank(b)
   })
-
-  // Build synthetic TP/SL rows for active (real) positions
-  const tpRows: ChartPlacedOrder[] = []
-  const slRow: ChartPlacedOrder | null = (() => {
-    if (!isActive || !tpSl) return null
-    if (tpSl.sl != null) {
-      return {
-        id: `${positionKey}:sl`,
-        side: isLong ? "sell" : "buy",
-        orderType: "market",
-        price: tpSl.sl,
-        qty: pos.realSize,
-        status: "pending",
-        source: "user",
-        time: undefined,
-      } as unknown as ChartPlacedOrder
-    }
-    return null
-  })()
-
-  if (isActive && tpSl) {
-    const levels = tpSl.tpLevels && tpSl.tpLevels.length > 1 ? tpSl.tpLevels : tpSl.tp != null ? [tpSl.tp] : []
-    levels.forEach((price, i) => {
-      tpRows.push({
-        id: `${positionKey}:tp:${i}`,
-        side: isLong ? "sell" : "buy",
-        orderType: "limit",
-        price,
-        qty: pos.realSize,
-        status: "pending",
-        source: "user",
-        time: undefined,
-      } as unknown as ChartPlacedOrder)
-    })
-  }
 
   return (
     <div
@@ -644,19 +594,7 @@ function ExpandedPosition({
       </div>
 
       {/* Order rows */}
-      {/* TP rows at top */}
-      {tpRows.map((order) => (
-        <PositionOrderRow
-          key={order.id}
-          order={order}
-          positionKey={positionKey}
-          isSynthetic
-          syntheticLabel="TP Limit"
-          onCancel={() => {}}
-        />
-      ))}
-
-      {sortedOrders.length === 0 && tpRows.length === 0 && !slRow ? (
+      {sortedOrders.length === 0 ? (
         <div className="px-3 py-2 font-mono" style={{ fontSize: 9, color: C.dim }}>
           No orders
         </div>
@@ -669,17 +607,6 @@ function ExpandedPosition({
             onCancel={() => removePlacedOrder(positionKey, order.id)}
           />
         ))
-      )}
-
-      {/* SL row at bottom */}
-      {slRow && (
-        <PositionOrderRow
-          order={slRow}
-          positionKey={positionKey}
-          isSynthetic
-          syntheticLabel="SL Market"
-          onCancel={() => {}}
-        />
       )}
 
       {/* Close actions */}
@@ -760,23 +687,7 @@ function PositionListHeader() {
 
 export function PortfolioWidget(_props: { widget: Widget }) {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
-  const { positions: livePositions, closePosition, partialClosePosition, tpSlOrders, activeTab } = useTerminal()
-
-  // Build map: posKey -> ChartTpSl by matching chart widgets on symbol
-  const tpSlByPosKey: Record<string, ChartTpSl> = {}
-  if (activeTab) {
-    for (const widget of activeTab.widgets) {
-      if (widget.type !== "chart" || !widget.symbol) continue
-      const tpsl = tpSlOrders[widget.id]
-      if (!tpsl) continue
-      // Match active positions by symbol
-      for (const [pk, pos] of Object.entries(livePositions)) {
-        if (pos.symbol === widget.symbol && pos.status === "active") {
-          tpSlByPosKey[pk] = tpsl
-        }
-      }
-    }
-  }
+  const { positions: livePositions, closePosition, partialClosePosition } = useTerminal()
 
   const liveList = Object.entries(livePositions)
 
@@ -862,7 +773,6 @@ export function PortfolioWidget(_props: { widget: Widget }) {
                     <ExpandedPosition
                       pos={pos}
                       positionKey={pk}
-                      tpSl={tpSlByPosKey[pk]}
                       onClose={(size) => handleClose(pos, size)}
                     />
                   )}
