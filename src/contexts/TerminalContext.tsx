@@ -527,9 +527,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (entry) {
         const orders = entry.orders.filter((o) => o.id !== orderId)
         if (orders.length === 0) {
-          // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart
-          const posOrders = positionsRef.current[positionKey]?.orders ?? []
-          const slotHasFills = posOrders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+          // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart.
+          // Use pos.orders (captured before removal) — positionsRef may already reflect the deletion.
+          const slotHasFills = pos.orders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
           if (slotHasFills) {
             setGridOrdersMap({ ...prevGrid, [consoleId]: { ...entry, orders: [] } })
           } else {
@@ -941,20 +941,22 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       setPositionsMap((prevPos) => {
         const existing = prevPos[posPk]
         if (existing) {
-          // Merge — replace grid orders for this console, keep rest
+          // Merge — replace grid orders for this console, keep rest.
+          // Preserve realSize/avgEntry from filled orders — only filled volume drives the position label.
+          // Adding a new pending grid must not shift the displayed entry price.
           const withoutOld = existing.orders.filter((o) => o.gridConsoleId !== consoleId)
           const mergedOrders = [...withoutOld, ...newOrders]
-          const newSize = totalQty
-          const newAvg = weightedAvg
-          const notional = newSize * newAvg
+          const displaySize = existing.realSize ?? 0
+          const displayAvg = existing.avgEntry  // already tracks only fills via fillOrder
+          const notional = displaySize * displayAvg
           const markPx = existing.markPrice
-          const rawPnl = entry.side === "long"
-            ? (markPx - newAvg) * newSize
-            : (newAvg - markPx) * newSize
-          const pnlPct = notional > 0 ? (rawPnl / notional) * entry.leverage * 100 : 0
+          const rawPnl = displaySize > 0
+            ? (entry.side === "long" ? (markPx - displayAvg) * displaySize : (displayAvg - markPx) * displaySize)
+            : 0
+          const pnlPct = notional > 0 ? (rawPnl / notional) * (entry.leverage ?? 1) * 100 : 0
           return {
             ...prevPos,
-            [posPk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: mergedOrders },
+            [posPk]: { ...existing, size: displaySize, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: mergedOrders },
           }
         }
         const notional = totalQty * weightedAvg
