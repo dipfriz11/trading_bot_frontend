@@ -242,6 +242,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const gridOrdersRef = React.useRef<GridOrderMap>({})
   const positionsRef = React.useRef<PositionsMap>({})
   const balancesRef = React.useRef<BalanceStore>(buildInitialBalances())
+  const livePricesRef = React.useRef<Record<string, number>>({})
   previewOrdersRef.current = previewOrders
   gridOrdersRef.current = gridOrders
   positionsRef.current = positions
@@ -260,6 +261,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem("tpsl_orders", JSON.stringify(tpSlOrders)) } catch {}
   }, [tpSlOrders])
   const [livePrices, setLivePricesMap] = useState<Record<string, number>>({})
+  livePricesRef.current = livePrices
   const setLivePrice = useCallback((symbol: string, price: number) => {
     setLivePricesMap((prev) => prev[symbol] === price ? prev : { ...prev, [symbol]: price })
   }, [])
@@ -525,9 +527,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (entry) {
         const orders = entry.orders.filter((o) => o.id !== orderId)
         if (orders.length === 0) {
-          const n = { ...prevGrid }
-          delete n[consoleId]
-          setGridOrdersMap(n)
+          // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart.
+          // Use pos.orders (captured before removal) — positionsRef may already reflect the deletion.
+          const slotHasFills = pos.orders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+          if (slotHasFills) {
+            setGridOrdersMap({ ...prevGrid, [consoleId]: { ...entry, orders: [] } })
+          } else {
+            const n = { ...prevGrid }
+            delete n[consoleId]
+            setGridOrdersMap(n)
+          }
         } else {
           setGridOrdersMap({ ...prevGrid, [consoleId]: { ...entry, orders } })
         }
@@ -584,6 +593,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       if (!p) return prev
       return { ...prev, [positionKey]: { ...p, orders: p.orders.map((o) => o.id === orderId ? { ...o, ...updates } : o) } }
     })
+    // Sync grid overlay so chart lines update when price/qty are edited via portfolio
+    const order = positionsRef.current[positionKey]?.orders.find((o) => o.id === orderId)
+    if (order?.gridConsoleId && (updates.price != null || updates.qty != null)) {
+      const cid = order.gridConsoleId
+      setGridOrdersMap((prev) => {
+        const entry = prev[cid]
+        if (!entry) return prev
+        return { ...prev, [cid]: { ...entry, orders: entry.orders.map((o) => o.id === orderId ? { ...o, ...updates } : o) } }
+      })
+    }
   }, [])
 
   // ── Position Manager ─────────────────────────────────────────────────────────
@@ -593,20 +612,25 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setPositionsMap((prev) => {
       const existing = prev[pk]
       if (existing) {
-        // Merge into existing position (add to size, recalculate avg entry)
+        // Merge new pending orders into existing position.
+        // Do NOT touch avgEntry/realSize here — fillOrder will update them when the order is actually filled.
+        // Only update the total declared size and append the new orders.
         const totalSize = existing.size + pos.size
-        const newAvgEntry = (existing.avgEntry * existing.size + pos.avgEntry * pos.size) / totalSize
-        const notional = totalSize * newAvgEntry
+        const notional = totalSize * existing.avgEntry
         const rawPnl = pos.side === "long"
-          ? (pos.markPrice - newAvgEntry) * totalSize
-          : (newAvgEntry - pos.markPrice) * totalSize
-        const pnlPct = (rawPnl / notional) * pos.leverage * 100
+          ? (existing.markPrice - existing.avgEntry) * totalSize
+          : (existing.avgEntry - existing.markPrice) * totalSize
+        const pnlPct = notional > 0 ? (rawPnl / notional) * existing.leverage * 100 : 0
+        console.log(
+          `[OPEN_POSITION] merging into existing pos pk=${pk.split(":").slice(-2).join(":")}` +
+          ` existingSize=${existing.size} addSize=${pos.size} existingAvgEntry=${existing.avgEntry}` +
+          ` existingRealSize=${existing.realSize} (avgEntry NOT changed — fillOrder will update it)`
+        )
         return {
           ...prev,
           [pk]: {
             ...existing,
             size: totalSize,
-            avgEntry: newAvgEntry,
             notional,
             unrealizedPnl: rawPnl,
             unrealizedPnlPct: pnlPct,
@@ -640,6 +664,32 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         },
       }
     })
+
+    // Auto-fill orders that cross the market price (unified logic for single and grid orders)
+    // For LONG (buy): order placed at or above current price → fills immediately at markPrice
+    // For SHORT (sell): order placed at or below current price → fills immediately at markPrice
+    // Fill price = markPrice (actual execution price), NOT order.price (limit price)
+    const markPx = pos.markPrice
+    const crossingOrders = initialOrders.filter((o) =>
+      o.orderType === "market" || (
+        pos.side === "long" ? o.price >= markPx : o.price <= markPx
+      ),
+    )
+    if (crossingOrders.length > 0) {
+      console.log(
+        `[OPEN_POSITION] auto-filling ${crossingOrders.length} crossing order(s).` +
+        ` markPrice=${markPx} side=${pos.side}`,
+        crossingOrders.map((o) => ({
+          id: o.id.slice(-6), orderType: o.orderType,
+          orderPrice: o.price, fillAt: markPx,
+        }))
+      )
+      setTimeout(() => {
+        for (const o of crossingOrders) {
+          fillOrder(pk, o.id, markPx)
+        }
+      }, 0)
+    }
   }, [])
 
   const closePosition = useCallback((pk: PositionKey) => {
@@ -717,12 +767,24 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
+    console.log(`[FILL_ORDER] pk=${pk.split(":").slice(-2).join(":")} orderId=${orderId.slice(-6)} fillPrice=${fillPrice}`)
+
     setPositionsMap((prev) => {
       const pos = prev[pk]
-      if (!pos) return prev
+      if (!pos) {
+        console.warn(`[FILL_ORDER] position not found for pk=${pk}`)
+        return prev
+      }
 
       const order = pos.orders.find((o) => o.id === orderId)
-      if (!order || order.status === "filled") return prev
+      if (!order) {
+        console.warn(`[FILL_ORDER] order ${orderId.slice(-6)} not found in position ${pk.split(":").slice(-2).join(":")}`)
+        return prev
+      }
+      if (order.status === "filled") {
+        console.warn(`[FILL_ORDER] order ${orderId.slice(-6)} already filled — skipping (orderType=${order.orderType} orderPrice=${order.price})`)
+        return prev
+      }
 
       const price = fillPrice ?? order.price
       const qty = order.qty
@@ -739,6 +801,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         ? (pos.markPrice - newAvgEntry) * pos.size
         : (newAvgEntry - pos.markPrice) * pos.size
       const pnlPct = notional > 0 ? (rawPnl / notional) * pos.leverage * 100 : 0
+
+      console.log(
+        `[FILL_ORDER] filled: orderType=${order.orderType} orderPrice=${order.price} fillPrice=${price}` +
+        ` prevRealSize=${prevRealSize} newRealSize=${newRealSize} newAvgEntry=${newAvgEntry.toFixed(4)}` +
+        ` markPrice=${pos.markPrice} pnl=${rawPnl.toFixed(2)}`
+      )
 
       const updatedOrders = pos.orders.map((o) =>
         o.id === orderId
@@ -873,20 +941,22 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       setPositionsMap((prevPos) => {
         const existing = prevPos[posPk]
         if (existing) {
-          // Merge — replace grid orders for this console, keep rest
+          // Merge — replace grid orders for this console, keep rest.
+          // Preserve realSize/avgEntry from filled orders — only filled volume drives the position label.
+          // Adding a new pending grid must not shift the displayed entry price.
           const withoutOld = existing.orders.filter((o) => o.gridConsoleId !== consoleId)
           const mergedOrders = [...withoutOld, ...newOrders]
-          const newSize = totalQty
-          const newAvg = weightedAvg
-          const notional = newSize * newAvg
+          const displaySize = existing.realSize ?? 0
+          const displayAvg = existing.avgEntry  // already tracks only fills via fillOrder
+          const notional = displaySize * displayAvg
           const markPx = existing.markPrice
-          const rawPnl = entry.side === "long"
-            ? (markPx - newAvg) * newSize
-            : (newAvg - markPx) * newSize
-          const pnlPct = notional > 0 ? (rawPnl / notional) * entry.leverage * 100 : 0
+          const rawPnl = displaySize > 0
+            ? (entry.side === "long" ? (markPx - displayAvg) * displaySize : (displayAvg - markPx) * displaySize)
+            : 0
+          const pnlPct = notional > 0 ? (rawPnl / notional) * (entry.leverage ?? 1) * 100 : 0
           return {
             ...prevPos,
-            [posPk]: { ...existing, size: newSize, avgEntry: newAvg, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: mergedOrders },
+            [posPk]: { ...existing, size: displaySize, notional, unrealizedPnl: rawPnl, unrealizedPnlPct: pnlPct, orders: mergedOrders },
           }
         }
         const notional = totalQty * weightedAvg
@@ -906,7 +976,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
             avgEntry: weightedAvg,
             leverage: entry.leverage,
             marginMode: "cross" as const,
-            markPrice: weightedAvg,
+            markPrice: livePricesRef.current[entry.symbol] ?? weightedAvg,
             notional,
             unrealizedPnl: 0,
             unrealizedPnlPct: 0,
@@ -921,17 +991,21 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      // Auto-fill orders that cross the market price (negative first offset scenario)
-      // For LONG (buy): order placed at or above current price → fills immediately
-      // For SHORT (sell): order placed at or below current price → fills immediately
-      const marketPrice = entry.entryPrice ?? weightedAvg
+      // Auto-fill grid orders that cross the market price
+      // Fill at marketPrice, NOT at order.price (limit price) — actual execution price
+      const marketPrice = livePricesRef.current[entry.symbol] ?? entry.entryPrice ?? weightedAvg
       const autoFillOrders = newOrders.filter((o) =>
         entry.side === "long" ? o.price >= marketPrice : o.price <= marketPrice,
       )
       if (autoFillOrders.length > 0) {
+        console.log(
+          `[PLACE_GRID_ORDERS] auto-filling ${autoFillOrders.length} crossing order(s).` +
+          ` marketPrice=${marketPrice} side=${entry.side}`,
+          autoFillOrders.map((o) => ({ id: o.id.slice(-6), orderPrice: o.price, fillAt: marketPrice }))
+        )
         setTimeout(() => {
           for (const o of autoFillOrders) {
-            fillOrder(posPk, o.id, o.price)
+            fillOrder(posPk, o.id, marketPrice)
           }
         }, 0)
       }
@@ -954,9 +1028,26 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     const prev = gridOrdersRef.current
     const entry = prev[consoleId]
     console.log("[CANCEL_GRID_ORDERS] consoleId:", consoleId, "entry:", entry ? { symbol: entry.symbol, side: entry.side, ordersCount: entry.orders.length } : "not found")
-    const n = { ...prev }
-    delete n[consoleId]
-    setGridOrdersMap(n)
+
+    // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart
+    if (entry) {
+      const checkPk = entry.accountId && entry.exchangeId && entry.marketType
+        ? posKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures", entry.symbol, entry.side)
+        : null
+      const posOrders = checkPk ? (positionsRef.current[checkPk]?.orders ?? []) : []
+      const slotHasFills = posOrders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+      if (slotHasFills) {
+        setGridOrdersMap({ ...prev, [consoleId]: { ...entry, orders: [] } })
+      } else {
+        const n = { ...prev }
+        delete n[consoleId]
+        setGridOrdersMap(n)
+      }
+    } else {
+      const n = { ...prev }
+      delete n[consoleId]
+      setGridOrdersMap(n)
+    }
 
     if (entry && entry.accountId && entry.exchangeId && entry.marketType) {
       const k = balKey(entry.accountId, entry.exchangeId, entry.marketType as "spot" | "futures")
@@ -967,11 +1058,16 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         const pos = prev[cancelPk]
         if (!pos) return prev
         const remainingOrders = pos.orders.filter((o) => o.gridConsoleId !== consoleId)
-        // If no orders remain, delete the position entirely
-        if (remainingOrders.length === 0) {
+        // Only delete position if no filled volume AND no remaining orders.
+        // If realSize > 0 the position has executed trades and must stay active (e.g. grid edit save).
+        if (remainingOrders.length === 0 && (pos.realSize ?? 0) === 0) {
+          console.log(`[CANCEL_GRID_ORDERS] deleting position ${cancelPk.split(":").slice(-2).join(":")} — no orders and realSize=0`)
           const n = { ...prev }
           delete n[cancelPk]
           return n
+        }
+        if (remainingOrders.length === 0) {
+          console.log(`[CANCEL_GRID_ORDERS] keeping position ${cancelPk.split(":").slice(-2).join(":")} — realSize=${pos.realSize}, clearing orders temporarily (grid edit)`)
         }
         return { ...prev, [cancelPk]: { ...pos, orders: remainingOrders } }
       })
@@ -1095,12 +1191,18 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       return result
     })
 
-    // Remove from grid overlay
+    // Remove from grid overlay.
+    // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart.
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
       const orders = entry.orders.filter((o) => o.id !== orderId)
       if (orders.length === 0) {
+        const posOrders = Object.values(positionsRef.current).flatMap((p) => p.orders)
+        const slotHasFills = posOrders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+        if (slotHasFills) {
+          return { ...prev, [consoleId]: { ...entry, orders: [] } }
+        }
         const n = { ...prev }
         delete n[consoleId]
         return n
@@ -1158,6 +1260,10 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setTpSl = useCallback((chartId: string, patch: Partial<ChartTpSl>) => {
+    if (import.meta.env.DEV) {
+      const caller = new Error().stack?.split("\n").slice(2, 4).join(" | ") ?? ""
+      console.log("[SET_TPSL] chartId:", chartId, "patch:", patch, "| from:", caller)
+    }
     setTpSlOrders((prev) => {
       const existing: ChartTpSl = prev[chartId] ?? { tp: null, sl: null }
       return { ...prev, [chartId]: { ...existing, ...patch } }

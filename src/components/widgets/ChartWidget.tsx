@@ -417,9 +417,10 @@ function PositionLine({
   const priceStr = priceToString(price)
   const realSizeStr = position.realSize > 0 ? position.realSize.toFixed(4) : position.size.toFixed(4)
 
-  // Badge sits at the left axis edge, vertically centered on the line
+  // Badge: LONG → left side with extra offset, SHORT → right side with extra offset
+  // Extra offset (16px) ensures preview/draft order badges don't hide under the position badge
+  const BADGE_EXTRA_OFFSET = 32
   const badgeTop = clampedY
-  const badgeLeft = padding.left
 
   return (
     <>
@@ -462,11 +463,13 @@ function PositionLine({
         </g>
       </svg>
 
-      {/* HTML badge on LEFT side — same style as the top "Close Position" badge */}
+      {/* HTML badge: LONG on left, SHORT on right */}
       <div
         style={{
           position: "absolute",
-          left: badgeLeft,
+          ...(isLong
+            ? { left: padding.left + BADGE_EXTRA_OFFSET }
+            : { right: padding.right + BADGE_EXTRA_OFFSET }),
           top: badgeTop,
           transform: "translateY(-50%)",
           zIndex: 10,
@@ -1683,18 +1686,25 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (!dragStarted) return
 
       const finalPrice = finalPriceRef.current
+      const phase = isPreview ? "P1-PREVIEW" : "P2-VIRTUAL"
       if (target === "sl") {
+        console.log(`[CHART-DRAG ${phase}] SL drag end. consoleId:`, consoleId, "finalPrice:", finalPrice, "startPrice:", startPrice)
         applyGridTpSl(consoleId, { slPrice: finalPrice })
+        // For P2: also update tpSlOrders so TPSL_DRAG_SYNC can sync noTpSl % (used by REANCHOR)
+        if (!isPreview) setTpSl(widget.id, { sl: finalPrice })
       } else {
         const newLevels = [...(grid.tpLevels ?? [])]
         newLevels[tpIndex] = finalPrice
+        console.log(`[CHART-DRAG ${phase}] TP drag end. consoleId:`, consoleId, "tpIndex:", tpIndex, "finalPrice:", finalPrice, "startPrice:", startPrice, "newLevels:", newLevels)
         applyGridTpSl(consoleId, { tpLevels: newLevels, tpPrice: newLevels[0] ?? null })
+        // For P2: also update tpSlOrders so TPSL_DRAG_SYNC can sync noTpSl % (used by REANCHOR)
+        if (!isPreview) setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] ?? null })
       }
     }
 
     window.addEventListener("mousemove", onMove)
     window.addEventListener("mouseup", onUp)
-  }, [gridOrders, previewOrders, applyGridTpSl])
+  }, [gridOrders, previewOrders, applyGridTpSl, setTpSl, widget.id])
 
   // ---- TP/SL drag handler ----
   const handleTpSlDragStart = useCallback((
@@ -1746,14 +1756,17 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (dragStarted) {
         const newPrice = finalPriceRef.current
         if (key === "sl") {
+          console.log("[CHART-DRAG P3-REAL] SL drag end. chartId:", widget.id, "finalPrice:", newPrice, "startPrice:", startPrice)
           setTpSl(widget.id, { sl: newPrice })
         } else {
           const levels = current?.tpLevels
           if (levels && levels.length > 1) {
             const idx = tpIndex ?? 0
             const newLevels = levels.map((p, i) => i === idx ? newPrice : p)
+            console.log("[CHART-DRAG P3-REAL] TP drag end (multi). chartId:", widget.id, "tpIndex:", idx, "finalPrice:", newPrice, "startPrice:", startPrice, "newLevels:", newLevels)
             setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
           } else {
+            console.log("[CHART-DRAG P3-REAL] TP drag end (single). chartId:", widget.id, "finalPrice:", newPrice, "startPrice:", startPrice)
             setTpSl(widget.id, { tp: newPrice, tpLevels: undefined })
           }
         }

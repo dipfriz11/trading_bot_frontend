@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { EXCHANGES } from "@/lib/mock-data"
 import type { Widget, LivePosition, ChartPlacedOrder } from "@/types/terminal"
+import type { ChartTpSl } from "@/contexts/TerminalContext"
 import { useTerminal, posKey } from "@/contexts/TerminalContext"
-import { X, ChevronDown, ChevronRight, Pencil, CircleCheck as CheckCircle2, Circle, CircleAlert as AlertCircle } from "lucide-react"
+import { X, ChevronDown, ChevronRight, Pencil, Check, CircleCheck as CheckCircle2, Circle, CircleAlert as AlertCircle } from "lucide-react"
 
 // ─── Color palette ────────────────────────────────────────────────────────────
 const C = {
@@ -180,17 +181,23 @@ function CollapsedRow({
 
 function PositionOrderRow({
   order,
-  positionKey: _positionKey,
+  positionKey,
   onCancel,
+  isSynthetic = false,
+  syntheticLabel,
 }: {
   order: ChartPlacedOrder
   positionKey: string
   onCancel: () => void
+  isSynthetic?: boolean
+  syntheticLabel?: string
 }) {
+  const { updatePlacedOrder } = useTerminal()
   const isBuy = order.side === "buy"
   const sideColor = isBuy ? C.buy : C.sell
   const isFilled = order.status === "filled"
   const isCancelled = order.status === "cancelled"
+  const isPending = order.status === "pending"
 
   let typeLabel = order.orderType === "market" ? "Market" : "Limit"
   if (order.source === "grid" && order.gridIndex != null) {
@@ -198,20 +205,172 @@ function PositionOrderRow({
   }
 
   const isSlOrder = order.orderType === "market" && order.side === "sell" && order.source === "grid"
-  const typeDisplay = isSlOrder ? "SL Market" : typeLabel
+  const typeDisplay = syntheticLabel ?? (isSlOrder ? "SL Market" : typeLabel)
 
   const fillPct = order.filledPct ?? (isFilled ? 100 : 0)
-  const qty = fmtQty(order.qty)
+
+  // ── Inline edit state ──────────────────────────────────────────────────────
+  const [editing, setEditing] = useState(false)
+  const [editPrice, setEditPrice] = useState("")
+  const [editQty, setEditQty] = useState("")
+  const priceRef = useRef<HTMLInputElement>(null)
+
+  const startEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isPending) return
+    setEditPrice(String(order.price))
+    setEditQty(String(order.qty))
+    setEditing(true)
+  }
+
+  useEffect(() => {
+    if (editing) priceRef.current?.select()
+  }, [editing])
+
+  const commitEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newPrice = parseFloat(editPrice)
+    const newQty = parseFloat(editQty)
+    const updates: Partial<ChartPlacedOrder> = {}
+    if (!isNaN(newPrice) && newPrice > 0) updates.price = newPrice
+    if (!isNaN(newQty) && newQty > 0) updates.qty = newQty
+    if (Object.keys(updates).length > 0) {
+      updatePlacedOrder(positionKey, order.id, updates)
+    }
+    setEditing(false)
+  }
+
+  const cancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      const newPrice = parseFloat(editPrice)
+      const newQty = parseFloat(editQty)
+      const updates: Partial<ChartPlacedOrder> = {}
+      if (!isNaN(newPrice) && newPrice > 0) updates.price = newPrice
+      if (!isNaN(newQty) && newQty > 0) updates.qty = newQty
+      if (Object.keys(updates).length > 0) {
+        updatePlacedOrder(positionKey, order.id, updates)
+      }
+      setEditing(false)
+    } else if (e.key === "Escape") {
+      setEditing(false)
+    }
+  }
+
+  const inlineInput: React.CSSProperties = {
+    background: "rgba(30,111,239,0.1)",
+    border: "1px solid rgba(30,111,239,0.35)",
+    borderRadius: 3,
+    color: "rgba(200,214,229,0.95)",
+    fontSize: 9,
+    fontFamily: "monospace",
+    padding: "1px 4px",
+    outline: "none",
+    width: "100%",
+  }
+
+  // ── Edit mode row ──────────────────────────────────────────────────────────
+  if (editing) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1.5"
+        style={{
+          borderBottom: `1px solid ${C.border}`,
+          background: "rgba(30,111,239,0.04)",
+          border: "1px solid rgba(30,111,239,0.18)",
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* BUY/SELL badge */}
+        <span
+          className="px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0"
+          style={{
+            fontSize: 8,
+            background: isBuy ? "rgba(0,229,160,0.1)" : "rgba(255,71,87,0.1)",
+            color: sideColor,
+            border: `1px solid ${isBuy ? "rgba(0,229,160,0.22)" : "rgba(255,71,87,0.22)"}`,
+          }}
+        >
+          {isBuy ? "BUY" : "SELL"}
+        </span>
+
+        {/* Type label */}
+        <span className="font-mono flex-shrink-0" style={{ fontSize: 9, color: "rgba(200,214,229,0.5)", minWidth: 50 }}>
+          {typeDisplay}
+        </span>
+
+        {/* Price input */}
+        <div className="flex flex-col gap-0.5 flex-1" style={{ minWidth: 70 }}>
+          <span className="font-mono" style={{ fontSize: 7, color: C.dim }}>Price</span>
+          <input
+            ref={priceRef}
+            value={editPrice}
+            onChange={(e) => setEditPrice(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={inlineInput}
+            type="number"
+            step="any"
+          />
+        </div>
+
+        {/* Qty input */}
+        <div className="flex flex-col gap-0.5 flex-1" style={{ minWidth: 55 }}>
+          <span className="font-mono" style={{ fontSize: 7, color: C.dim }}>Qty</span>
+          <input
+            value={editQty}
+            onChange={(e) => setEditQty(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={inlineInput}
+            type="number"
+            step="any"
+          />
+        </div>
+
+        {/* Confirm */}
+        <button
+          onClick={commitEdit}
+          className="flex-shrink-0 p-1 rounded transition-colors"
+          style={{ color: C.filled, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)" }}
+          title="Save changes"
+        >
+          <Check size={9} />
+        </button>
+
+        {/* Cancel edit */}
+        <button
+          onClick={cancelEdit}
+          className="flex-shrink-0 p-1 rounded transition-colors"
+          style={{ color: "rgba(255,71,87,0.7)", background: "rgba(255,71,87,0.08)", border: "1px solid rgba(255,71,87,0.2)" }}
+          title="Cancel"
+        >
+          <X size={9} />
+        </button>
+      </div>
+    )
+  }
+
+  // ── Normal row ─────────────────────────────────────────────────────────────
+  const isTpSynthetic = isSynthetic && syntheticLabel?.startsWith("TP")
+  const isSlSynthetic = isSynthetic && syntheticLabel?.startsWith("SL")
+  const syntheticBorderColor = isTpSynthetic ? "rgba(0,229,160,0.35)" : isSlSynthetic ? "rgba(255,71,87,0.35)" : undefined
 
   return (
     <div
       className="group flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.02]"
-      style={{ borderBottom: `1px solid ${C.border}` }}
+      style={{
+        borderBottom: `1px solid ${C.border}`,
+        ...(syntheticBorderColor ? { borderLeft: `2px solid ${syntheticBorderColor}`, paddingLeft: 10 } : {}),
+        ...(isSynthetic ? { background: isTpSynthetic ? "rgba(0,229,160,0.025)" : "rgba(255,71,87,0.025)" } : {}),
+      }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Order ID */}
       <span className="font-mono" style={{ fontSize: 8, color: C.dimmer, minWidth: 66, flexShrink: 0 }}>
-        {order.id.slice(0, 10)}
+        {isSynthetic ? (isTpSynthetic ? "Take Profit" : "Stop Loss").slice(0, 10) : order.id.slice(0, 10)}
       </span>
 
       {/* BUY/SELL badge */}
@@ -234,7 +393,7 @@ function PositionOrderRow({
 
       {/* Qty */}
       <div className="flex flex-col items-end" style={{ minWidth: 40 }}>
-        <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>{qty}</span>
+        <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>{fmtQty(order.qty)}</span>
         {order.source === "grid" && (
           <div className="flex gap-0.5">
             <span style={{ color: C.dim, fontSize: 8 }}>≡</span>
@@ -264,19 +423,21 @@ function PositionOrderRow({
         )}
       </div>
 
-      {/* Price */}
+      {/* Price + pencil */}
       <div className="flex items-center gap-1 flex-1">
         <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>
           {fmtPrice(order.price)}
         </span>
-        <button
-          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
-          style={{ color: C.accent }}
-          title="Edit price"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Pencil size={8} />
-        </button>
+        {isPending && !isSynthetic && (
+          <button
+            className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+            style={{ color: C.accent }}
+            title="Edit order"
+            onClick={startEdit}
+          >
+            <Pencil size={8} />
+          </button>
+        )}
       </div>
 
       {/* Fill % */}
@@ -304,7 +465,7 @@ function PositionOrderRow({
       </div>
 
       {/* Cancel button */}
-      {order.status === "pending" && (
+      {isPending && !isSynthetic && (
         <button
           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded flex-shrink-0"
           style={{ color: "rgba(255,71,87,0.65)" }}
@@ -323,10 +484,12 @@ function PositionOrderRow({
 function ExpandedPosition({
   pos,
   positionKey,
+  tpSl,
   onClose,
 }: {
   pos: LivePosition
   positionKey: string
+  tpSl?: ChartTpSl
   onClose: (size: number) => void
 }) {
   const { removePlacedOrder } = useTerminal()
@@ -339,6 +502,41 @@ function ExpandedPosition({
     const rank = (o: ChartPlacedOrder) => o.status === "filled" ? 0 : o.status === "pending" ? 1 : 2
     return rank(a) - rank(b)
   })
+
+  // Build synthetic TP/SL rows for active (real) positions
+  const tpRows: ChartPlacedOrder[] = []
+  const slRow: ChartPlacedOrder | null = (() => {
+    if (!isActive || !tpSl) return null
+    if (tpSl.sl != null) {
+      return {
+        id: `${positionKey}:sl`,
+        side: isLong ? "sell" : "buy",
+        orderType: "market",
+        price: tpSl.sl,
+        qty: pos.realSize,
+        status: "pending",
+        source: "user",
+        time: undefined,
+      } as unknown as ChartPlacedOrder
+    }
+    return null
+  })()
+
+  if (isActive && tpSl) {
+    const levels = tpSl.tpLevels && tpSl.tpLevels.length > 1 ? tpSl.tpLevels : tpSl.tp != null ? [tpSl.tp] : []
+    levels.forEach((price, i) => {
+      tpRows.push({
+        id: `${positionKey}:tp:${i}`,
+        side: isLong ? "sell" : "buy",
+        orderType: "limit",
+        price,
+        qty: pos.realSize,
+        status: "pending",
+        source: "user",
+        time: undefined,
+      } as unknown as ChartPlacedOrder)
+    })
+  }
 
   return (
     <div
@@ -446,7 +644,19 @@ function ExpandedPosition({
       </div>
 
       {/* Order rows */}
-      {sortedOrders.length === 0 ? (
+      {/* TP rows at top */}
+      {tpRows.map((order) => (
+        <PositionOrderRow
+          key={order.id}
+          order={order}
+          positionKey={positionKey}
+          isSynthetic
+          syntheticLabel="TP Limit"
+          onCancel={() => {}}
+        />
+      ))}
+
+      {sortedOrders.length === 0 && tpRows.length === 0 && !slRow ? (
         <div className="px-3 py-2 font-mono" style={{ fontSize: 9, color: C.dim }}>
           No orders
         </div>
@@ -459,6 +669,17 @@ function ExpandedPosition({
             onCancel={() => removePlacedOrder(positionKey, order.id)}
           />
         ))
+      )}
+
+      {/* SL row at bottom */}
+      {slRow && (
+        <PositionOrderRow
+          order={slRow}
+          positionKey={positionKey}
+          isSynthetic
+          syntheticLabel="SL Market"
+          onCancel={() => {}}
+        />
       )}
 
       {/* Close actions */}
@@ -539,7 +760,23 @@ function PositionListHeader() {
 
 export function PortfolioWidget(_props: { widget: Widget }) {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
-  const { positions: livePositions, closePosition, partialClosePosition } = useTerminal()
+  const { positions: livePositions, closePosition, partialClosePosition, tpSlOrders, activeTab } = useTerminal()
+
+  // Build map: posKey -> ChartTpSl by matching chart widgets on symbol
+  const tpSlByPosKey: Record<string, ChartTpSl> = {}
+  if (activeTab) {
+    for (const widget of activeTab.widgets) {
+      if (widget.type !== "chart" || !widget.symbol) continue
+      const tpsl = tpSlOrders[widget.id]
+      if (!tpsl) continue
+      // Match active positions by symbol
+      for (const [pk, pos] of Object.entries(livePositions)) {
+        if (pos.symbol === widget.symbol && pos.status === "active") {
+          tpSlByPosKey[pk] = tpsl
+        }
+      }
+    }
+  }
 
   const liveList = Object.entries(livePositions)
 
@@ -625,6 +862,7 @@ export function PortfolioWidget(_props: { widget: Widget }) {
                     <ExpandedPosition
                       pos={pos}
                       positionKey={pk}
+                      tpSl={tpSlByPosKey[pk]}
                       onClose={(size) => handleClose(pos, size)}
                     />
                   )}

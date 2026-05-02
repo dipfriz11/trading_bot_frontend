@@ -341,7 +341,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     tpSlOrders, setTpSl,
     setGridPreview, cancelGridPreview, registerOrderPreviewCancelCb, unregisterOrderPreviewCancelCb,
     registerOrderDragEndCb, unregisterOrderDragEndCb,
-    openPosition, fillOrder,
+    openPosition,
     livePrices,
   } = useTerminal()
 
@@ -760,6 +760,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Если уже есть виртуальная позиция по этому символу (ордера из любого источника —
     // Order или Grid) — TP/SL принадлежат позиции целиком, не рисуем draft-линии поверх.
     const positionHasOrders = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).length > 0
+    console.log("[NO-PREVIEW-EFFECT] firing. p:", p, "qty:", qtyNum, "positionHasOrders:", positionHasOrders, "viz.tpLevels:", viz.tpLevels, "viz.slPrice:", viz.slPrice)
     if (!positionHasOrders) {
       setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
     }
@@ -817,24 +818,40 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
     // If noPreviewEffect just wrote this slPrice, skip — it came from form, not user drag
     if (noPreviewWroteSlRef.current) {
+      console.log("[P1/P2 SL-DRAG] skipped — noPreviewWroteSlRef guard. noChartSlPrice:", noChartSlPrice)
       noPreviewWroteSlRef.current = false
       prevNoSlPriceValueRef.current = noChartSlPrice ?? null
       return
     }
     const prev = prevNoSlPriceValueRef.current
     prevNoSlPriceValueRef.current = noChartSlPrice ?? null
-    if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) return
-    if (Math.abs(noChartSlPrice - prev) < 1e-8) return
+    console.log("[P1/P2 SL-DRAG] triggered. noChartSlPrice:", noChartSlPrice, "prev:", prev, "noExpectedSl:", noExpectedSlPriceRef.current, "orderType:", orderType)
+    if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) {
+      console.log("[P1/P2 SL-DRAG] skipped — prev or cur is null/undefined")
+      return
+    }
+    if (Math.abs(noChartSlPrice - prev) < 1e-8) {
+      console.log("[P1/P2 SL-DRAG] skipped — price unchanged (<1e-8)")
+      return
+    }
     const exp = noExpectedSlPriceRef.current
-    if (exp !== undefined && exp !== null && Math.abs(noChartSlPrice - exp) < 1e-8) return
+    if (exp !== undefined && exp !== null && Math.abs(noChartSlPrice - exp) < 1e-8) {
+      console.log("[P1/P2 SL-DRAG] skipped — matches noExpectedSl:", exp)
+      return
+    }
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    if (p <= 0) return
+    if (p <= 0) {
+      console.log("[P1/P2 SL-DRAG] skipped — entry price p <= 0:", p)
+      return
+    }
     const gSide = effectiveSide === "buy" ? "long" : "short"
     const isLong = gSide === "long"
     const newPct = isLong
       ? (1 - noChartSlPrice / p) * 100
       : (noChartSlPrice / p - 1) * 100
-    noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
+    const rounded = Math.max(0.01, Math.round(newPct * 100) / 100)
+    console.log("[P1/P2 SL-DRAG] REAL DRAG → slPercent:", rounded, "(entryPrice:", p, "isLong:", isLong, "slPrice:", noChartSlPrice, ")")
+    noUpd("slPercent", rounded)
   }, [noChartSlPrice, activeChart?.id])
 
   // TP x-click: tpLevels count decreased
@@ -843,19 +860,33 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   useEffect(() => {
     const prev = prevNoTpLevelsKeyRef.current
     prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
-    if (prev === undefined) return
+    console.log("[P1/P2 TP-XCLICK] triggered. noChartTpLevelsKey:", noChartTpLevelsKey, "prev:", prev, "noPreviewState:", !!noPreviewState)
+    if (prev === undefined) {
+      console.log("[P1/P2 TP-XCLICK] skipped — first render")
+      return
+    }
     // If the entire preview was removed (not a user TP x-click), skip
-    if (!noPreviewState) return
+    if (!noPreviewState) {
+      console.log("[P1/P2 TP-XCLICK] skipped — no noPreviewState")
+      return
+    }
     const prevLen = prev ? prev.split(",").length : 0
     const curLen = noChartTpLevels?.length ?? 0
-    if (curLen >= prevLen) return
+    if (curLen >= prevLen) {
+      console.log("[P1/P2 TP-XCLICK] skipped — curLen:", curLen, ">= prevLen:", prevLen, "(count didn't decrease)")
+      return
+    }
     if (curLen === 0) {
+      console.log("[P1/P2 TP-XCLICK] tpEnabled → false (all TP removed)")
       noUpd("tpEnabled", false)
       return
     }
     // Partial removal: sync multiTpLevels
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    if (p <= 0) return
+    if (p <= 0) {
+      console.log("[P1/P2 TP-XCLICK] skipped — entry price p <= 0:", p)
+      return
+    }
     const gSide = effectiveSide === "buy" ? "long" : "short"
     const isLong = gSide === "long"
     const remaining = noChartTpLevels ?? []
@@ -866,6 +897,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const pct = isLong ? (price / p - 1) * 100 : (1 - price / p) * 100
       return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent: i === n - 1 ? base + remainder : base }
     })
+    console.log("[P1/P2 TP-XCLICK] partial removal → newLevels:", newLevels, "(entryPrice:", p, "isLong:", isLong, ")")
     setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpCount: n, multiTpLevels: newLevels, multiTpEnabled: n > 1 }))
   }, [noChartTpLevelsKey])
 
@@ -875,19 +907,33 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const prev = prevNoTpLevelsValuesRef.current
     const cur = noChartTpLevels
     prevNoTpLevelsValuesRef.current = cur ? [...cur] : undefined
-    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
+    console.log("[P1/P2 TP-DRAG] triggered. cur:", cur, "prev:", prev, "noPreviewWroteTp:", noPreviewWroteTpRef.current)
+    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) {
+      console.log("[P1/P2 TP-DRAG] skipped — no prev/cur or length mismatch or empty")
+      return
+    }
     const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
-    if (!changed) return
+    if (!changed) {
+      console.log("[P1/P2 TP-DRAG] skipped — values unchanged")
+      return
+    }
     // Skip if noPreviewEffect just wrote these tpLevels — not a user drag
     if (noPreviewWroteTpRef.current) {
+      console.log("[P1/P2 TP-DRAG] skipped — noPreviewWroteTpRef guard")
       noPreviewWroteTpRef.current = false
       return
     }
     // Skip if these are values we just wrote via noPreviewEffect
     const exp = noExpectedTpLevelsRef.current
-    if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) return
+    if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) {
+      console.log("[P1/P2 TP-DRAG] skipped — matches noExpectedTpLevels:", exp)
+      return
+    }
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    if (p <= 0) return
+    if (p <= 0) {
+      console.log("[P1/P2 TP-DRAG] skipped — entry price p <= 0:", p)
+      return
+    }
     const gSide = effectiveSide === "buy" ? "long" : "short"
     const isLong = gSide === "long"
     const newLevels = cur.map((price, i) => {
@@ -897,15 +943,25 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
       }
     })
+    console.log("[P1/P2 TP-DRAG] REAL DRAG → newLevels:", newLevels, "(entryPrice:", p, "isLong:", isLong, "cur:", cur, ")")
     setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpLevels: newLevels }))
   }, [noChartTpLevelsKey])
 
   // ---- Push TP to context when form changes ----
   useEffect(() => {
     if (!activeChart) return
-    if (settingTpSlFromContextRef.current) return
+    if (settingTpSlFromContextRef.current) {
+      console.log("[PUSH-TP] skipped — settingTpSlFromContextRef guard. tp:", tp)
+      return
+    }
+    // When position has orders, FORM→CHART owns tpSlOrders — don't let string form interfere
+    if ((ctxPositionsRef.current[activePositionKey]?.orders.length ?? 0) > 0) {
+      console.log("[PUSH-TP] skipped — position has orders, FORM→CHART owns tpSlOrders")
+      return
+    }
     const tpNum = parseFloat(tp)
     const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
+    console.log("[PUSH-TP] tp string changed →", newTp, "(lastPushed:", lastTpPushedRef.current, ")")
     lastTpPushedRef.current = newTp
     setTpSl(activeChart.id, { tp: newTp })
   }, [tp, activeChart?.id])
@@ -913,9 +969,18 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- Push SL to context when form changes ----
   useEffect(() => {
     if (!activeChart) return
-    if (settingTpSlFromContextRef.current) return
+    if (settingTpSlFromContextRef.current) {
+      console.log("[PUSH-SL] skipped — settingTpSlFromContextRef guard. sl:", sl)
+      return
+    }
+    // When position has orders, FORM→CHART owns tpSlOrders — don't let string form interfere
+    if ((ctxPositionsRef.current[activePositionKey]?.orders.length ?? 0) > 0) {
+      console.log("[PUSH-SL] skipped — position has orders, FORM→CHART owns tpSlOrders")
+      return
+    }
     const slNum = parseFloat(sl)
     const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
+    console.log("[PUSH-SL] sl string changed →", newSl, "(lastPushed:", lastSlPushedRef.current, ")")
     lastSlPushedRef.current = newSl
     setTpSl(activeChart.id, { sl: newSl })
   }, [sl, activeChart?.id])
@@ -923,34 +988,51 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- Sync TP/SL form from context (chart drag) ----
   useEffect(() => {
     if (!activeChart) return
+    // When position has orders, TPSL_DRAG_SYNC owns the sync path — string form sync would conflict
+    if ((ctxPositionsRef.current[activePositionKey]?.orders.length ?? 0) > 0) {
+      console.log("[CTX→FORM-STRING] skipped — position has orders, TPSL_DRAG_SYNC owns sync")
+      return
+    }
     const tpsl = tpSlOrders[activeChart.id]
     const ctxTp = tpsl?.tp ?? null
     const ctxSl = tpsl?.sl ?? null
+    console.log("[CTX→FORM-STRING] triggered. ctxTp:", ctxTp, "ctxSl:", ctxSl, "lastTpPushed:", lastTpPushedRef.current, "lastSlPushed:", lastSlPushedRef.current)
 
     // Check if context TP changed externally (chart drag)
     const threshold = (v: number) => Math.max(v * 0.00001, 1e-8)
     if (ctxTp !== null && (lastTpPushedRef.current === null || Math.abs(ctxTp - (lastTpPushedRef.current ?? 0)) > threshold(ctxTp))) {
+      console.log("[CTX→FORM-STRING] setTp →", priceToString(ctxTp), "(diff:", Math.abs(ctxTp - (lastTpPushedRef.current ?? 0)), ")")
       settingTpSlFromContextRef.current = true
       setTp(priceToString(ctxTp))
       lastTpPushedRef.current = ctxTp
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      // Use setTimeout(0) instead of requestAnimationFrame: rAF fires after the next paint,
+      // which is after the next render, meaning the push-to-context effects already re-run
+      // with the new tp/sl state before the guard clears — causing an infinite loop.
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     } else if (ctxTp === null && lastTpPushedRef.current !== null && lastTpPushedRef.current !== 0) {
+      console.log("[CTX→FORM-STRING] setTp → '' (tp cleared)")
       settingTpSlFromContextRef.current = true
       setTp("")
       lastTpPushedRef.current = null
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
+    } else {
+      console.log("[CTX→FORM-STRING] TP skipped (unchanged or within threshold)")
     }
 
     if (ctxSl !== null && (lastSlPushedRef.current === null || Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)) > threshold(ctxSl))) {
+      console.log("[CTX→FORM-STRING] setSl →", priceToString(ctxSl), "(diff:", Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)), ")")
       settingTpSlFromContextRef.current = true
       setSl(priceToString(ctxSl))
       lastSlPushedRef.current = ctxSl
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     } else if (ctxSl === null && lastSlPushedRef.current !== null && lastSlPushedRef.current !== 0) {
+      console.log("[CTX→FORM-STRING] setSl → '' (sl cleared)")
       settingTpSlFromContextRef.current = true
       setSl("")
       lastSlPushedRef.current = null
-      requestAnimationFrame(() => { settingTpSlFromContextRef.current = false })
+      setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
+    } else {
+      console.log("[CTX→FORM-STRING] SL skipped (unchanged or within threshold)")
     }
   }, [tpSlOrders, activeChart?.id])
 
@@ -963,14 +1045,18 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Guard: REANCHOR just fired setTpSl — this is our own echo, not a user drag.
     // The lastPushed refs are already set, but this catches the frame where both
     // ctxPositions change and tpSlOrders update arrive simultaneously.
-    if (reanchorJustFiredRef.current) return
+    console.log("[TPSL_DRAG_SYNC] reanchorJustFiredRef:", reanchorJustFiredRef.current)
+    if (reanchorJustFiredRef.current) {
+      console.log("[TPSL_DRAG_SYNC] skipped — reanchorJustFired guard")
+      return
+    }
 
     const tpsl = tpSlOrders[activeChart.id]
     // Read position from ref to avoid ctxPositions as a dependency (prevents double-firing
     // when REANCHOR changes both tpSlOrders and ctxPositions in the same cycle).
     const pos = ctxPositionsRef.current[activePositionKey]
 
-    console.log("[TPSL_DRAG_SYNC] chartId:", activeChart.id, "posKey:", activePositionKey, "posOrdersCount:", pos?.orders?.length ?? 0, "ctxTp:", tpsl?.tp, "ctxSl:", tpsl?.sl)
+    console.log("[TPSL_DRAG_SYNC] chartId:", activeChart.id, "posKey:", activePositionKey, "posOrdersCount:", pos?.orders?.length ?? 0, "ctxTp:", tpsl?.tp, "ctxSl:", tpsl?.sl, "lastPlacedSl:", lastPlacedSlPushedRef.current, "lastPlacedTp:", lastPlacedTpPushedRef.current)
 
     if (!pos || pos.orders.length === 0) {
       console.log("[TPSL_DRAG_SYNC] skipped — no position or no orders")
@@ -984,13 +1070,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     if (!anchors) return
 
     const isLong = futuresSide === "long"
-    const slMode = noTpSlRef.current.slMode ?? null
+    const slMode = noTpSlRef.current.slMode
     const slBase = getSlBase(anchors, slMode)
     const tpBase = anchors.firstOrder
-    console.log("[TPSL_DRAG_SYNC] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
+    console.log("[TPSL_DRAG_SYNC] slMode:", slMode, "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
     // SL: check if incoming value differs from what we last pushed via placed-form
     const incomingSl = tpsl?.sl ?? null
+    console.log("[TPSL_DRAG_SYNC] incomingSl:", incomingSl, "diff:", incomingSl !== null ? Math.abs(incomingSl - (lastPlacedSlPushedRef.current ?? 0)) : "n/a", "threshold: 0.01")
     if (incomingSl === null || incomingSl === 0) {
       // Line was removed (X clicked) — clear form if we didn't push null ourselves
       if (lastPlacedSlPushedRef.current !== null && lastPlacedSlPushedRef.current !== 0) {
@@ -1003,8 +1090,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         ? (1 - incomingSl / slBase) * 100
         : (incomingSl / slBase - 1) * 100
       const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
-      console.log("[TPSL_DRAG_SYNC] SL real drag: incomingSl:", incomingSl, "slBase:", slBase, "→ slPct:", rounded, "(mode:", slMode ?? "null=firstOrder", ")")
-      lastPlacedSlPushedRef.current = incomingSl
+      // Store roundtrip value so FORM→CHART echo-check compares the same rounded result
+      const roundtripSl = isLong ? slBase * (1 - rounded / 100) : slBase * (1 + rounded / 100)
+      console.log("[TPSL_DRAG_SYNC] SL real drag: incomingSl:", incomingSl, "slBase:", slBase, "→ slPct:", rounded, "roundtripSl:", roundtripSl, "(mode:", slMode ?? "null=firstOrder", ")")
+      lastPlacedSlPushedRef.current = roundtripSl
       setNoTpSl((prev) => {
         if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
         return { ...prev, slPercent: rounded, slEnabled: true }
@@ -1014,6 +1103,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // TP: check if incoming value differs from what we last pushed via placed-form
     const incomingTp = tpsl?.tp ?? null
     const incomingTpLevels = tpsl?.tpLevels ?? null
+    console.log("[TPSL_DRAG_SYNC] incomingTp:", incomingTp, "incomingTpLevels:", incomingTpLevels, "diff:", incomingTp !== null ? Math.abs(incomingTp - (lastPlacedTpPushedRef.current ?? 0)) : "n/a", "lastTpLevelsKey:", lastTpLevelsPushedKeyRef.current)
     if (incomingTp === null || incomingTp === 0) {
       // Line was removed — clear form if we didn't push null ourselves
       if (lastPlacedTpPushedRef.current !== null && lastPlacedTpPushedRef.current !== 0) {
@@ -1021,30 +1111,38 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         lastTpLevelsPushedKeyRef.current = ""
         setNoTpSl((prev) => prev.tpEnabled ? { ...prev, tpEnabled: false } : prev)
       }
-    } else if (tpBase > 0 && Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.01) {
+    } else if (tpBase > 0) {
       // Real drag on TP — update % form
-      lastPlacedTpPushedRef.current = incomingTp
-
       if (incomingTpLevels != null && incomingTpLevels.length > 0) {
-        const newLevelsKey = incomingTpLevels.map((p) => Math.round(p * 100)).join(",")
+        // Compute levels via percent-rounding (same path as FORM→CHART) to get a stable roundtrip key
+        const candidateLevels = incomingTpLevels.map((lvlPrice, i) => {
+          const pct = isLong
+            ? (lvlPrice / tpBase - 1) * 100
+            : (1 - lvlPrice / tpBase) * 100
+          const tpPercent = Math.max(0.01, Math.round(pct * 100) / 100)
+          return {
+            tpPercent,
+            closePercent: noTpSlRef.current.multiTpLevels[i]?.closePercent ?? Math.floor(100 / incomingTpLevels.length),
+            roundtrip: isLong ? tpBase * (1 + tpPercent / 100) : tpBase * (1 - tpPercent / 100),
+          }
+        })
+        const newLevelsKey = candidateLevels.map((l) => Math.round(l.roundtrip * 100)).join(",")
+        console.log("[TPSL_DRAG_SYNC] TP levels drag. newLevelsKey:", newLevelsKey, "lastKey:", lastTpLevelsPushedKeyRef.current, "tpBase:", tpBase, "incomingTpLevels:", incomingTpLevels)
         if (newLevelsKey !== lastTpLevelsPushedKeyRef.current) {
           lastTpLevelsPushedKeyRef.current = newLevelsKey
-          const newLevels = incomingTpLevels.map((lvlPrice, i) => {
-            const pct = isLong
-              ? (lvlPrice / tpBase - 1) * 100
-              : (1 - lvlPrice / tpBase) * 100
-            return {
-              tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
-              closePercent: noTpSlRef.current.multiTpLevels[i]?.closePercent ?? Math.floor(100 / incomingTpLevels.length),
-            }
-          })
+          lastPlacedTpPushedRef.current = candidateLevels[0]?.roundtrip ?? incomingTp
+          const newLevels = candidateLevels.map(({ tpPercent, closePercent }) => ({ tpPercent, closePercent }))
           setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
         }
-      } else {
+        // If levels key unchanged — nothing to update, skip entirely (prevents oscillation)
+      } else if (Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.01) {
         const tpPct = isLong
           ? (incomingTp / tpBase - 1) * 100
           : (1 - incomingTp / tpBase) * 100
         const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
+        // Store roundtrip value so FORM→CHART echo-check compares the same rounded result
+        const roundtripTp = isLong ? tpBase * (1 + rounded / 100) : tpBase * (1 - rounded / 100)
+        lastPlacedTpPushedRef.current = roundtripTp
         setNoTpSl((prev) => {
           if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
           return { ...prev, tpPercent: rounded, tpEnabled: true }
@@ -1064,7 +1162,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Key encodes both which orders exist and their prices (drag updates price, not composition)
     const ordersKey = orders.map((o) => `${o.id}:${o.price}`).sort().join(",")
 
-    console.log("[REANCHOR] posKey:", activePositionKey, "ordersCount:", orders.length, "ordersKey:", ordersKey, "prevKey:", prevOrdersKeyRef.current)
+    console.log("[REANCHOR] posKey:", activePositionKey, "ordersCount:", orders.length)
+    console.log("[REANCHOR] ordersKey NEW:", ordersKey)
+    console.log("[REANCHOR] ordersKey OLD:", prevOrdersKeyRef.current)
     console.log("[REANCHOR] orders:", orders.map((o) => ({ id: o.id.slice(-6), source: o.source, price: o.price, qty: o.qty, status: o.status })))
 
     if (ordersKey === prevOrdersKeyRef.current) {
@@ -1086,12 +1186,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     const isLong = futuresSide === "long"
     const curTpSl = noTpSlRef.current
-    const slMode = curTpSl.slMode ?? null
+    const slMode = curTpSl.slMode
     const slBase = getSlBase(anchors, slMode)
     const tpBase = anchors.firstOrder
 
     console.log("[REANCHOR] anchors:", { firstOrder: anchors.firstOrder, extremeOrder: anchors.extremeOrder, avgEntry: anchors.avgEntry })
-    console.log("[REANCHOR] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "isLong:", isLong)
+    console.log("[REANCHOR] slMode:", slMode, "slBase:", slBase, "tpBase:", tpBase, "isLong:", isLong)
     console.log("[REANCHOR] cfg: tpEnabled:", curTpSl.tpEnabled, "tpPercent:", curTpSl.tpPercent, "slEnabled:", curTpSl.slEnabled, "slPercent:", curTpSl.slPercent)
 
     const tpLevels = curTpSl.tpEnabled
@@ -1104,7 +1204,8 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       ? isLong ? slBase * (1 - curTpSl.slPercent / 100) : slBase * (1 + curTpSl.slPercent / 100)
       : null
 
-    console.log("[REANCHOR] result tp:", newTp, "sl:", newSl, "→ setTpSl chartId:", activeChart.id)
+    console.log("[REANCHOR] result tp:", newTp, "sl:", newSl, "tpLevels:", tpLevels, "→ setTpSl chartId:", activeChart.id)
+    console.log("[REANCHOR] lastPlacedTp was:", lastPlacedTpPushedRef.current, "lastPlacedSl was:", lastPlacedSlPushedRef.current)
 
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl
@@ -1119,16 +1220,19 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // Uses value-based echo detection: computes new values, skips push if nothing changed vs lastPushed.
   useEffect(() => {
     if (!activeChart) return
-    const pos = ctxPositions[activePositionKey]
+    // Use ref — not ctxPositions — to break the cycle:
+    // positions update → setTpSl → TPSL_DRAG_SYNC → setNoTpSl → this effect → repeat
+    const pos = ctxPositionsRef.current[activePositionKey]
     if (!pos || pos.orders.length === 0) return
 
     const anchors = getPositionAnchors(pos.orders, futuresSide)
     if (!anchors) return
 
     const isLong = futuresSide === "long"
-    const slMode = noTpSl.slMode ?? null
+    const slMode = noTpSl.slMode
     const slBase = getSlBase(anchors, slMode)
-    console.log("[FORM→CHART] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", anchors.firstOrder, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
+    console.log("[FORM→CHART] triggered. slEnabled:", noTpSl.slEnabled, "slPercent:", noTpSl.slPercent, "tpEnabled:", noTpSl.tpEnabled, "tpPercent:", noTpSl.tpPercent, "multiTpLevels:", noTpSl.multiTpLevels)
+    console.log("[FORM→CHART] slMode:", slMode, "slBase:", slBase, "tpBase:", anchors.firstOrder, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
     const newSl = noTpSl.slEnabled && noTpSl.slPercent > 0
       ? isLong
@@ -1149,21 +1253,29 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     // Skip if nothing changed vs what was last pushed (avoids echo-looping back from back-calc)
     const slUnchanged = newSl === lastPlacedSlPushedRef.current ||
-      (newSl !== null && lastPlacedSlPushedRef.current !== null && Math.abs(newSl - lastPlacedSlPushedRef.current) < 0.01)
-    const tpUnchanged = newTp === lastPlacedTpPushedRef.current ||
-      (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.01)
+      (newSl !== null && lastPlacedSlPushedRef.current !== null && Math.abs(newSl - lastPlacedSlPushedRef.current) < 0.5)
     const tpLevelsUnchanged = newTpLevelsKey === lastTpLevelsPushedKeyRef.current
+    // For multi-TP: use levels key to detect changes (not single tp value which oscillates)
+    const tpUnchanged = tpLevels.length > 1
+      ? tpLevelsUnchanged
+      : (newTp === lastPlacedTpPushedRef.current ||
+          (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.5))
 
-    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) return
+    console.log("[FORM→CHART] slUnchanged:", slUnchanged, "tpUnchanged:", tpUnchanged, "tpLevelsUnchanged:", tpLevelsUnchanged, "newSl:", newSl, "newTp:", newTp, "newTpLevels:", tpLevels)
+    if (slUnchanged && tpUnchanged && tpLevelsUnchanged) {
+      console.log("[FORM→CHART] skipped — nothing changed")
+      return
+    }
     lastPlacedTpPushedRef.current = newTp
     lastPlacedSlPushedRef.current = newSl
     lastTpLevelsPushedKeyRef.current = newTpLevelsKey
+    console.log("[FORM→CHART] firing setTpSl: tp:", newTp, "sl:", newSl, "tpLevels:", tpLevels)
     setTpSl(activeChart.id, {
       tp: newTp,
       sl: newSl,
       tpLevels: tpLevels.length > 1 ? tpLevels : undefined,
     })
-  }, [noTpSl, activeChart?.id, activePositionKey, ctxPositions, futuresSide])
+  }, [noTpSl, activeChart?.id, activePositionKey, futuresSide])
 
   // Reset TP/SL refs on chart switch and push current form values to new chart immediately
   useEffect(() => {
@@ -1307,7 +1419,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
       // Build order object
       const posSide = effectiveSide === "buy" ? "long" : "short"
-      const activePositionKeyForFill = `${accountId}:${exchangeId}:${marketType}:${symbol}:${posSide}`
       const newOrder: ChartPlacedOrder = {
         id,
         side: effectiveSide,
@@ -1322,8 +1433,16 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         leverage: posSettings.leverage,
         margin,
         time,
-        status: orderType === "market" ? "filled" : "pending",
+        // Always start as "pending" — fillOrder will mark it "filled" and update realSize/avgEntry.
+        // Setting "filled" here would cause fillOrder's guard to skip it, leaving realSize=0 and status="pending".
+        status: "pending",
       }
+
+      console.log(
+        `[HANDLE_SUBMIT] orderType=${orderType} side=${effectiveSide} qty=${qty} effectivePrice=${effectivePrice}` +
+        ` markPrice=${livePrices[symbol] ?? effectivePrice} symbol=${symbol}` +
+        ` isMarketCrossing=${orderType === "market" || (posSide === "long" ? effectivePrice >= (livePrices[symbol] ?? effectivePrice) : effectivePrice <= (livePrices[symbol] ?? effectivePrice))}`
+      )
 
       // Open / merge into live position with the order already included
       openPosition({
@@ -1336,7 +1455,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         avgEntry: effectivePrice,
         leverage: posSettings.leverage,
         marginMode: posSettings.marginMode ?? "cross",
-        markPrice: effectivePrice,
+        markPrice: livePrices[symbol] ?? effectivePrice,
         openedAt: time,
         openedDate: (() => {
           const n = new Date()
@@ -1345,14 +1464,6 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         shortId: String(Math.floor(Math.random() * 9000000) + 1000000),
         realSize: 0,
       }, [newOrder])
-
-      // Market orders execute immediately — simulate fill
-      if (orderType === "market") {
-        // Use setTimeout(0) so openPosition state update settles first
-        setTimeout(() => {
-          fillOrder(activePositionKeyForFill, id, effectivePrice)
-        }, 0)
-      }
 
       deductOrderBalance(accountId, exchangeId, marketType, margin)
     }
@@ -1383,9 +1494,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
       if (anchors) {
         const tpBase = anchors.firstOrder
-        const slMode = noTpSl.slMode ?? null
+        const slMode = noTpSl.slMode
         const slBase = getSlBase(anchors, slMode)
-        console.log("[NEW_ORDER_PREVIEW] slMode:", slMode ?? "null(=firstOrder)", "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
+        console.log("[NEW_ORDER_PREVIEW] slMode:", slMode, "slBase:", slBase, "tpBase:", tpBase, "anchors:", { first: anchors.firstOrder, extreme: anchors.extremeOrder, avg: anchors.avgEntry })
 
         if (noTpSl.tpEnabled) {
           if (noTpSl.multiTpEnabled && noTpSl.multiTpLevels.length > 0) {
@@ -1585,25 +1696,45 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
             </div>
           </div>
 
-          {/* Order type */}
-          <div className="flex gap-1">
-            {(["market", "limit", "stop"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setOrderType(t)}
-                className="text-xs font-mono px-2 py-0.5 rounded capitalize transition-colors flex-1"
-                style={{
-                  background: orderType === t ? "rgba(30,111,239,0.15)" : "transparent",
-                  color: orderType === t ? "#1e6fef" : "rgba(255,255,255,0.35)",
-                  border: "1px solid",
-                  borderColor: orderType === t ? "rgba(30,111,239,0.3)" : "rgba(255,255,255,0.07)",
-                  fontSize: 10,
-                }}
-                onMouseDown={stopProp}
-              >
-                {t}
-              </button>
-            ))}
+          {/* Symbol + Price + Order type */}
+          <div
+            style={{
+              background: "rgba(30,111,239,0.05)",
+              border: "1px solid rgba(30,111,239,0.12)",
+              borderRadius: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 6,
+              padding: "3px 6px",
+            }}
+            onMouseDown={stopProp}
+          >
+            <span style={{ fontSize: 9, opacity: 0.4, whiteSpace: "nowrap", fontFamily: "monospace" }}>{symbol}</span>
+            <span style={{ fontWeight: 700, color: "#00e5a0", fontSize: 11, flex: 1, textAlign: "right", marginRight: 6 }}>
+              {mockPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <div className="flex rounded overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
+              {(["market", "limit", "stop"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setOrderType(t)}
+                  title={t === "market" ? "Execute at current market price" : t === "limit" ? "Enter at a specific limit price" : "Enter with a stop order"}
+                  style={{
+                    flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 7px",
+                    background: orderType === t ? "rgba(30,111,239,0.18)" : "transparent",
+                    color: orderType === t ? "#1e6fef" : "rgba(255,255,255,0.35)",
+                    border: "none", cursor: "pointer",
+                    fontWeight: orderType === t ? 700 : 400, letterSpacing: "0.04em",
+                    whiteSpace: "nowrap",
+                    textTransform: "capitalize",
+                  }}
+                  onMouseDown={stopProp}
+                >
+                  {t === "market" ? "Market" : t === "limit" ? "Limit" : "Stop"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Stop Price */}
@@ -1917,7 +2048,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
                   ] as const).map((o, i, arr) => (
                     <div key={o.v} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: noTpSl.slMode === o.v ? "rgba(30,111,239,0.18)" : "transparent", borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.1)" : undefined }}>
                       <button
-                        onClick={() => noUpd("slMode", noTpSl.slMode === o.v ? null : o.v)}
+                        onClick={() => noUpd("slMode", o.v)}
                         onMouseDown={(e) => e.stopPropagation()}
                         style={{ flex: 1, fontSize: 9, fontFamily: "monospace", padding: "2px 6px", background: "transparent", border: "none", cursor: "pointer", color: noTpSl.slMode === o.v ? "#1e6fef" : "rgba(255,255,255,0.35)", fontWeight: noTpSl.slMode === o.v ? 700 : 400, letterSpacing: "0.04em" }}
                       >{o.label}</button>
