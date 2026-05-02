@@ -1011,8 +1011,10 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         ? (1 - incomingSl / slBase) * 100
         : (incomingSl / slBase - 1) * 100
       const rounded = Math.max(0.01, Math.round(slPct * 100) / 100)
-      console.log("[TPSL_DRAG_SYNC] SL real drag: incomingSl:", incomingSl, "slBase:", slBase, "→ slPct:", rounded, "(mode:", slMode ?? "null=firstOrder", ")")
-      lastPlacedSlPushedRef.current = incomingSl
+      // Store roundtrip value so FORM→CHART echo-check compares the same rounded result
+      const roundtripSl = isLong ? slBase * (1 - rounded / 100) : slBase * (1 + rounded / 100)
+      console.log("[TPSL_DRAG_SYNC] SL real drag: incomingSl:", incomingSl, "slBase:", slBase, "→ slPct:", rounded, "roundtripSl:", roundtripSl, "(mode:", slMode ?? "null=firstOrder", ")")
+      lastPlacedSlPushedRef.current = roundtripSl
       setNoTpSl((prev) => {
         if (Math.abs((prev.slPercent ?? 0) - rounded) < 0.005) return prev
         return { ...prev, slPercent: rounded, slEnabled: true }
@@ -1033,29 +1035,35 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     } else if (tpBase > 0) {
       // Real drag on TP — update % form
       if (incomingTpLevels != null && incomingTpLevels.length > 0) {
-        const newLevelsKey = incomingTpLevels.map((p) => Math.round(p * 100)).join(",")
+        // Compute levels via percent-rounding (same path as FORM→CHART) to get a stable roundtrip key
+        const candidateLevels = incomingTpLevels.map((lvlPrice, i) => {
+          const pct = isLong
+            ? (lvlPrice / tpBase - 1) * 100
+            : (1 - lvlPrice / tpBase) * 100
+          const tpPercent = Math.max(0.01, Math.round(pct * 100) / 100)
+          return {
+            tpPercent,
+            closePercent: noTpSlRef.current.multiTpLevels[i]?.closePercent ?? Math.floor(100 / incomingTpLevels.length),
+            roundtrip: isLong ? tpBase * (1 + tpPercent / 100) : tpBase * (1 - tpPercent / 100),
+          }
+        })
+        const newLevelsKey = candidateLevels.map((l) => Math.round(l.roundtrip * 100)).join(",")
         console.log("[TPSL_DRAG_SYNC] TP levels drag. newLevelsKey:", newLevelsKey, "lastKey:", lastTpLevelsPushedKeyRef.current, "tpBase:", tpBase, "incomingTpLevels:", incomingTpLevels)
         if (newLevelsKey !== lastTpLevelsPushedKeyRef.current) {
           lastTpLevelsPushedKeyRef.current = newLevelsKey
-          lastPlacedTpPushedRef.current = incomingTp
-          const newLevels = incomingTpLevels.map((lvlPrice, i) => {
-            const pct = isLong
-              ? (lvlPrice / tpBase - 1) * 100
-              : (1 - lvlPrice / tpBase) * 100
-            return {
-              tpPercent: Math.max(0.01, Math.round(pct * 100) / 100),
-              closePercent: noTpSlRef.current.multiTpLevels[i]?.closePercent ?? Math.floor(100 / incomingTpLevels.length),
-            }
-          })
+          lastPlacedTpPushedRef.current = candidateLevels[0]?.roundtrip ?? incomingTp
+          const newLevels = candidateLevels.map(({ tpPercent, closePercent }) => ({ tpPercent, closePercent }))
           setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
         }
         // If levels key unchanged — nothing to update, skip entirely (prevents oscillation)
       } else if (Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.01) {
-        lastPlacedTpPushedRef.current = incomingTp
         const tpPct = isLong
           ? (incomingTp / tpBase - 1) * 100
           : (1 - incomingTp / tpBase) * 100
         const rounded = Math.max(0.01, Math.round(tpPct * 100) / 100)
+        // Store roundtrip value so FORM→CHART echo-check compares the same rounded result
+        const roundtripTp = isLong ? tpBase * (1 + rounded / 100) : tpBase * (1 - rounded / 100)
+        lastPlacedTpPushedRef.current = roundtripTp
         setNoTpSl((prev) => {
           if (Math.abs((prev.tpPercent ?? 0) - rounded) < 0.005) return prev
           return { ...prev, tpPercent: rounded, tpEnabled: true }
