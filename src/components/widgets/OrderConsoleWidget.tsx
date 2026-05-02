@@ -760,6 +760,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     // Если уже есть виртуальная позиция по этому символу (ордера из любого источника —
     // Order или Grid) — TP/SL принадлежат позиции целиком, не рисуем draft-линии поверх.
     const positionHasOrders = (ctxPositionsRef.current[activePositionKeyRef.current]?.orders ?? []).length > 0
+    console.log("[NO-PREVIEW-EFFECT] firing. p:", p, "qty:", qtyNum, "positionHasOrders:", positionHasOrders, "viz.tpLevels:", viz.tpLevels, "viz.slPrice:", viz.slPrice)
     if (!positionHasOrders) {
       setTpSl(activeChart.id, { tp: null, sl: null, tpLevels: undefined })
     }
@@ -817,24 +818,40 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     }
     // If noPreviewEffect just wrote this slPrice, skip — it came from form, not user drag
     if (noPreviewWroteSlRef.current) {
+      console.log("[P1/P2 SL-DRAG] skipped — noPreviewWroteSlRef guard. noChartSlPrice:", noChartSlPrice)
       noPreviewWroteSlRef.current = false
       prevNoSlPriceValueRef.current = noChartSlPrice ?? null
       return
     }
     const prev = prevNoSlPriceValueRef.current
     prevNoSlPriceValueRef.current = noChartSlPrice ?? null
-    if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) return
-    if (Math.abs(noChartSlPrice - prev) < 1e-8) return
+    console.log("[P1/P2 SL-DRAG] triggered. noChartSlPrice:", noChartSlPrice, "prev:", prev, "noExpectedSl:", noExpectedSlPriceRef.current, "orderType:", orderType)
+    if (prev === undefined || prev === null || noChartSlPrice === null || noChartSlPrice === undefined) {
+      console.log("[P1/P2 SL-DRAG] skipped — prev or cur is null/undefined")
+      return
+    }
+    if (Math.abs(noChartSlPrice - prev) < 1e-8) {
+      console.log("[P1/P2 SL-DRAG] skipped — price unchanged (<1e-8)")
+      return
+    }
     const exp = noExpectedSlPriceRef.current
-    if (exp !== undefined && exp !== null && Math.abs(noChartSlPrice - exp) < 1e-8) return
+    if (exp !== undefined && exp !== null && Math.abs(noChartSlPrice - exp) < 1e-8) {
+      console.log("[P1/P2 SL-DRAG] skipped — matches noExpectedSl:", exp)
+      return
+    }
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    if (p <= 0) return
+    if (p <= 0) {
+      console.log("[P1/P2 SL-DRAG] skipped — entry price p <= 0:", p)
+      return
+    }
     const gSide = effectiveSide === "buy" ? "long" : "short"
     const isLong = gSide === "long"
     const newPct = isLong
       ? (1 - noChartSlPrice / p) * 100
       : (noChartSlPrice / p - 1) * 100
-    noUpd("slPercent", Math.max(0.01, Math.round(newPct * 100) / 100))
+    const rounded = Math.max(0.01, Math.round(newPct * 100) / 100)
+    console.log("[P1/P2 SL-DRAG] REAL DRAG → slPercent:", rounded, "(entryPrice:", p, "isLong:", isLong, "slPrice:", noChartSlPrice, ")")
+    noUpd("slPercent", rounded)
   }, [noChartSlPrice, activeChart?.id])
 
   // TP x-click: tpLevels count decreased
@@ -843,19 +860,33 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   useEffect(() => {
     const prev = prevNoTpLevelsKeyRef.current
     prevNoTpLevelsKeyRef.current = noChartTpLevelsKey
-    if (prev === undefined) return
+    console.log("[P1/P2 TP-XCLICK] triggered. noChartTpLevelsKey:", noChartTpLevelsKey, "prev:", prev, "noPreviewState:", !!noPreviewState)
+    if (prev === undefined) {
+      console.log("[P1/P2 TP-XCLICK] skipped — first render")
+      return
+    }
     // If the entire preview was removed (not a user TP x-click), skip
-    if (!noPreviewState) return
+    if (!noPreviewState) {
+      console.log("[P1/P2 TP-XCLICK] skipped — no noPreviewState")
+      return
+    }
     const prevLen = prev ? prev.split(",").length : 0
     const curLen = noChartTpLevels?.length ?? 0
-    if (curLen >= prevLen) return
+    if (curLen >= prevLen) {
+      console.log("[P1/P2 TP-XCLICK] skipped — curLen:", curLen, ">= prevLen:", prevLen, "(count didn't decrease)")
+      return
+    }
     if (curLen === 0) {
+      console.log("[P1/P2 TP-XCLICK] tpEnabled → false (all TP removed)")
       noUpd("tpEnabled", false)
       return
     }
     // Partial removal: sync multiTpLevels
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    if (p <= 0) return
+    if (p <= 0) {
+      console.log("[P1/P2 TP-XCLICK] skipped — entry price p <= 0:", p)
+      return
+    }
     const gSide = effectiveSide === "buy" ? "long" : "short"
     const isLong = gSide === "long"
     const remaining = noChartTpLevels ?? []
@@ -866,6 +897,7 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       const pct = isLong ? (price / p - 1) * 100 : (1 - price / p) * 100
       return { tpPercent: Math.max(0.01, Math.round(pct * 100) / 100), closePercent: i === n - 1 ? base + remainder : base }
     })
+    console.log("[P1/P2 TP-XCLICK] partial removal → newLevels:", newLevels, "(entryPrice:", p, "isLong:", isLong, ")")
     setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpCount: n, multiTpLevels: newLevels, multiTpEnabled: n > 1 }))
   }, [noChartTpLevelsKey])
 
@@ -875,19 +907,33 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const prev = prevNoTpLevelsValuesRef.current
     const cur = noChartTpLevels
     prevNoTpLevelsValuesRef.current = cur ? [...cur] : undefined
-    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) return
+    console.log("[P1/P2 TP-DRAG] triggered. cur:", cur, "prev:", prev, "noPreviewWroteTp:", noPreviewWroteTpRef.current)
+    if (!prev || !cur || prev.length !== cur.length || cur.length === 0) {
+      console.log("[P1/P2 TP-DRAG] skipped — no prev/cur or length mismatch or empty")
+      return
+    }
     const changed = cur.some((v, i) => Math.abs(v - prev[i]) > 1e-8)
-    if (!changed) return
+    if (!changed) {
+      console.log("[P1/P2 TP-DRAG] skipped — values unchanged")
+      return
+    }
     // Skip if noPreviewEffect just wrote these tpLevels — not a user drag
     if (noPreviewWroteTpRef.current) {
+      console.log("[P1/P2 TP-DRAG] skipped — noPreviewWroteTpRef guard")
       noPreviewWroteTpRef.current = false
       return
     }
     // Skip if these are values we just wrote via noPreviewEffect
     const exp = noExpectedTpLevelsRef.current
-    if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) return
+    if (exp && exp.length === cur.length && cur.every((v, i) => Math.abs(v - exp[i]) < 1e-8)) {
+      console.log("[P1/P2 TP-DRAG] skipped — matches noExpectedTpLevels:", exp)
+      return
+    }
     const p = orderType === "market" ? mockPriceRef.current : (parseFloat(priceRef.current) || 0)
-    if (p <= 0) return
+    if (p <= 0) {
+      console.log("[P1/P2 TP-DRAG] skipped — entry price p <= 0:", p)
+      return
+    }
     const gSide = effectiveSide === "buy" ? "long" : "short"
     const isLong = gSide === "long"
     const newLevels = cur.map((price, i) => {
@@ -897,15 +943,20 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         closePercent: noTpSl.multiTpLevels[i]?.closePercent ?? Math.floor(100 / cur.length),
       }
     })
+    console.log("[P1/P2 TP-DRAG] REAL DRAG → newLevels:", newLevels, "(entryPrice:", p, "isLong:", isLong, "cur:", cur, ")")
     setNoTpSl((prev) => ({ ...prev, tpPercent: newLevels[0]?.tpPercent ?? prev.tpPercent, multiTpLevels: newLevels }))
   }, [noChartTpLevelsKey])
 
   // ---- Push TP to context when form changes ----
   useEffect(() => {
     if (!activeChart) return
-    if (settingTpSlFromContextRef.current) return
+    if (settingTpSlFromContextRef.current) {
+      console.log("[PUSH-TP] skipped — settingTpSlFromContextRef guard. tp:", tp)
+      return
+    }
     const tpNum = parseFloat(tp)
     const newTp = !isNaN(tpNum) && tpNum > 0 ? tpNum : null
+    console.log("[PUSH-TP] tp string changed →", newTp, "(lastPushed:", lastTpPushedRef.current, ")")
     lastTpPushedRef.current = newTp
     setTpSl(activeChart.id, { tp: newTp })
   }, [tp, activeChart?.id])
@@ -913,9 +964,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
   // ---- Push SL to context when form changes ----
   useEffect(() => {
     if (!activeChart) return
-    if (settingTpSlFromContextRef.current) return
+    if (settingTpSlFromContextRef.current) {
+      console.log("[PUSH-SL] skipped — settingTpSlFromContextRef guard. sl:", sl)
+      return
+    }
     const slNum = parseFloat(sl)
     const newSl = !isNaN(slNum) && slNum > 0 ? slNum : null
+    console.log("[PUSH-SL] sl string changed →", newSl, "(lastPushed:", lastSlPushedRef.current, ")")
     lastSlPushedRef.current = newSl
     setTpSl(activeChart.id, { sl: newSl })
   }, [sl, activeChart?.id])
@@ -926,10 +981,12 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
     const tpsl = tpSlOrders[activeChart.id]
     const ctxTp = tpsl?.tp ?? null
     const ctxSl = tpsl?.sl ?? null
+    console.log("[CTX→FORM-STRING] triggered. ctxTp:", ctxTp, "ctxSl:", ctxSl, "lastTpPushed:", lastTpPushedRef.current, "lastSlPushed:", lastSlPushedRef.current)
 
     // Check if context TP changed externally (chart drag)
     const threshold = (v: number) => Math.max(v * 0.00001, 1e-8)
     if (ctxTp !== null && (lastTpPushedRef.current === null || Math.abs(ctxTp - (lastTpPushedRef.current ?? 0)) > threshold(ctxTp))) {
+      console.log("[CTX→FORM-STRING] setTp →", priceToString(ctxTp), "(diff:", Math.abs(ctxTp - (lastTpPushedRef.current ?? 0)), ")")
       settingTpSlFromContextRef.current = true
       setTp(priceToString(ctxTp))
       lastTpPushedRef.current = ctxTp
@@ -938,22 +995,29 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
       // with the new tp/sl state before the guard clears — causing an infinite loop.
       setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     } else if (ctxTp === null && lastTpPushedRef.current !== null && lastTpPushedRef.current !== 0) {
+      console.log("[CTX→FORM-STRING] setTp → '' (tp cleared)")
       settingTpSlFromContextRef.current = true
       setTp("")
       lastTpPushedRef.current = null
       setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
+    } else {
+      console.log("[CTX→FORM-STRING] TP skipped (unchanged or within threshold)")
     }
 
     if (ctxSl !== null && (lastSlPushedRef.current === null || Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)) > threshold(ctxSl))) {
+      console.log("[CTX→FORM-STRING] setSl →", priceToString(ctxSl), "(diff:", Math.abs(ctxSl - (lastSlPushedRef.current ?? 0)), ")")
       settingTpSlFromContextRef.current = true
       setSl(priceToString(ctxSl))
       lastSlPushedRef.current = ctxSl
       setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
     } else if (ctxSl === null && lastSlPushedRef.current !== null && lastSlPushedRef.current !== 0) {
+      console.log("[CTX→FORM-STRING] setSl → '' (sl cleared)")
       settingTpSlFromContextRef.current = true
       setSl("")
       lastSlPushedRef.current = null
       setTimeout(() => { settingTpSlFromContextRef.current = false }, 0)
+    } else {
+      console.log("[CTX→FORM-STRING] SL skipped (unchanged or within threshold)")
     }
   }, [tpSlOrders, activeChart?.id])
 

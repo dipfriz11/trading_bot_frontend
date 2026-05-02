@@ -1686,11 +1686,14 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (!dragStarted) return
 
       const finalPrice = finalPriceRef.current
+      const phase = isPreview ? "P1-PREVIEW" : "P2-VIRTUAL"
       if (target === "sl") {
+        console.log(`[CHART-DRAG ${phase}] SL drag end. consoleId:`, consoleId, "finalPrice:", finalPrice, "startPrice:", startPrice)
         applyGridTpSl(consoleId, { slPrice: finalPrice })
       } else {
         const newLevels = [...(grid.tpLevels ?? [])]
         newLevels[tpIndex] = finalPrice
+        console.log(`[CHART-DRAG ${phase}] TP drag end. consoleId:`, consoleId, "tpIndex:", tpIndex, "finalPrice:", finalPrice, "startPrice:", startPrice, "newLevels:", newLevels)
         applyGridTpSl(consoleId, { tpLevels: newLevels, tpPrice: newLevels[0] ?? null })
       }
     }
@@ -1749,14 +1752,17 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       if (dragStarted) {
         const newPrice = finalPriceRef.current
         if (key === "sl") {
+          console.log("[CHART-DRAG P3-REAL] SL drag end. chartId:", widget.id, "finalPrice:", newPrice, "startPrice:", startPrice)
           setTpSl(widget.id, { sl: newPrice })
         } else {
           const levels = current?.tpLevels
           if (levels && levels.length > 1) {
             const idx = tpIndex ?? 0
             const newLevels = levels.map((p, i) => i === idx ? newPrice : p)
+            console.log("[CHART-DRAG P3-REAL] TP drag end (multi). chartId:", widget.id, "tpIndex:", idx, "finalPrice:", newPrice, "startPrice:", startPrice, "newLevels:", newLevels)
             setTpSl(widget.id, { tpLevels: newLevels, tp: newLevels[0] })
           } else {
+            console.log("[CHART-DRAG P3-REAL] TP drag end (single). chartId:", widget.id, "finalPrice:", newPrice, "startPrice:", startPrice)
             setTpSl(widget.id, { tp: newPrice, tpLevels: undefined })
           }
         }
