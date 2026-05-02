@@ -1030,15 +1030,14 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
         lastTpLevelsPushedKeyRef.current = ""
         setNoTpSl((prev) => prev.tpEnabled ? { ...prev, tpEnabled: false } : prev)
       }
-    } else if (tpBase > 0 && Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.01) {
+    } else if (tpBase > 0) {
       // Real drag on TP — update % form
-      lastPlacedTpPushedRef.current = incomingTp
-
       if (incomingTpLevels != null && incomingTpLevels.length > 0) {
         const newLevelsKey = incomingTpLevels.map((p) => Math.round(p * 100)).join(",")
         console.log("[TPSL_DRAG_SYNC] TP levels drag. newLevelsKey:", newLevelsKey, "lastKey:", lastTpLevelsPushedKeyRef.current, "tpBase:", tpBase, "incomingTpLevels:", incomingTpLevels)
         if (newLevelsKey !== lastTpLevelsPushedKeyRef.current) {
           lastTpLevelsPushedKeyRef.current = newLevelsKey
+          lastPlacedTpPushedRef.current = incomingTp
           const newLevels = incomingTpLevels.map((lvlPrice, i) => {
             const pct = isLong
               ? (lvlPrice / tpBase - 1) * 100
@@ -1050,7 +1049,9 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
           })
           setNoTpSl((prev) => ({ ...prev, multiTpLevels: newLevels, multiTpCount: newLevels.length, multiTpEnabled: newLevels.length > 1 }))
         }
-      } else {
+        // If levels key unchanged — nothing to update, skip entirely (prevents oscillation)
+      } else if (Math.abs((incomingTp - (lastPlacedTpPushedRef.current ?? 0))) > 0.01) {
+        lastPlacedTpPushedRef.current = incomingTp
         const tpPct = isLong
           ? (incomingTp / tpBase - 1) * 100
           : (1 - incomingTp / tpBase) * 100
@@ -1165,10 +1166,13 @@ export function OrderConsoleWidget(_props: { widget: Widget }) {
 
     // Skip if nothing changed vs what was last pushed (avoids echo-looping back from back-calc)
     const slUnchanged = newSl === lastPlacedSlPushedRef.current ||
-      (newSl !== null && lastPlacedSlPushedRef.current !== null && Math.abs(newSl - lastPlacedSlPushedRef.current) < 0.01)
-    const tpUnchanged = newTp === lastPlacedTpPushedRef.current ||
-      (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.01)
+      (newSl !== null && lastPlacedSlPushedRef.current !== null && Math.abs(newSl - lastPlacedSlPushedRef.current) < 0.5)
     const tpLevelsUnchanged = newTpLevelsKey === lastTpLevelsPushedKeyRef.current
+    // For multi-TP: use levels key to detect changes (not single tp value which oscillates)
+    const tpUnchanged = tpLevels.length > 1
+      ? tpLevelsUnchanged
+      : (newTp === lastPlacedTpPushedRef.current ||
+          (newTp !== null && lastPlacedTpPushedRef.current !== null && Math.abs(newTp - lastPlacedTpPushedRef.current) < 0.5))
 
     console.log("[FORM→CHART] slUnchanged:", slUnchanged, "tpUnchanged:", tpUnchanged, "tpLevelsUnchanged:", tpLevelsUnchanged, "newSl:", newSl, "newTp:", newTp, "newTpLevels:", tpLevels)
     if (slUnchanged && tpUnchanged && tpLevelsUnchanged) {
