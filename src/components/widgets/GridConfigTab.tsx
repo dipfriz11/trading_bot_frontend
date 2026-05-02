@@ -769,6 +769,12 @@ export const GridConfigTab = memo(function GridConfigTab({
   const currentPreviewState = useGridPreviewEntry(consoleId)
   const isPlaced = !!currentGridState
   const hasPendingUpdate = isPlaced && currentGridState?.pendingUpdate
+
+  // If any order in this position has been filled (realSize > 0), structural grid editing
+  // is mathematically impossible — hide "Apply Changes" to prevent breaking the live position.
+  const activePositionKey = posKey(accountId ?? "", exchangeId ?? "", marketType ?? "futures", cfg.symbol, cfg.side)
+  const activePosition = positions[activePositionKey]
+  const positionHasFills = (activePosition?.realSize ?? 0) > 0
   // For drag-sync: use placed state when placed, otherwise use preview state
   const currentDragState = currentGridState ?? currentPreviewState
 
@@ -2568,34 +2574,54 @@ export const GridConfigTab = memo(function GridConfigTab({
         >
           <RotateCcw size={10} /> Reset
         </button>
-        <button
-          className="flex items-center justify-center gap-1.5 flex-1"
-          onClick={handlePlaceGrid}
-          style={{
-            fontSize: 11, fontFamily: "monospace", fontWeight: 700, padding: "7px 0",
-            background: hasPendingUpdate
-              ? "rgba(251,191,36,0.18)"
-              : cfg.side === "long" ? "rgba(0,229,160,0.18)" : "rgba(248,113,113,0.15)",
-            color: hasPendingUpdate
-              ? "rgba(251,191,36,0.9)"
-              : cfg.side === "long" ? "#00e5a0" : "#f87171",
-            border: `1px solid ${hasPendingUpdate
-              ? "rgba(251,191,36,0.45)"
-              : cfg.side === "long" ? "rgba(0,229,160,0.45)" : "rgba(248,113,113,0.4)"}`,
-            borderRadius: 4, cursor: activeChartId ? "pointer" : "not-allowed", opacity: activeChartId ? 1 : 0.5,
-          }}
-          onMouseDown={stopProp}
-          disabled={!activeChartId}
-          title={hasPendingUpdate ? "Применить изменения к размещённым ордерам" : cfg.side === "long" ? "Place Long grid orders on chart" : "Place Short grid orders on chart"}
-        >
-          {cfg.autoEnabled && <Play size={11} />}
-          {hasPendingUpdate
-            ? `Apply Changes #${activeSlotIndex + 1}`
-            : isPlaced
-              ? `${cfg.side === "long" ? "Long" : "Short"} / Grid #${activeSlotIndex + 1} ✓`
-              : `${cfg.side === "long" ? "Long" : "Short"} / Grid${gridSlots.length > 1 ? ` #${activeSlotIndex + 1}` : ""}`
-          }
-        </button>
+        {/* When the position has fills, "Apply Changes" is hidden — structural re-config is impossible. */}
+        {hasPendingUpdate && positionHasFills ? (
+          <div
+            className="flex items-center justify-center gap-1.5 flex-1"
+            style={{
+              fontSize: 10, fontFamily: "monospace", fontWeight: 600, padding: "7px 0",
+              background: "rgba(255,255,255,0.03)",
+              color: "rgba(255,255,255,0.25)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 4,
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0 }}>
+              <rect x="2" y="4.5" width="6" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+              <path d="M3.5 4.5V3a1.5 1.5 0 013 0v1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+            Grid locked · has fills
+          </div>
+        ) : (
+          <button
+            className="flex items-center justify-center gap-1.5 flex-1"
+            onClick={handlePlaceGrid}
+            style={{
+              fontSize: 11, fontFamily: "monospace", fontWeight: 700, padding: "7px 0",
+              background: hasPendingUpdate
+                ? "rgba(251,191,36,0.18)"
+                : cfg.side === "long" ? "rgba(0,229,160,0.18)" : "rgba(248,113,113,0.15)",
+              color: hasPendingUpdate
+                ? "rgba(251,191,36,0.9)"
+                : cfg.side === "long" ? "#00e5a0" : "#f87171",
+              border: `1px solid ${hasPendingUpdate
+                ? "rgba(251,191,36,0.45)"
+                : cfg.side === "long" ? "rgba(0,229,160,0.45)" : "rgba(248,113,113,0.4)"}`,
+              borderRadius: 4, cursor: activeChartId ? "pointer" : "not-allowed", opacity: activeChartId ? 1 : 0.5,
+            }}
+            onMouseDown={stopProp}
+            disabled={!activeChartId}
+            title={hasPendingUpdate ? "Применить изменения к размещённым ордерам" : cfg.side === "long" ? "Place Long grid orders on chart" : "Place Short grid orders on chart"}
+          >
+            {cfg.autoEnabled && <Play size={11} />}
+            {hasPendingUpdate
+              ? `Apply Changes #${activeSlotIndex + 1}`
+              : isPlaced
+                ? `${cfg.side === "long" ? "Long" : "Short"} / Grid #${activeSlotIndex + 1} ✓`
+                : `${cfg.side === "long" ? "Long" : "Short"} / Grid${gridSlots.length > 1 ? ` #${activeSlotIndex + 1}` : ""}`
+            }
+          </button>
+        )}
       </div>
       </div>
     </div>

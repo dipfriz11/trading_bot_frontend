@@ -1,8 +1,8 @@
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { EXCHANGES } from "@/lib/mock-data"
 import type { Widget, LivePosition, ChartPlacedOrder } from "@/types/terminal"
 import { useTerminal, posKey } from "@/contexts/TerminalContext"
-import { X, ChevronDown, ChevronRight, Pencil, CircleCheck as CheckCircle2, Circle, CircleAlert as AlertCircle } from "lucide-react"
+import { X, ChevronDown, ChevronRight, Pencil, Check, CircleCheck as CheckCircle2, Circle, CircleAlert as AlertCircle } from "lucide-react"
 
 // ─── Color palette ────────────────────────────────────────────────────────────
 const C = {
@@ -180,17 +180,19 @@ function CollapsedRow({
 
 function PositionOrderRow({
   order,
-  positionKey: _positionKey,
+  positionKey,
   onCancel,
 }: {
   order: ChartPlacedOrder
   positionKey: string
   onCancel: () => void
 }) {
+  const { updatePlacedOrder } = useTerminal()
   const isBuy = order.side === "buy"
   const sideColor = isBuy ? C.buy : C.sell
   const isFilled = order.status === "filled"
   const isCancelled = order.status === "cancelled"
+  const isPending = order.status === "pending"
 
   let typeLabel = order.orderType === "market" ? "Market" : "Limit"
   if (order.source === "grid" && order.gridIndex != null) {
@@ -201,8 +203,152 @@ function PositionOrderRow({
   const typeDisplay = isSlOrder ? "SL Market" : typeLabel
 
   const fillPct = order.filledPct ?? (isFilled ? 100 : 0)
-  const qty = fmtQty(order.qty)
 
+  // ── Inline edit state ──────────────────────────────────────────────────────
+  const [editing, setEditing] = useState(false)
+  const [editPrice, setEditPrice] = useState("")
+  const [editQty, setEditQty] = useState("")
+  const priceRef = useRef<HTMLInputElement>(null)
+
+  const startEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isPending) return
+    setEditPrice(String(order.price))
+    setEditQty(String(order.qty))
+    setEditing(true)
+  }
+
+  useEffect(() => {
+    if (editing) priceRef.current?.select()
+  }, [editing])
+
+  const commitEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newPrice = parseFloat(editPrice)
+    const newQty = parseFloat(editQty)
+    const updates: Partial<ChartPlacedOrder> = {}
+    if (!isNaN(newPrice) && newPrice > 0) updates.price = newPrice
+    if (!isNaN(newQty) && newQty > 0) updates.qty = newQty
+    if (Object.keys(updates).length > 0) {
+      updatePlacedOrder(positionKey, order.id, updates)
+    }
+    setEditing(false)
+  }
+
+  const cancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      const newPrice = parseFloat(editPrice)
+      const newQty = parseFloat(editQty)
+      const updates: Partial<ChartPlacedOrder> = {}
+      if (!isNaN(newPrice) && newPrice > 0) updates.price = newPrice
+      if (!isNaN(newQty) && newQty > 0) updates.qty = newQty
+      if (Object.keys(updates).length > 0) {
+        updatePlacedOrder(positionKey, order.id, updates)
+      }
+      setEditing(false)
+    } else if (e.key === "Escape") {
+      setEditing(false)
+    }
+  }
+
+  const inlineInput: React.CSSProperties = {
+    background: "rgba(30,111,239,0.1)",
+    border: "1px solid rgba(30,111,239,0.35)",
+    borderRadius: 3,
+    color: "rgba(200,214,229,0.95)",
+    fontSize: 9,
+    fontFamily: "monospace",
+    padding: "1px 4px",
+    outline: "none",
+    width: "100%",
+  }
+
+  // ── Edit mode row ──────────────────────────────────────────────────────────
+  if (editing) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1.5"
+        style={{
+          borderBottom: `1px solid ${C.border}`,
+          background: "rgba(30,111,239,0.04)",
+          border: "1px solid rgba(30,111,239,0.18)",
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* BUY/SELL badge */}
+        <span
+          className="px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0"
+          style={{
+            fontSize: 8,
+            background: isBuy ? "rgba(0,229,160,0.1)" : "rgba(255,71,87,0.1)",
+            color: sideColor,
+            border: `1px solid ${isBuy ? "rgba(0,229,160,0.22)" : "rgba(255,71,87,0.22)"}`,
+          }}
+        >
+          {isBuy ? "BUY" : "SELL"}
+        </span>
+
+        {/* Type label */}
+        <span className="font-mono flex-shrink-0" style={{ fontSize: 9, color: "rgba(200,214,229,0.5)", minWidth: 50 }}>
+          {typeDisplay}
+        </span>
+
+        {/* Price input */}
+        <div className="flex flex-col gap-0.5 flex-1" style={{ minWidth: 70 }}>
+          <span className="font-mono" style={{ fontSize: 7, color: C.dim }}>Price</span>
+          <input
+            ref={priceRef}
+            value={editPrice}
+            onChange={(e) => setEditPrice(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={inlineInput}
+            type="number"
+            step="any"
+          />
+        </div>
+
+        {/* Qty input */}
+        <div className="flex flex-col gap-0.5 flex-1" style={{ minWidth: 55 }}>
+          <span className="font-mono" style={{ fontSize: 7, color: C.dim }}>Qty</span>
+          <input
+            value={editQty}
+            onChange={(e) => setEditQty(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={inlineInput}
+            type="number"
+            step="any"
+          />
+        </div>
+
+        {/* Confirm */}
+        <button
+          onClick={commitEdit}
+          className="flex-shrink-0 p-1 rounded transition-colors"
+          style={{ color: C.filled, background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.25)" }}
+          title="Save changes"
+        >
+          <Check size={9} />
+        </button>
+
+        {/* Cancel edit */}
+        <button
+          onClick={cancelEdit}
+          className="flex-shrink-0 p-1 rounded transition-colors"
+          style={{ color: "rgba(255,71,87,0.7)", background: "rgba(255,71,87,0.08)", border: "1px solid rgba(255,71,87,0.2)" }}
+          title="Cancel"
+        >
+          <X size={9} />
+        </button>
+      </div>
+    )
+  }
+
+  // ── Normal row ─────────────────────────────────────────────────────────────
   return (
     <div
       className="group flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white/[0.02]"
@@ -234,7 +380,7 @@ function PositionOrderRow({
 
       {/* Qty */}
       <div className="flex flex-col items-end" style={{ minWidth: 40 }}>
-        <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>{qty}</span>
+        <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>{fmtQty(order.qty)}</span>
         {order.source === "grid" && (
           <div className="flex gap-0.5">
             <span style={{ color: C.dim, fontSize: 8 }}>≡</span>
@@ -264,19 +410,21 @@ function PositionOrderRow({
         )}
       </div>
 
-      {/* Price */}
+      {/* Price + pencil */}
       <div className="flex items-center gap-1 flex-1">
         <span className="font-mono" style={{ fontSize: 9, color: "rgba(200,214,229,0.85)" }}>
           {fmtPrice(order.price)}
         </span>
-        <button
-          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
-          style={{ color: C.accent }}
-          title="Edit price"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Pencil size={8} />
-        </button>
+        {isPending && (
+          <button
+            className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+            style={{ color: C.accent }}
+            title="Edit order"
+            onClick={startEdit}
+          >
+            <Pencil size={8} />
+          </button>
+        )}
       </div>
 
       {/* Fill % */}
@@ -304,7 +452,7 @@ function PositionOrderRow({
       </div>
 
       {/* Cancel button */}
-      {order.status === "pending" && (
+      {isPending && (
         <button
           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded flex-shrink-0"
           style={{ color: "rgba(255,71,87,0.65)" }}
