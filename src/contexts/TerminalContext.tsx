@@ -1191,12 +1191,18 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       return result
     })
 
-    // Remove from grid overlay
+    // Remove from grid overlay.
+    // Keep entry alive (orders:[]) if this slot has fills so TP/SL lines stay on chart.
     setGridOrdersMap((prev) => {
       const entry = prev[consoleId]
       if (!entry) return prev
       const orders = entry.orders.filter((o) => o.id !== orderId)
       if (orders.length === 0) {
+        const posOrders = Object.values(positionsRef.current).flatMap((p) => p.orders)
+        const slotHasFills = posOrders.some((o) => o.gridConsoleId === consoleId && o.status === "filled")
+        if (slotHasFills) {
+          return { ...prev, [consoleId]: { ...entry, orders: [] } }
+        }
         const n = { ...prev }
         delete n[consoleId]
         return n
